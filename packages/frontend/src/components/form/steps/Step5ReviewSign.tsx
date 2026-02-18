@@ -13,6 +13,12 @@ const CONSENT_TEXT =
   'and the Uniform Electronic Transactions Act (UETA). I have read and agree to the terms of this application and understand ' +
   'that interaction data (time on fields, pauses) is monitored for quality and fraud prevention purposes as disclosed in the Privacy Policy.';
 
+const TCPA_CONSENT_TEXT =
+  'By checking this box, I consent to receive marketing communications (including calls, texts, and emails) from ' +
+  'the Company and its lending partners regarding loan products and services. I understand that this consent is ' +
+  'not required as a condition of purchase and that message/data rates may apply. I may revoke this consent at ' +
+  'any time by contacting the Company. This consent complies with the Telephone Consumer Protection Act (TCPA).';
+
 interface Props {
   state: FormState;
   onBack: () => void;
@@ -42,6 +48,7 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [consentChecked, setConsentChecked] = useState(false);
+  const [tcpaChecked, setTcpaChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -59,6 +66,7 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
     if (!signerName.trim()) { setError('Please enter your full name.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) { setError('Please enter a valid email.'); return; }
     if (!padRef.current || padRef.current.isEmpty()) { setError('Please provide your signature.'); return; }
+    if (!tcpaChecked) { setError('You must acknowledge the TCPA marketing consent.'); return; }
     if (!consentChecked) { setError('You must acknowledge the consent statement.'); return; }
     if (!state.applicationId || !token) { setError('Session error. Please refresh.'); return; }
 
@@ -67,7 +75,7 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       const signatureData = padRef.current.toDataURL('image/png');
       const res = await api.post<{ success: boolean; signedAt: string }>(
         `/api/signatures/${state.applicationId}/sign`,
-        { signatureData, signerName, signerEmail, consentAcknowledged: true },
+        { signatureData, signerName, signerEmail, consentAcknowledged: true, marketingConsent: true },
         token
       );
       await api.post(`/api/applications/${state.applicationId}/submit`, {}, token);
@@ -111,6 +119,16 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
           ['Amount', loanRequest.amountRequested ? `$${Number(loanRequest.amountRequested).toLocaleString()}` : undefined],
           ['Purpose', loanRequest.purpose], ['Term', loanRequest.termPreference], ['Urgency', loanRequest.urgency],
         ]} />
+      </div>
+
+      <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 mb-5">
+        <h3 className="font-semibold text-violet-900 mb-2 text-sm">Marketing Communications Consent (TCPA)</h3>
+        <p className="text-xs text-gray-700 leading-relaxed mb-3">{TCPA_CONSENT_TEXT}</p>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" checked={tcpaChecked} onChange={(e) => setTcpaChecked(e.target.checked)}
+            className="mt-0.5 accent-violet-700" />
+          <span className="text-xs text-gray-700">I consent to receive marketing communications as described above.</span>
+        </label>
       </div>
 
       <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 mb-5">

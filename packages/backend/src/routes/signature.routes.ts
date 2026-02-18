@@ -17,6 +17,9 @@ const signatureSchema = z.object({
   consentAcknowledged: z.literal(true, {
     errorMap: () => ({ message: 'You must acknowledge the consent statement' }),
   }),
+  marketingConsent: z.literal(true, {
+    errorMap: () => ({ message: 'Marketing consent acknowledgment is required' }),
+  }),
 });
 
 const CONSENT_TEXT =
@@ -31,6 +34,7 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.appId);
     const { signatureData, signerName, signerEmail } = req.body as z.infer<typeof signatureSchema>;
+    const marketingConsent = true; // validated as z.literal(true) above
 
     const app = await prisma.application.findFirst({
       where: { id: appId, tenantId: req.tenantId! },
@@ -54,6 +58,8 @@ router.post(
         userAgent,
         consentText: CONSENT_TEXT,
         signedAt: now,
+        marketingConsent,
+        marketingConsentTimestamp: now,
       },
     });
 
@@ -62,7 +68,13 @@ router.post(
       action: 'APPLICATION_SIGNED',
       actor: signerEmail,
       ipAddress,
-      details: { signerName, signerEmail, signedAt: now.toISOString() },
+      details: {
+        signerName,
+        signerEmail,
+        signedAt: now.toISOString(),
+        marketingConsent,
+        marketingConsentTimestamp: now.toISOString(),
+      },
     });
 
     res.json({
@@ -77,7 +89,7 @@ router.get(
   '/:appId/signature',
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const sig = await prisma.signature.findFirst({
-      where: { applicationId: req.params.appId, application: { tenantId: req.tenantId! } },
+      where: { applicationId: String(req.params.appId), application: { tenantId: req.tenantId! } },
       select: { signerName: true, signerEmail: true, signedAt: true, ipAddress: true, consentText: true },
     });
     if (!sig) throw createError('Signature not found', 404);

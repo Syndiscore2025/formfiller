@@ -9,6 +9,8 @@ export interface BusinessLookupResult {
   state?: string;
   zipCode?: string;
   registrationDate?: string;
+  sicCode?: string;
+  naicsCode?: string;
   officers?: Array<{ name: string; role: string }>;
   source: string;
   fieldsPopulated: string[];
@@ -54,6 +56,30 @@ export async function lookupByOpenCorporates(
     if (addr.locality) { result.city = addr.locality as string; populated.push('city'); }
     if (addr.region) { result.state = addr.region as string; populated.push('state'); }
     if (addr.postal_code) { result.zipCode = addr.postal_code as string; populated.push('zipCode'); }
+  }
+
+  // Extract SIC code — OpenCorporates may return industry_codes array
+  const industryCodes = company.industry_codes as Array<{
+    code: string;
+    description?: string;
+    code_scheme_id?: string;
+  }> | null;
+
+  if (Array.isArray(industryCodes)) {
+    const sicEntry = industryCodes.find((ic) =>
+      ic.code_scheme_id?.toLowerCase().startsWith('sic')
+    );
+    const naicsEntry = industryCodes.find((ic) =>
+      ic.code_scheme_id?.toLowerCase().startsWith('naics')
+    );
+    if (sicEntry?.code) {
+      result.sicCode = sicEntry.code;
+      populated.push('sicCode');
+    }
+    if (naicsEntry?.code) {
+      result.naicsCode = naicsEntry.code;
+      populated.push('naicsCode');
+    }
   }
 
   result.fieldsPopulated = populated;

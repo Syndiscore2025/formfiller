@@ -12,6 +12,8 @@ interface ApplicationData {
     signerEmail: string;
     signedAt: string;
     ipAddress: string;
+    marketingConsent: boolean;
+    marketingConsentTimestamp?: string;
   };
 }
 
@@ -33,6 +35,8 @@ export function generateApplicationPdf(data: ApplicationData): Readable {
     row(doc, 'Business Start Date', data.business.businessStartDate as string);
     row(doc, 'Phone', data.business.phone as string);
     row(doc, 'Website', data.business.website as string);
+    row(doc, 'SIC Code', data.business.sicCode as string);
+    row(doc, 'NAICS Code', data.business.naicsCode as string);
     row(doc, 'Address', formatAddress(data.business));
     doc.moveDown(0.5);
   }
@@ -78,6 +82,10 @@ export function generateApplicationPdf(data: ApplicationData): Readable {
     row(doc, 'Signer Email', data.signature.signerEmail);
     row(doc, 'Signed At', data.signature.signedAt);
     row(doc, 'IP Address', data.signature.ipAddress);
+    row(doc, 'Marketing Consent (TCPA)', data.signature.marketingConsent ? 'Yes — Consented' : 'No — Declined');
+    if (data.signature.marketingConsentTimestamp) {
+      row(doc, 'Marketing Consent Timestamp', data.signature.marketingConsentTimestamp);
+    }
     doc.moveDown(1);
     doc.fontSize(10).text('_________________________________');
     doc.text(`${data.signature.signerName}  |  ${data.signature.signedAt}`);

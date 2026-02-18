@@ -24,6 +24,8 @@ export interface BusinessInfo {
   city: string;
   state: string;
   zipCode: string;
+  sicCode: string;
+  naicsCode: string;
   autoPopulated?: Record<string, boolean>;
 }
 

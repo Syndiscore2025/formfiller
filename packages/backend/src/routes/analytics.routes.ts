@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -35,7 +36,7 @@ router.post(
   '/:appId/events',
   validate(eventSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { appId } = req.params;
+    const appId = String(req.params.appId);
 
     const app = await prisma.application.findFirst({
       where: { id: appId, tenantId: req.tenantId! },
@@ -51,7 +52,7 @@ router.post(
         fieldName: e.fieldName,
         eventType: e.eventType,
         durationMs: e.durationMs,
-        metadata: e.metadata,
+        metadata: e.metadata as Prisma.InputJsonValue | undefined,
       })),
     });
 
@@ -63,15 +64,16 @@ router.post(
 router.get(
   '/:appId/summary',
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    const summaryAppId = String(req.params.appId);
     const app = await prisma.application.findFirst({
-      where: { id: req.params.appId, tenantId: req.tenantId! },
+      where: { id: summaryAppId, tenantId: req.tenantId! },
       select: { id: true },
     });
     if (!app) throw createError('Application not found', 404);
 
     const events = await prisma.analyticsEvent.groupBy({
       by: ['fieldName', 'eventType'],
-      where: { applicationId: req.params.appId },
+      where: { applicationId: summaryAppId },
       _count: { id: true },
       _avg: { durationMs: true },
       _sum: { durationMs: true },

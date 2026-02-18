@@ -52,7 +52,7 @@ export function Step1Business({ defaultValues, autoPopulated, onNext, isSaving, 
 
   const onSubmit = (data: FormData) => {
     trackStep(1, 'step_complete');
-    onNext({ ...defaultValues, ...data, autoPopulated });
+    onNext({ ...defaultValues, ...data, entityType: data.entityType as BusinessInfo['entityType'], autoPopulated });
   };
 
   return (

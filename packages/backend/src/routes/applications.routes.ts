@@ -52,8 +52,9 @@ router.post(
 router.get(
   '/:id',
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    const appId = String(req.params.id);
     const app = await prisma.application.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: appId, tenantId: req.tenantId! },
       include: { business: true, owners: { orderBy: { ownerIndex: 'asc' } }, financial: true, loanRequest: true, signature: true },
     });
     if (!app) throw createError('Application not found', 404);
@@ -81,8 +82,9 @@ router.patch(
 router.post(
   '/:id/submit',
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    const submitAppId = String(req.params.id);
     const app = await prisma.application.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: submitAppId, tenantId: req.tenantId! },
       include: { business: true, owners: true, financial: true, loanRequest: true, signature: true },
     });
     if (!app) throw createError('Application not found', 404);
@@ -110,8 +112,9 @@ router.post(
 router.get(
   '/:id/pdf',
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    const pdfAppId = String(req.params.id);
     const app = await prisma.application.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: pdfAppId, tenantId: req.tenantId! },
       include: { business: true, owners: true, financial: true, loanRequest: true, signature: true },
     });
     if (!app) throw createError('Application not found', 404);
@@ -132,6 +135,8 @@ router.get(
         signerEmail: sig.signerEmail,
         signedAt: sig.signedAt.toISOString(),
         ipAddress: sig.ipAddress,
+        marketingConsent: sig.marketingConsent,
+        marketingConsentTimestamp: sig.marketingConsentTimestamp?.toISOString(),
       },
     });
     stream.pipe(res);

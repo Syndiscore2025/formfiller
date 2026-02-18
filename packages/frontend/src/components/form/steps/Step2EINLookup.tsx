@@ -17,6 +17,8 @@ interface LookupResult {
     state?: string;
     zipCode?: string;
     registrationDate?: string;
+    sicCode?: string;
+    naicsCode?: string;
     fieldsPopulated: string[];
   };
   message?: string;
@@ -63,6 +65,8 @@ export function Step2EINLookup({ business, onAutoPopulate, onNext, onBack, token
           state: res.data.state,
           zipCode: res.data.zipCode,
           businessStartDate: res.data.registrationDate,
+          sicCode: res.data.sicCode,
+          naicsCode: res.data.naicsCode,
         }, populated);
       }
     } catch (e) {

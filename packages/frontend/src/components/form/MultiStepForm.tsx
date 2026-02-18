@@ -14,6 +14,7 @@ const EMPTY_BUSINESS: BusinessInfo = {
   legalName: '', dba: '', entityType: '', industry: '', stateOfFormation: '',
   ein: '', businessStartDate: '', phone: '', website: '',
   streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',
+  sicCode: '', naicsCode: '',
 };
 const EMPTY_FINANCIAL: FinancialInfo = {
   annualRevenue: '', monthlyRevenue: '', monthlyExpenses: '', outstandingDebts: '',

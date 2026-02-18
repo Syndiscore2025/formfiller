@@ -26,6 +26,8 @@ const businessSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
+  sicCode: z.string().optional(),
+  naicsCode: z.string().optional(),
   autoPopulated: z.record(z.boolean()).optional(),
 });
 
