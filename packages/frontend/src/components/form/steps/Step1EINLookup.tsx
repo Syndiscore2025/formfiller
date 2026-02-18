@@ -26,7 +26,7 @@ interface LookupResult {
 
 interface Props {
   business: BusinessInfo;
-  onAutoPopulate: (data: Partial<BusinessInfo>, populated: Record<string, boolean>) => void;
+  onAutoPopulate: (data: Partial<BusinessInfo>) => void;
   onNext: (contact: ContactInfo) => Promise<void>;
   token: string | null;
 }
@@ -73,8 +73,6 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
           );
           setResult(res);
           if (res.found && res.data) {
-            const populated: Record<string, boolean> = {};
-            res.data.fieldsPopulated.forEach((f) => { populated[f] = true; });
             onAutoPopulate({
               legalName: res.data.legalName,
               entityType: (res.data.entityType as BusinessInfo['entityType']) || undefined,
@@ -86,7 +84,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
               businessStartDate: res.data.registrationDate,
               sicCode: res.data.sicCode,
               naicsCode: res.data.naicsCode,
-            }, populated);
+            });
           }
         } catch {
           // Lookup failed silently — continue anyway

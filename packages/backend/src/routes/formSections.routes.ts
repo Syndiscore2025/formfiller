@@ -32,12 +32,12 @@ const businessSchema = z.object({
 });
 
 const ownerSchema = z.object({
-  ownerIndex: z.number().int().min(1),
+  ownerIndex: z.number().int().min(0),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
-  ownershipPct: z.number().min(0).max(100).optional(),
+  ownershipPct: z.string().optional(), // now stored as string
   ssn: z.string().regex(/^\d{9}$/, 'SSN must be 9 digits').optional(),
   dateOfBirth: z.string().optional(),
   creditScore: z.string().optional(),
@@ -49,17 +49,11 @@ const ownerSchema = z.object({
 });
 
 const financialSchema = z.object({
-  annualRevenue: z.number().nonnegative().optional(),
-  monthlyRevenue: z.number().nonnegative().optional(),
-  monthlyExpenses: z.number().nonnegative().optional(),
-  outstandingDebts: z.number().nonnegative().optional(),
-  bankruptcyHistory: z.boolean().optional(),
-  bankName: z.string().optional(),
-  accountType: z.string().optional(),
+  annualRevenue: z.string().optional(), // dropdown range value
 });
 
 const loanSchema = z.object({
-  amountRequested: z.number().positive().optional(),
+  amountRequested: z.string().optional(), // dropdown range value
   purpose: z.string().optional(),
   urgency: z.string().optional(),
   termPreference: z.string().optional(),

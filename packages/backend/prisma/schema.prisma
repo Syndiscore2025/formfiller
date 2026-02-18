@@ -41,24 +41,25 @@ model User {
 }
 
 model Application {
-  id                  String    @id @default(uuid())
-  tenantId            String
-  userId              String?
-  status              String    @default("draft")
-  currentStep         Int       @default(1)
-  completionPct       Int       @default(0)
-  ipAddress           String?
-  userAgent           String?
-  contactFirstName    String?
-  contactLastName     String?
-  contactEmail        String?
-  contactPhone        String?
-  tcpaConsentStep1    Boolean   @default(false)
-  tcpaConsentStep1At  DateTime?
-  lastActivityAt      DateTime  @default(now())
-  warmLeadSentAt      DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  tenantId              String
+  userId                String?
+  status                String    @default("draft")
+  currentStep           Int       @default(1)
+  completionPct         Int       @default(0)
+  ipAddress             String?
+  userAgent             String?
+  contactFirstName      String?
+  contactLastName       String?
+  contactEmail          String?
+  contactPhone          String?
+  tcpaConsentStep1      Boolean   @default(false)
+  tcpaConsentStep1At    DateTime?
+  hasAdditionalOwners   Boolean?
+  lastActivityAt        DateTime  @default(now())
+  warmLeadSentAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   tenant          Tenant             @relation(fields: [tenantId], references: [id])
   user            User?              @relation(fields: [userId], references: [id])
@@ -104,14 +105,14 @@ model BusinessInfo {
 model OwnerInfo {
   id              String   @id @default(uuid())
   applicationId   String
-  ownerIndex      Int      @default(1)
+  ownerIndex      Int      @default(0)
   firstName       String?
   lastName        String?
   email           String?
   phone           String?
-  ownershipPct    Float?
+  ownershipPct    String?  // stored as string (e.g., "51")
   ssnEncrypted    String?
-  dateOfBirth     DateTime?
+  dateOfBirth     String?  // stored as string (YYYY-MM-DD)
   creditScore     String?
   streetAddress   String?
   streetAddress2  String?
@@ -130,13 +131,13 @@ model OwnerInfo {
 model FinancialInfo {
   id                   String   @id @default(uuid())
   applicationId        String   @unique
-  annualRevenue        Float?
-  monthlyRevenue       Float?
-  monthlyExpenses      Float?
-  outstandingDebts     Float?
-  bankruptcyHistory    Boolean?
-  bankName             String?
-  accountType          String?
+  annualRevenue        String?  // dropdown range value (e.g., "100k-250k")
+  monthlyRevenue       Float?   // deprecated - kept for backwards compatibility
+  monthlyExpenses      Float?   // deprecated - kept for backwards compatibility
+  outstandingDebts     Float?   // deprecated - kept for backwards compatibility
+  bankruptcyHistory    Boolean? // deprecated - kept for backwards compatibility
+  bankName             String?  // deprecated - kept for backwards compatibility
+  accountType          String?  // deprecated - kept for backwards compatibility
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -146,7 +147,7 @@ model FinancialInfo {
 model LoanRequest {
   id              String   @id @default(uuid())
   applicationId   String   @unique
-  amountRequested Float?
+  amountRequested String?  // dropdown range value (e.g., "50k-100k")
   purpose         String?
   urgency         String?
   termPreference  String?

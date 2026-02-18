@@ -14,7 +14,8 @@ const router = Router();
 // Guest-accessible middleware chain (JWT or x-tenant-slug header)
 const guestAccess = [optionalAuth, requireTenant];
 
-const stepSchema = z.object({ currentStep: z.number().int().min(1).max(5) });
+const stepSchema = z.object({ currentStep: z.number().int().min(1).max(8) });
+const updateAppSchema = z.object({ hasAdditionalOwners: z.boolean().optional() });
 
 const createAppSchema = z.object({
   contactFirstName: z.string().min(1, 'First name is required'),
@@ -99,6 +100,23 @@ router.patch(
       data: { currentStep, completionPct: Math.round((currentStep - 1) * 20), lastActivityAt: new Date() },
     });
     await writeAuditLog({ applicationId: appId, action: `STEP_${currentStep}_REACHED`, actor: req.userId, ipAddress: req.ip });
+    res.json({ success: true });
+  })
+);
+
+// PATCH /applications/:id — update application fields (guests allowed)
+router.patch(
+  '/:id',
+  ...guestAccess,
+  validate(updateAppSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const appId = String(req.params.id);
+    const { hasAdditionalOwners } = req.body as z.infer<typeof updateAppSchema>;
+    await prisma.application.updateMany({
+      where: { id: appId, tenantId: req.tenantId! },
+      data: { hasAdditionalOwners, lastActivityAt: new Date() },
+    });
+    await writeAuditLog({ applicationId: appId, action: 'APPLICATION_UPDATED', actor: req.userId, ipAddress: req.ip });
     res.json({ success: true });
   })
 );
