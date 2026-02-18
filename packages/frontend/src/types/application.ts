@@ -75,8 +75,8 @@ export interface FormState {
 }
 
 export const STEPS = [
-  { id: 1, label: 'Business Info' },
-  { id: 2, label: 'EIN Lookup' },
+  { id: 1, label: 'EIN Lookup' },
+  { id: 2, label: 'Business Info' },
   { id: 3, label: 'Owners & Financials' },
   { id: 4, label: 'Loan Request' },
   { id: 5, label: 'Review & Sign' },

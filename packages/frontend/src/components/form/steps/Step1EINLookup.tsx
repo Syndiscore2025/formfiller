@@ -28,11 +28,10 @@ interface Props {
   business: BusinessInfo;
   onAutoPopulate: (data: Partial<BusinessInfo>, populated: Record<string, boolean>) => void;
   onNext: () => void;
-  onBack: () => void;
   token: string | null;
 }
 
-export function Step2EINLookup({ business, onAutoPopulate, onNext, onBack, token }: Props) {
+export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Props) {
   const [searchName, setSearchName] = useState(business.legalName || '');
   const [searchState, setSearchState] = useState(business.stateOfFormation || '');
   const [loading, setLoading] = useState(false);
@@ -78,21 +77,23 @@ export function Step2EINLookup({ business, onAutoPopulate, onNext, onBack, token
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Business Lookup & Auto-Population</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">Business Lookup</h2>
       <p className="text-sm text-gray-500 mb-6">
-        We'll search public business registries using your business name and state to pre-fill your application.
+        Enter your business name and state to search public records and pre-fill your application.
         You can skip this step and enter information manually.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
         <Input
-          label="Business Name"
+          label="Business Legal Name"
+          required
           value={searchName}
           onChange={(e) => setSearchName(e.target.value)}
           placeholder="Exact legal business name"
         />
         <Select
           label="State of Formation"
+          required
           value={searchState}
           onChange={(e) => setSearchState(e.target.value)}
           options={[...US_STATES]}
@@ -117,16 +118,15 @@ export function Step2EINLookup({ business, onAutoPopulate, onNext, onBack, token
                   <li key={f}>{f.replace(/([A-Z])/g, ' $1').trim()}</li>
                 ))}
               </ul>
-              <p className="text-xs text-green-600 mt-2">Please review and correct any inaccurate fields on the previous step.</p>
+              <p className="text-xs text-green-600 mt-2">You can review and edit all fields on the next step.</p>
             </>
           ) : (
-            <p className="text-yellow-800 text-sm">{result.message ?? 'No data found. Please enter your information manually.'}</p>
+            <p className="text-yellow-800 text-sm">{result.message ?? 'No data found. You can enter your information manually on the next step.'}</p>
           )}
         </div>
       )}
 
-      <div className="flex justify-between mt-8">
-        <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
+      <div className="flex justify-end mt-8">
         <Button type="button" onClick={onNext}>
           {result?.found ? 'Continue with Auto-filled Data' : 'Skip & Enter Manually'}
         </Button>

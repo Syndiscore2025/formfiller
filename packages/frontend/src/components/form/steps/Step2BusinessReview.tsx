@@ -31,12 +31,13 @@ interface Props {
   defaultValues: BusinessInfo;
   autoPopulated: Record<string, boolean>;
   onNext: (data: BusinessInfo) => void;
+  onBack: () => void;
   isSaving: boolean;
   applicationId: string | null;
   token: string | null;
 }
 
-export function Step1Business({ defaultValues, autoPopulated, onNext, isSaving, applicationId, token }: Props) {
+export function Step2BusinessReview({ defaultValues, autoPopulated, onNext, onBack, isSaving, applicationId, token }: Props) {
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues,
@@ -51,14 +52,14 @@ export function Step1Business({ defaultValues, autoPopulated, onNext, isSaving, 
   });
 
   const onSubmit = (data: FormData) => {
-    trackStep(1, 'step_complete');
+    trackStep(2, 'step_complete');
     onNext({ ...defaultValues, ...data, entityType: data.entityType as BusinessInfo['entityType'], autoPopulated });
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Business Information</h2>
-      <p className="text-sm text-gray-500 mb-6">Tell us about your business. Fields marked with <span className="text-violet-600 font-medium">Auto-filled</span> were retrieved from public records.</p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">Review Business Information</h2>
+      <p className="text-sm text-gray-500 mb-6">Review and complete your business details. Fields marked with <span className="text-violet-600 font-medium">Auto-filled</span> were retrieved from public records — you can edit any field.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Input label="Business Legal Name" required error={errors.legalName?.message} placeholder="EX: ABC Towing, LLC"
@@ -100,7 +101,8 @@ export function Step1Business({ defaultValues, autoPopulated, onNext, isSaving, 
         </div>
       </div>
 
-      <div className="flex justify-end mt-8 gap-3">
+      <div className="flex justify-between mt-8 gap-3">
+        <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
         <Button type="submit" size="lg" loading={isSaving}>Next</Button>
       </div>
     </form>

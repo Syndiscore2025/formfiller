@@ -2,8 +2,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
-import { Step1Business } from './steps/Step1Business';
-import { Step2EINLookup } from './steps/Step2EINLookup';
+import { Step1EINLookup } from './steps/Step1EINLookup';
+import { Step2BusinessReview } from './steps/Step2BusinessReview';
 import { Step3OwnersFinancials } from './steps/Step3OwnersFinancials';
 import { Step4LoanRequest } from './steps/Step4LoanRequest';
 import { Step5ReviewSign } from './steps/Step5ReviewSign';
@@ -64,17 +64,18 @@ export function MultiStepForm({ token }: Props) {
     setState((prev) => ({ ...prev, currentStep: nextStep }));
   }, [state.applicationId, token]);
 
-  const handleStep1Next = useCallback(async (business: BusinessInfo) => {
+  const handleStep1Next = useCallback(async () => {
+    // Step 1 is EIN lookup — no application created yet, just advance locally
+    setState((prev) => ({ ...prev, currentStep: 2 }));
+  }, []);
+
+  const handleStep2Next = useCallback(async (business: BusinessInfo) => {
     const appId = await ensureApplication();
     setState((prev) => ({ ...prev, business }));
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => saveSection('business', { ...business, autoPopulated }, appId), 300);
-    await advanceStep(2);
-  }, [ensureApplication, saveSection, advanceStep, autoPopulated]);
-
-  const handleStep2Next = useCallback(async () => {
     await advanceStep(3);
-  }, [advanceStep]);
+  }, [ensureApplication, saveSection, advanceStep, autoPopulated]);
 
   const handleStep3Next = useCallback(async (owners: OwnerInfo[], financial: FinancialInfo) => {
     const appId = await ensureApplication();
@@ -136,21 +137,21 @@ export function MultiStepForm({ token }: Props) {
       </div>
 
       {state.currentStep === 1 && (
-        <Step1Business
-          defaultValues={state.business}
-          autoPopulated={autoPopulated}
+        <Step1EINLookup
+          business={state.business}
+          onAutoPopulate={handleAutoPopulate}
           onNext={handleStep1Next}
-          isSaving={state.isSaving}
-          applicationId={state.applicationId}
           token={token}
         />
       )}
       {state.currentStep === 2 && (
-        <Step2EINLookup
-          business={state.business}
-          onAutoPopulate={handleAutoPopulate}
+        <Step2BusinessReview
+          defaultValues={state.business}
+          autoPopulated={autoPopulated}
           onNext={handleStep2Next}
           onBack={() => setState((p) => ({ ...p, currentStep: 1 }))}
+          isSaving={state.isSaving}
+          applicationId={state.applicationId}
           token={token}
         />
       )}
