@@ -68,7 +68,7 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
     if (!padRef.current || padRef.current.isEmpty()) { setError('Please provide your signature.'); return; }
     if (!tcpaChecked) { setError('You must acknowledge the TCPA marketing consent.'); return; }
     if (!consentChecked) { setError('You must acknowledge the consent statement.'); return; }
-    if (!state.applicationId || !token) { setError('Session error. Please refresh.'); return; }
+    if (!state.applicationId) { setError('Session error. Please refresh.'); return; }
 
     setSubmitting(true);
     try {
@@ -76,9 +76,9 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       const res = await api.post<{ success: boolean; signedAt: string }>(
         `/api/signatures/${state.applicationId}/sign`,
         { signatureData, signerName, signerEmail, consentAcknowledged: true, marketingConsent: true },
-        token
+        token ?? undefined
       );
-      await api.post(`/api/applications/${state.applicationId}/submit`, {}, token);
+      await api.post(`/api/applications/${state.applicationId}/submit`, {}, token ?? undefined);
       onSubmitted(res.signedAt);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Submission failed. Please try again.');
@@ -142,8 +142,8 @@ export function Step5ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-        <Input label="Full Name (Signer)" required value={signerName} onChange={(e) => setSignerName(e.target.value)} />
-        <Input label="Email Address (Signer)" required type="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} />
+        <Input label="Full Name (Signer)" required autoComplete="name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
+        <Input label="Email Address (Signer)" required type="email" autoComplete="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} />
       </div>
 
       <div className="mb-5">

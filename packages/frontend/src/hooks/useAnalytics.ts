@@ -25,10 +25,10 @@ export function useAnalytics(applicationId: string | null, token: string | null)
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flush = useCallback(async () => {
-    if (!applicationId || !token || queue.current.length === 0) return;
+    if (!applicationId || queue.current.length === 0) return;
     const batch = queue.current.splice(0, 100);
     try {
-      await api.post(`/api/analytics/${applicationId}/events`, { events: batch }, token);
+      await api.post(`/api/analytics/${applicationId}/events`, { events: batch }, token ?? undefined);
     } catch {
       // Re-queue on failure (fire-and-forget; do not block form)
       queue.current.unshift(...batch);

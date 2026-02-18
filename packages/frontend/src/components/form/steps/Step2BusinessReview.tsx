@@ -63,8 +63,9 @@ export function Step2BusinessReview({ defaultValues, autoPopulated, onNext, onBa
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Input label="Business Legal Name" required error={errors.legalName?.message} placeholder="EX: ABC Towing, LLC"
-          autoPopulated={autoPopulated.legalName} {...register('legalName')} {...analyticsProps('legalName')} />
-        <Input label="DBA (Doing Business As)" error={errors.dba?.message} {...register('dba')} {...analyticsProps('dba')} />
+          autoComplete="organization" autoPopulated={autoPopulated.legalName} {...register('legalName')} {...analyticsProps('legalName')} />
+        <Input label="DBA (Doing Business As)" error={errors.dba?.message} autoComplete="organization"
+          {...register('dba')} {...analyticsProps('dba')} />
         <Select label="Legal Entity" required error={errors.entityType?.message}
           options={ENTITY_TYPES} autoPopulated={autoPopulated.entityType} {...register('entityType')} />
         <Select label="Industry" required error={errors.industry?.message}
@@ -72,13 +73,13 @@ export function Step2BusinessReview({ defaultValues, autoPopulated, onNext, onBa
         <Select label="State of Formation" required error={errors.stateOfFormation?.message}
           options={[...US_STATES]} autoPopulated={autoPopulated.stateOfFormation} {...register('stateOfFormation')} />
         <Input label="Federal Tax ID (EIN)" hint="EIN — Must be 9 digits" error={errors.ein?.message}
-          placeholder="XXXXXXXXX" maxLength={9} autoPopulated={autoPopulated.ein} {...register('ein')} {...analyticsProps('ein')} />
+          placeholder="XXXXXXXXX" maxLength={9} autoComplete="off" autoPopulated={autoPopulated.ein} {...register('ein')} {...analyticsProps('ein')} />
         <Input label="Business Start Date" required type="date" error={errors.businessStartDate?.message}
           autoPopulated={autoPopulated.businessStartDate} {...register('businessStartDate')} />
         <Input label="Business Phone Number" required type="tel" error={errors.phone?.message}
-          {...register('phone')} {...analyticsProps('phone')} />
+          autoComplete="tel" {...register('phone')} {...analyticsProps('phone')} />
         <Input label="Website" type="url" error={errors.website?.message}
-          placeholder="https://" {...register('website')} {...analyticsProps('website')} />
+          autoComplete="url" placeholder="https://" {...register('website')} {...analyticsProps('website')} />
       </div>
 
       <div className="mt-6">
@@ -86,18 +87,18 @@ export function Step2BusinessReview({ defaultValues, autoPopulated, onNext, onBa
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="sm:col-span-2">
             <Input label="Street Address" required error={errors.streetAddress?.message}
-              autoPopulated={autoPopulated.streetAddress} {...register('streetAddress')} {...analyticsProps('streetAddress')} />
+              autoComplete="address-line1" autoPopulated={autoPopulated.streetAddress} {...register('streetAddress')} {...analyticsProps('streetAddress')} />
           </div>
           <div className="sm:col-span-2">
             <Input label="Street Address Line 2" error={errors.streetAddress2?.message}
-              {...register('streetAddress2')} {...analyticsProps('streetAddress2')} />
+              autoComplete="address-line2" {...register('streetAddress2')} {...analyticsProps('streetAddress2')} />
           </div>
           <Input label="City" required error={errors.city?.message}
-            autoPopulated={autoPopulated.city} {...register('city')} {...analyticsProps('city')} />
+            autoComplete="address-level2" autoPopulated={autoPopulated.city} {...register('city')} {...analyticsProps('city')} />
           <Select label="State" required error={errors.state?.message}
             options={[...US_STATES]} autoPopulated={autoPopulated.state} {...register('state')} />
           <Input label="Zip Code" required error={errors.zipCode?.message}
-            autoPopulated={autoPopulated.zipCode} {...register('zipCode')} {...analyticsProps('zipCode')} />
+            autoComplete="postal-code" autoPopulated={autoPopulated.zipCode} {...register('zipCode')} {...analyticsProps('zipCode')} />
         </div>
       </div>
 

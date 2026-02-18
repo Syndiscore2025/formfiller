@@ -87,6 +87,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
         <Input
           label="Business Legal Name"
           required
+          autoComplete="organization"
           value={searchName}
           onChange={(e) => setSearchName(e.target.value)}
           placeholder="Exact legal business name"

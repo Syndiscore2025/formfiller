@@ -99,19 +99,19 @@ export function Step3OwnersFinancials({ defaultOwners, defaultFinancial, onNext,
             {i > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => remove(i)}>Remove</Button>}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input label="First Name" required error={errs.owners?.[i]?.firstName?.message} {...register(`owners.${i}.firstName`)} {...ap(`owner${i}_firstName`)} />
-            <Input label="Last Name" required error={errs.owners?.[i]?.lastName?.message} {...register(`owners.${i}.lastName`)} {...ap(`owner${i}_lastName`)} />
-            <Input label="Email Address" required type="email" error={errs.owners?.[i]?.email?.message} {...register(`owners.${i}.email`)} {...ap(`owner${i}_email`)} />
-            <Input label="Mobile Phone Number" required type="tel" error={errs.owners?.[i]?.phone?.message} {...register(`owners.${i}.phone`)} {...ap(`owner${i}_phone`)} />
-            <Input label="% of Ownership" required type="number" min="0" max="100" error={errs.owners?.[i]?.ownershipPct?.message} {...register(`owners.${i}.ownershipPct`)} {...ap(`owner${i}_ownershipPct`)} />
-            <Input label="Social Security Number" required type="password" hint="Encrypted — 9 digits, no dashes" error={errs.owners?.[i]?.ssn?.message} maxLength={9} {...register(`owners.${i}.ssn`)} {...ap(`owner${i}_ssn`)} />
-            <Input label="Date of Birth" required type="date" error={errs.owners?.[i]?.dateOfBirth?.message} {...register(`owners.${i}.dateOfBirth`)} />
-            <Input label="Estimated Credit Score" error={errs.owners?.[i]?.creditScore?.message} {...register(`owners.${i}.creditScore`)} {...ap(`owner${i}_creditScore`)} />
-            <div className="sm:col-span-2"><Input label="Home Address" required error={errs.owners?.[i]?.streetAddress?.message} {...register(`owners.${i}.streetAddress`)} {...ap(`owner${i}_streetAddress`)} /></div>
-            <div className="sm:col-span-2"><Input label="Street Address Line 2" {...register(`owners.${i}.streetAddress2`)} /></div>
-            <Input label="City" required error={errs.owners?.[i]?.city?.message} {...register(`owners.${i}.city`)} {...ap(`owner${i}_city`)} />
+            <Input label="First Name" required autoComplete="given-name" error={errs.owners?.[i]?.firstName?.message} {...register(`owners.${i}.firstName`)} {...ap(`owner${i}_firstName`)} />
+            <Input label="Last Name" required autoComplete="family-name" error={errs.owners?.[i]?.lastName?.message} {...register(`owners.${i}.lastName`)} {...ap(`owner${i}_lastName`)} />
+            <Input label="Email Address" required type="email" autoComplete="email" error={errs.owners?.[i]?.email?.message} {...register(`owners.${i}.email`)} {...ap(`owner${i}_email`)} />
+            <Input label="Mobile Phone Number" required type="tel" autoComplete="tel" error={errs.owners?.[i]?.phone?.message} {...register(`owners.${i}.phone`)} {...ap(`owner${i}_phone`)} />
+            <Input label="% of Ownership" required type="number" min="0" max="100" autoComplete="off" error={errs.owners?.[i]?.ownershipPct?.message} {...register(`owners.${i}.ownershipPct`)} {...ap(`owner${i}_ownershipPct`)} />
+            <Input label="Social Security Number" required type="password" hint="Encrypted — 9 digits, no dashes" autoComplete="off" error={errs.owners?.[i]?.ssn?.message} maxLength={9} {...register(`owners.${i}.ssn`)} {...ap(`owner${i}_ssn`)} />
+            <Input label="Date of Birth" required type="date" autoComplete="bday" error={errs.owners?.[i]?.dateOfBirth?.message} {...register(`owners.${i}.dateOfBirth`)} />
+            <Input label="Estimated Credit Score" autoComplete="off" error={errs.owners?.[i]?.creditScore?.message} {...register(`owners.${i}.creditScore`)} {...ap(`owner${i}_creditScore`)} />
+            <div className="sm:col-span-2"><Input label="Home Address" required autoComplete="address-line1" error={errs.owners?.[i]?.streetAddress?.message} {...register(`owners.${i}.streetAddress`)} {...ap(`owner${i}_streetAddress`)} /></div>
+            <div className="sm:col-span-2"><Input label="Street Address Line 2" autoComplete="address-line2" {...register(`owners.${i}.streetAddress2`)} /></div>
+            <Input label="City" required autoComplete="address-level2" error={errs.owners?.[i]?.city?.message} {...register(`owners.${i}.city`)} {...ap(`owner${i}_city`)} />
             <Select label="State" required error={errs.owners?.[i]?.state?.message} options={[...US_STATES]} {...register(`owners.${i}.state`)} />
-            <Input label="Zip Code" required error={errs.owners?.[i]?.zipCode?.message} {...register(`owners.${i}.zipCode`)} {...ap(`owner${i}_zipCode`)} />
+            <Input label="Zip Code" required autoComplete="postal-code" error={errs.owners?.[i]?.zipCode?.message} {...register(`owners.${i}.zipCode`)} {...ap(`owner${i}_zipCode`)} />
           </div>
         </div>
       ))}
