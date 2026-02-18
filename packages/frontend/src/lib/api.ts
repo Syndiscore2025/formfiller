@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG || 'default';
 
 interface ApiOptions extends RequestInit {
   token?: string;
@@ -8,6 +9,7 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { token, ...rest } = options;
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    'x-tenant-slug': TENANT_SLUG,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...rest.headers,
   };

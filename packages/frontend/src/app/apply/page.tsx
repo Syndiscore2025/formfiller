@@ -1,28 +1,9 @@
 'use client';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { MultiStepForm } from '@/components/form/MultiStepForm';
 
 export default function ApplyPage() {
-  const router = useRouter();
-  const { token, loading } = useAuth();
-
-  useEffect(() => {
-    if (!loading && !token) {
-      router.replace('/login');
-    }
-  }, [token, loading, router]);
-
-  if (loading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-sm animate-pulse">Loading...</div>
-      </main>
-    );
-  }
-
-  if (!token) return null;
+  const { token } = useAuth();
 
   return (
     <main className="min-h-screen py-8 px-4">

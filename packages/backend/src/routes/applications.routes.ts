@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
@@ -10,13 +10,16 @@ import { pushToSwitchboxCrm } from '../services/crm.service';
 import { generateApplicationPdf } from '../services/pdf.service';
 
 const router = Router();
-router.use(requireAuth);
+
+// Guest-accessible middleware chain (JWT or x-tenant-slug header)
+const guestAccess = [optionalAuth, requireTenant];
 
 const stepSchema = z.object({ currentStep: z.number().int().min(1).max(5) });
 
-// GET /applications — list for tenant
+// GET /applications — list for tenant (agents only)
 router.get(
   '/',
+  requireAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const apps = await prisma.application.findMany({
       where: { tenantId: req.tenantId! },
@@ -31,9 +34,10 @@ router.get(
   })
 );
 
-// POST /applications — create new draft
+// POST /applications — create new draft (guests allowed)
 router.post(
   '/',
+  ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const app = await prisma.application.create({
       data: {
@@ -48,9 +52,10 @@ router.post(
   })
 );
 
-// GET /applications/:id — full application
+// GET /applications/:id — full application (guests allowed)
 router.get(
   '/:id',
+  ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.id);
     const app = await prisma.application.findFirst({
@@ -62,9 +67,10 @@ router.get(
   })
 );
 
-// PATCH /applications/:id/step — update current step
+// PATCH /applications/:id/step — update current step (guests allowed)
 router.patch(
   '/:id/step',
+  ...guestAccess,
   validate(stepSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { currentStep } = req.body as z.infer<typeof stepSchema>;
@@ -78,9 +84,10 @@ router.patch(
   })
 );
 
-// POST /applications/:id/submit — finalize and push to CRM
+// POST /applications/:id/submit — finalize and push to CRM (guests allowed)
 router.post(
   '/:id/submit',
+  ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const submitAppId = String(req.params.id);
     const app = await prisma.application.findFirst({
@@ -108,9 +115,10 @@ router.post(
   })
 );
 
-// GET /applications/:id/pdf — download signed PDF
+// GET /applications/:id/pdf — download signed PDF (guests allowed)
 router.get(
   '/:id/pdf',
+  ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const pdfAppId = String(req.params.id);
     const app = await prisma.application.findFirst({

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
@@ -9,7 +9,7 @@ import { encrypt } from '../utils/encryption';
 import { writeAuditLog } from '../services/auditLog.service';
 
 const router = Router();
-router.use(requireAuth);
+const guestAccess = [optionalAuth, requireTenant];
 
 const businessSchema = z.object({
   legalName: z.string().optional(),
@@ -71,7 +71,7 @@ async function assertAppOwnership(appId: string, tenantId: string): Promise<void
 }
 
 // Business Info
-router.put('/:appId/business', validate(businessSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const appId = String(req.params.appId);
   await assertAppOwnership(appId, req.tenantId!);
   const { ein, ...rest } = req.body as z.infer<typeof businessSchema>;
@@ -85,7 +85,7 @@ router.put('/:appId/business', validate(businessSchema), asyncHandler(async (req
 }));
 
 // Owner Info — upsert by ownerIndex
-router.put('/:appId/owners', validate(ownerSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/:appId/owners', ...guestAccess, validate(ownerSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const appId = String(req.params.appId);
   await assertAppOwnership(appId, req.tenantId!);
   const { ssn, ownerIndex, ...rest } = req.body as z.infer<typeof ownerSchema>;
@@ -100,7 +100,7 @@ router.put('/:appId/owners', validate(ownerSchema), asyncHandler(async (req: Aut
 }));
 
 // Financial Info
-router.put('/:appId/financial', validate(financialSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/:appId/financial', ...guestAccess, validate(financialSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const appId = String(req.params.appId);
   await assertAppOwnership(appId, req.tenantId!);
   const data = req.body as z.infer<typeof financialSchema>;
@@ -114,7 +114,7 @@ router.put('/:appId/financial', validate(financialSchema), asyncHandler(async (r
 }));
 
 // Loan Request
-router.put('/:appId/loan', validate(loanSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/:appId/loan', ...guestAccess, validate(loanSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const appId = String(req.params.appId);
   await assertAppOwnership(appId, req.tenantId!);
   const data = req.body as z.infer<typeof loanSchema>;

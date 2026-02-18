@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth';
+import { optionalAuth, requireTenant } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { einLookupLimiter } from '../middleware/rateLimiter';
 import { lookupByOpenCorporates } from '../services/businessLookup.service';
 
 const router = Router();
-router.use(requireAuth);
+const guestAccess = [optionalAuth, requireTenant];
 
 const lookupSchema = z.object({
   businessName: z.string().min(2),
@@ -16,6 +16,7 @@ const lookupSchema = z.object({
 
 router.get(
   '/lookup',
+  ...guestAccess,
   einLookupLimiter,
   validate(lookupSchema, 'query'),
   asyncHandler(async (req: Request, res: Response) => {

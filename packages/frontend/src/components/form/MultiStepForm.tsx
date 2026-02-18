@@ -22,7 +22,7 @@ const EMPTY_FINANCIAL: FinancialInfo = {
 };
 const EMPTY_LOAN: LoanRequest = { amountRequested: '', purpose: '', urgency: '', termPreference: '' };
 
-interface Props { token: string; }
+interface Props { token: string | null; }
 
 export function MultiStepForm({ token }: Props) {
   const [state, setState] = useState<FormState>({

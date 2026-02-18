@@ -1,14 +1,14 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 import { writeAuditLog } from '../services/auditLog.service';
 
 const router = Router();
-router.use(requireAuth);
+const guestAccess = [optionalAuth, requireTenant];
 
 const signatureSchema = z.object({
   signatureData: z.string().min(10, 'Signature data is required'),
@@ -30,6 +30,7 @@ const CONSENT_TEXT =
 
 router.post(
   '/:appId/sign',
+  ...guestAccess,
   validate(signatureSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.appId);
@@ -87,6 +88,7 @@ router.post(
 
 router.get(
   '/:appId/signature',
+  ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const sig = await prisma.signature.findFirst({
       where: { applicationId: String(req.params.appId), application: { tenantId: req.tenantId! } },

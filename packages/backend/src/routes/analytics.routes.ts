@@ -2,13 +2,13 @@ import { Router, Response } from 'express';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 
 const router = Router();
-router.use(requireAuth);
+const guestAccess = [optionalAuth, requireTenant];
 
 const eventSchema = z.object({
   events: z.array(
@@ -31,9 +31,10 @@ const eventSchema = z.object({
   ).min(1).max(100),
 });
 
-// POST /analytics/:appId/events — batch event ingestion
+// POST /analytics/:appId/events — batch event ingestion (guests allowed)
 router.post(
   '/:appId/events',
+  ...guestAccess,
   validate(eventSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.appId);
@@ -60,9 +61,10 @@ router.post(
   })
 );
 
-// GET /analytics/:appId/summary — friction summary per field/step
+// GET /analytics/:appId/summary — friction summary per field/step (agents only)
 router.get(
   '/:appId/summary',
+  requireAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const summaryAppId = String(req.params.appId);
     const app = await prisma.application.findFirst({
@@ -83,9 +85,10 @@ router.get(
   })
 );
 
-// GET /analytics/tenant/friction — aggregate friction across all apps in tenant
+// GET /analytics/tenant/friction — aggregate friction across all apps in tenant (agents only)
 router.get(
   '/tenant/friction',
+  requireAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const events = await prisma.analyticsEvent.groupBy({
       by: ['fieldName', 'eventType'],

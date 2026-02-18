@@ -37,6 +37,55 @@ export async function requireAuth(
   }
 }
 
+/**
+ * Optional auth: extracts JWT if present, OR resolves tenant from
+ * `x-tenant-slug` header for unauthenticated guest applicants.
+ * Never blocks — always calls next().
+ */
+export async function optionalAuth(
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const payload = jwt.verify(token, config.jwtSecret) as JwtPayload;
+      req.userId = payload.userId;
+      req.tenantId = payload.tenantId;
+      req.role = payload.role;
+    } else {
+      // Guest applicant: resolve tenant from x-tenant-slug header
+      const tenantSlug = req.headers['x-tenant-slug'] as string | undefined;
+      if (tenantSlug) {
+        const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+        if (tenant?.isActive) {
+          req.tenantId = tenant.id;
+        }
+      }
+    }
+  } catch {
+    // Invalid token — fall through as guest
+  }
+  next();
+}
+
+/**
+ * Ensures req.tenantId is resolved (by JWT or x-tenant-slug).
+ * Must be used after optionalAuth.
+ */
+export function requireTenant(
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): void {
+  if (!req.tenantId) {
+    return next(createError('Tenant not identified. Provide a valid JWT or x-tenant-slug header', 400));
+  }
+  next();
+}
+
 export async function requireTenantApiKey(
   req: AuthRequest,
   _res: Response,
