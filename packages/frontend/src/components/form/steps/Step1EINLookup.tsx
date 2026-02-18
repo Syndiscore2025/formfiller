@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { BusinessInfo, ContactInfo, US_STATES } from '@/types/application';
+import { BusinessInfo, ContactInfo, US_STATES, DataSource } from '@/types/application';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
@@ -19,9 +19,16 @@ interface LookupResult {
     registrationDate?: string;
     sicCode?: string;
     naicsCode?: string;
+    phone?: string;
+    website?: string;
     fieldsPopulated: string[];
+    fieldSources?: Record<string, DataSource>;
   };
   message?: string;
+  sources?: {
+    opencorporates: boolean;
+    googlePlaces: boolean;
+  };
 }
 
 interface Props {
@@ -84,6 +91,9 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
               businessStartDate: res.data.registrationDate,
               sicCode: res.data.sicCode,
               naicsCode: res.data.naicsCode,
+              phone: res.data.phone,
+              website: res.data.website,
+              fieldSources: res.data.fieldSources,
             });
           }
         } catch {

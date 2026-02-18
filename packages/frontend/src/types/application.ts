@@ -9,6 +9,8 @@ export type EntityType =
 
 export type ApplicationStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'declined';
 
+export type DataSource = 'opencorporates' | 'google_places';
+
 export interface BusinessInfo {
   legalName: string;
   dba: string;
@@ -27,6 +29,7 @@ export interface BusinessInfo {
   sicCode: string;
   naicsCode: string;
   autoPopulated?: Record<string, boolean>;
+  fieldSources?: Record<string, DataSource>;
 }
 
 export interface OwnerInfo {

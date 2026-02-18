@@ -11,9 +11,13 @@ export interface BusinessLookupResult {
   registrationDate?: string;
   sicCode?: string;
   naicsCode?: string;
+  phone?: string;
+  website?: string;
   officers?: Array<{ name: string; role: string }>;
   source: string;
   fieldsPopulated: string[];
+  // Track which source provided each field
+  fieldSources?: Record<string, 'opencorporates' | 'google_places'>;
 }
 
 export async function lookupByOpenCorporates(

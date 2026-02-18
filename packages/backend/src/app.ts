@@ -37,7 +37,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'x-tenant-slug'],
 }));
 
 app.use(compression());

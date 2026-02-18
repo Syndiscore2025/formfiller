@@ -14,6 +14,7 @@ export const config = {
   encryptionKey: process.env.ENCRYPTION_KEY || '',
   allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(','),
   openCorporatesApiKey: process.env.OPENCORPORATES_API_KEY || '',
+  googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || '',
   crmWebhookUrl: process.env.CRM_WEBHOOK_URL || '',
   crmApiKey: process.env.CRM_API_KEY || '',
   isProduction: process.env.NODE_ENV === 'production',
