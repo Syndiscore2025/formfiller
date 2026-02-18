@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Business Funding Application',
-  description: 'Apply for small business funding — fast, secure, and paperless.',
+  title: 'Business Funding',
+  description: 'Fast, secure, and paperless funding for your business.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,5 @@
 'use client';
 import { useState, useCallback, useRef } from 'react';
-import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { Step1EINLookup } from './steps/Step1EINLookup';
 import { Step2BusinessReview } from './steps/Step2BusinessReview';
@@ -153,11 +152,8 @@ export function MultiStepForm({ token }: Props) {
 
   return (
     <div>
-      <div className="mb-8">
-        <ProgressBar currentStep={state.currentStep} />
-        <div className="flex justify-end mt-1">
-          <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
-        </div>
+      <div className="flex justify-end mb-4">
+        <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
       </div>
 
       {state.currentStep === 1 && (

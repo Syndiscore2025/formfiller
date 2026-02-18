@@ -4,10 +4,10 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-10 text-center max-w-lg w-full">
-        <h1 className="text-3xl font-bold text-white mb-3">Business Funding Application</h1>
+        <h1 className="text-3xl font-bold text-white mb-3">Business Funding</h1>
         <p className="text-violet-200 mb-8 text-sm leading-relaxed">
           Fast, secure, and paperless funding for your business.
-          Complete your application in minutes.
+          Get started in minutes.
         </p>
         <div className="flex flex-col gap-3">
           <Link

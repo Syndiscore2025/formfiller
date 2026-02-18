@@ -32,7 +32,7 @@ interface Props {
 }
 
 const TCPA_TEXT =
-  'By clicking "Continue", I consent to be contacted about my loan application via phone, email, or text message. Standard message and data rates may apply. This consent is not a condition of applying for a loan.';
+  'By clicking "Continue", I consent to be contacted about my funding request via phone, email, or text message. Standard message and data rates may apply. This consent is not required to receive funding.';
 
 export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Props) {
   const [firstName, setFirstName] = useState('');
@@ -42,47 +42,9 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
   const [tcpaConsent, setTcpaConsent] = useState(false);
   const [searchName, setSearchName] = useState(business.legalName || '');
   const [searchState, setSearchState] = useState(business.stateOfFormation || '');
-  const [lookupLoading, setLookupLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleLookup = async () => {
-    if (!searchName.trim() || !searchState) {
-      setErrors((p) => ({ ...p, lookup: 'Business name and state are required for lookup.' }));
-      return;
-    }
-    setErrors((p) => ({ ...p, lookup: '' }));
-    setLookupLoading(true);
-    try {
-      const res = await api.get<{ success: boolean } & LookupResult>(
-        '/api/business/lookup',
-        token ?? undefined,
-        { businessName: searchName, state: searchState }
-      );
-      setResult(res);
-      if (res.found && res.data) {
-        const populated: Record<string, boolean> = {};
-        res.data.fieldsPopulated.forEach((f) => { populated[f] = true; });
-        onAutoPopulate({
-          legalName: res.data.legalName,
-          entityType: (res.data.entityType as BusinessInfo['entityType']) || undefined,
-          stateOfFormation: res.data.stateOfFormation,
-          streetAddress: res.data.streetAddress,
-          city: res.data.city,
-          state: res.data.state,
-          zipCode: res.data.zipCode,
-          businessStartDate: res.data.registrationDate,
-          sicCode: res.data.sicCode,
-          naicsCode: res.data.naicsCode,
-        }, populated);
-      }
-    } catch (e) {
-      setErrors((p) => ({ ...p, lookup: e instanceof Error ? e.message : 'Lookup failed' }));
-    } finally {
-      setLookupLoading(false);
-    }
-  };
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -101,6 +63,35 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSubmitting(true);
     try {
+      // Auto-trigger EIN lookup on Continue (if not already done)
+      if (!result && searchName.trim() && searchState) {
+        try {
+          const res = await api.get<{ success: boolean } & LookupResult>(
+            '/api/business/lookup',
+            token ?? undefined,
+            { businessName: searchName, state: searchState }
+          );
+          setResult(res);
+          if (res.found && res.data) {
+            const populated: Record<string, boolean> = {};
+            res.data.fieldsPopulated.forEach((f) => { populated[f] = true; });
+            onAutoPopulate({
+              legalName: res.data.legalName,
+              entityType: (res.data.entityType as BusinessInfo['entityType']) || undefined,
+              stateOfFormation: res.data.stateOfFormation,
+              streetAddress: res.data.streetAddress,
+              city: res.data.city,
+              state: res.data.state,
+              zipCode: res.data.zipCode,
+              businessStartDate: res.data.registrationDate,
+              sicCode: res.data.sicCode,
+              naicsCode: res.data.naicsCode,
+            }, populated);
+          }
+        } catch {
+          // Lookup failed silently — continue anyway
+        }
+      }
       await onNext({ firstName, lastName, email, phone, tcpaConsent });
     } finally {
       setSubmitting(false);
@@ -111,7 +102,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-1">Let&apos;s Get Started</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Tell us a bit about yourself and your business so we can pre-fill your application.
+        Tell us a bit about yourself and your business so we can pre-fill your information.
       </p>
 
       {/* Contact Info */}
@@ -134,25 +125,6 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
           onChange={(e) => setSearchState(e.target.value)} options={[...US_STATES]} error={errors.searchState} />
       </div>
 
-      {errors.lookup && <p className="text-sm text-red-600 mb-2">{errors.lookup}</p>}
-
-      <Button onClick={handleLookup} loading={lookupLoading} type="button" variant="secondary">
-        🔍 Search Public Records (Optional)
-      </Button>
-
-      {result && (
-        <div className={`mt-4 p-4 rounded-lg border ${result.found ? 'border-green-300 bg-green-50' : 'border-yellow-300 bg-yellow-50'}`}>
-          {result.found && result.data ? (
-            <>
-              <p className="font-semibold text-green-800 mb-1">✓ Found! {result.data.fieldsPopulated.length} fields will be auto-filled.</p>
-              <p className="text-xs text-green-600">You can review and edit all fields on the next step.</p>
-            </>
-          ) : (
-            <p className="text-yellow-800 text-sm">{result.message ?? 'No data found. Enter information manually on the next step.'}</p>
-          )}
-        </div>
-      )}
-
       {/* TCPA Consent */}
       <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
         <label className="flex items-start gap-3 cursor-pointer">
@@ -165,7 +137,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
 
       <div className="flex justify-end mt-6">
         <Button type="button" onClick={handleNext} loading={submitting}>
-          {result?.found ? 'Continue with Auto-filled Data →' : 'Continue →'}
+          Continue →
         </Button>
       </div>
     </div>
