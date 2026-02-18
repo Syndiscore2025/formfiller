@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  apiKey    String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  applications Application[]
+
+  @@index([slug])
+  @@index([apiKey])
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  email        String
+  passwordHash String
+  role         String   @default("agent")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  applications Application[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Application {
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String?
+  status         String   @default("draft")
+  currentStep    Int      @default(1)
+  completionPct  Int      @default(0)
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
+  user           User?              @relation(fields: [userId], references: [id])
+  business       BusinessInfo?
+  owners         OwnerInfo[]
+  financial      FinancialInfo?
+  loanRequest    LoanRequest?
+  signature      Signature?
+  analyticsEvents AnalyticsEvent[]
+  auditLogs      AuditLog[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model BusinessInfo {
+  id                String   @id @default(uuid())
+  applicationId     String   @unique
+  legalName         String?
+  dba               String?
+  entityType        String?
+  industry          String?
+  stateOfFormation  String?
+  ein               String?
+  businessStartDate DateTime?
+  phone             String?
+  website           String?
+  streetAddress     String?
+  streetAddress2    String?
+  city              String?
+  state             String?
+  zipCode           String?
+  autoPopulated     Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model OwnerInfo {
+  id              String   @id @default(uuid())
+  applicationId   String
+  ownerIndex      Int      @default(1)
+  firstName       String?
+  lastName        String?
+  email           String?
+  phone           String?
+  ownershipPct    Float?
+  ssnEncrypted    String?
+  dateOfBirth     DateTime?
+  creditScore     String?
+  streetAddress   String?
+  streetAddress2  String?
+  city            String?
+  state           String?
+  zipCode         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, ownerIndex])
+  @@index([applicationId])
+}
+
+model FinancialInfo {
+  id                   String   @id @default(uuid())
+  applicationId        String   @unique
+  annualRevenue        Float?
+  monthlyRevenue       Float?
+  monthlyExpenses      Float?
+  outstandingDebts     Float?
+  bankruptcyHistory    Boolean?
+  bankName             String?
+  accountType          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model LoanRequest {
+  id              String   @id @default(uuid())
+  applicationId   String   @unique
+  amountRequested Float?
+  purpose         String?
+  urgency         String?
+  termPreference  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model Signature {
+  id              String   @id @default(uuid())
+  applicationId   String   @unique
+  signatureData   String
+  signerName      String
+  signerEmail     String
+  ipAddress       String
+  userAgent       String
+  consentText     String
+  signedAt        DateTime
+  createdAt       DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsEvent {
+  id            String   @id @default(uuid())
+  applicationId String
+  fieldName     String?
+  eventType     String
+  durationMs    Int?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([eventType])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  applicationId String
+  action        String
+  actor         String?
+  ipAddress     String?
+  details       Json?
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
