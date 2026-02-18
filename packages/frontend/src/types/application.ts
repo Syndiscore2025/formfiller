@@ -63,9 +63,18 @@ export interface LoanRequest {
   termPreference: string;
 }
 
+export interface ContactInfo {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  tcpaConsent: boolean;
+}
+
 export interface FormState {
   applicationId: string | null;
   currentStep: number;
+  contact: ContactInfo;
   business: BusinessInfo;
   owners: OwnerInfo[];
   financial: FinancialInfo;

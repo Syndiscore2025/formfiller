@@ -80,6 +80,7 @@ router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHa
     update: { ...rest, ein },
     create: { applicationId: appId, ...rest, ein },
   });
+  await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'BUSINESS_INFO_SAVED', actor: req.userId, ipAddress: req.ip });
   res.json({ success: true });
 }));
@@ -95,6 +96,7 @@ router.put('/:appId/owners', ...guestAccess, validate(ownerSchema), asyncHandler
     update: { ...rest, ...(ssnEncrypted !== undefined && { ssnEncrypted }) },
     create: { applicationId: appId, ownerIndex, ...rest, ...(ssnEncrypted !== undefined && { ssnEncrypted }) },
   });
+  await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: `OWNER_${ownerIndex}_SAVED`, actor: req.userId, ipAddress: req.ip });
   res.json({ success: true });
 }));
@@ -109,6 +111,7 @@ router.put('/:appId/financial', ...guestAccess, validate(financialSchema), async
     update: data,
     create: { applicationId: appId, ...data },
   });
+  await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'FINANCIAL_INFO_SAVED', actor: req.userId, ipAddress: req.ip });
   res.json({ success: true });
 }));
@@ -123,6 +126,7 @@ router.put('/:appId/loan', ...guestAccess, validate(loanSchema), asyncHandler(as
     update: data,
     create: { applicationId: appId, ...data },
   });
+  await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'LOAN_REQUEST_SAVED', actor: req.userId, ipAddress: req.ip });
   res.json({ success: true });
 }));

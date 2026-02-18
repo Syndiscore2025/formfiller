@@ -7,9 +7,10 @@ import { Step2BusinessReview } from './steps/Step2BusinessReview';
 import { Step3OwnersFinancials } from './steps/Step3OwnersFinancials';
 import { Step4LoanRequest } from './steps/Step4LoanRequest';
 import { Step5ReviewSign } from './steps/Step5ReviewSign';
-import type { FormState, BusinessInfo, OwnerInfo, FinancialInfo, LoanRequest } from '@/types/application';
+import type { FormState, ContactInfo, BusinessInfo, OwnerInfo, FinancialInfo, LoanRequest } from '@/types/application';
 import { api } from '@/lib/api';
 
+const EMPTY_CONTACT: ContactInfo = { firstName: '', lastName: '', email: '', phone: '', tcpaConsent: false };
 const EMPTY_BUSINESS: BusinessInfo = {
   legalName: '', dba: '', entityType: '', industry: '', stateOfFormation: '',
   ein: '', businessStartDate: '', phone: '', website: '',
@@ -28,6 +29,7 @@ export function MultiStepForm({ token }: Props) {
   const [state, setState] = useState<FormState>({
     applicationId: null,
     currentStep: 1,
+    contact: EMPTY_CONTACT,
     business: EMPTY_BUSINESS,
     owners: [],
     financial: EMPTY_FINANCIAL,
@@ -39,9 +41,16 @@ export function MultiStepForm({ token }: Props) {
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const ensureApplication = useCallback(async (): Promise<string> => {
+  const ensureApplication = useCallback(async (contact?: ContactInfo): Promise<string> => {
     if (state.applicationId) return state.applicationId;
-    const res = await api.post<{ success: boolean; data: { id: string } }>('/api/applications', {}, token);
+    if (!contact) throw new Error('Contact info required to create application');
+    const res = await api.post<{ success: boolean; data: { id: string } }>('/api/applications', {
+      contactFirstName: contact.firstName,
+      contactLastName: contact.lastName,
+      contactEmail: contact.email,
+      contactPhone: contact.phone,
+      tcpaConsent: contact.tcpaConsent,
+    }, token ?? undefined);
     const id = res.data.id;
     setState((prev) => ({ ...prev, applicationId: id }));
     return id;
@@ -50,7 +59,7 @@ export function MultiStepForm({ token }: Props) {
   const saveSection = useCallback(async (path: string, body: unknown, appId: string) => {
     setState((prev) => ({ ...prev, isSaving: true }));
     try {
-      await api.put(`/api/forms/${appId}/${path}`, body, token);
+      await api.put(`/api/forms/${appId}/${path}`, body, token ?? undefined);
       setState((prev) => ({ ...prev, isSaving: false, lastSaved: new Date().toISOString() }));
     } catch (err) {
       console.error('Save error:', err);
@@ -60,25 +69,39 @@ export function MultiStepForm({ token }: Props) {
 
   const advanceStep = useCallback(async (nextStep: number) => {
     if (!state.applicationId) return;
-    await api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: nextStep }, token);
+    await api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: nextStep }, token ?? undefined);
     setState((prev) => ({ ...prev, currentStep: nextStep }));
   }, [state.applicationId, token]);
 
-  const handleStep1Next = useCallback(async () => {
-    // Step 1 is EIN lookup — no application created yet, just advance locally
-    setState((prev) => ({ ...prev, currentStep: 2 }));
-  }, []);
+  const handleStep1Next = useCallback(async (contact: ContactInfo) => {
+    // Step 1: create the application with contact info; pre-populate Owner 1
+    const appId = await ensureApplication(contact);
+    const prefilledOwner: OwnerInfo = {
+      ownerIndex: 1,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      email: contact.email,
+      phone: contact.phone,
+      ownershipPct: '', ssn: '', dateOfBirth: '', creditScore: '',
+      streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',
+    };
+    setState((prev) => ({ ...prev, contact, owners: [prefilledOwner], currentStep: 2 }));
+    // Persist step progress
+    await api.patch(`/api/applications/${appId}/step`, { currentStep: 2 }, token ?? undefined);
+  }, [ensureApplication, token]);
 
   const handleStep2Next = useCallback(async (business: BusinessInfo) => {
-    const appId = await ensureApplication();
+    const appId = state.applicationId;
+    if (!appId) return;
     setState((prev) => ({ ...prev, business }));
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => saveSection('business', { ...business, autoPopulated }, appId), 300);
     await advanceStep(3);
-  }, [ensureApplication, saveSection, advanceStep, autoPopulated]);
+  }, [state.applicationId, saveSection, advanceStep, autoPopulated]);
 
   const handleStep3Next = useCallback(async (owners: OwnerInfo[], financial: FinancialInfo) => {
-    const appId = await ensureApplication();
+    const appId = state.applicationId;
+    if (!appId) return;
     setState((prev) => ({ ...prev, owners, financial }));
     for (const owner of owners) {
       await saveSection('owners', owner, appId);
@@ -91,17 +114,18 @@ export function MultiStepForm({ token }: Props) {
       outstandingDebts: financial.outstandingDebts ? Number(financial.outstandingDebts) : undefined,
     }, appId);
     await advanceStep(4);
-  }, [ensureApplication, saveSection, advanceStep]);
+  }, [state.applicationId, saveSection, advanceStep]);
 
   const handleStep4Next = useCallback(async (loanRequest: LoanRequest) => {
-    const appId = await ensureApplication();
+    const appId = state.applicationId;
+    if (!appId) return;
     setState((prev) => ({ ...prev, loanRequest }));
     await saveSection('loan', {
       ...loanRequest,
       amountRequested: loanRequest.amountRequested ? Number(loanRequest.amountRequested) : undefined,
     }, appId);
     await advanceStep(5);
-  }, [ensureApplication, saveSection, advanceStep]);
+  }, [state.applicationId, saveSection, advanceStep]);
 
   const handleAutoPopulate = useCallback((data: Partial<BusinessInfo>, populated: Record<string, boolean>) => {
     setAutoPopulated(populated);

@@ -6,7 +6,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 import { writeAuditLog } from '../services/auditLog.service';
-import { pushToSwitchboxCrm } from '../services/crm.service';
+import { pushToSwitchboxCrm, buildHeatmap } from '../services/crm.service';
 import { generateApplicationPdf } from '../services/pdf.service';
 
 const router = Router();
@@ -15,6 +15,14 @@ const router = Router();
 const guestAccess = [optionalAuth, requireTenant];
 
 const stepSchema = z.object({ currentStep: z.number().int().min(1).max(5) });
+
+const createAppSchema = z.object({
+  contactFirstName: z.string().min(1, 'First name is required'),
+  contactLastName: z.string().min(1, 'Last name is required'),
+  contactEmail: z.string().email('Valid email is required'),
+  contactPhone: z.string().min(10, 'Valid phone number is required'),
+  tcpaConsent: z.boolean().refine((v) => v === true, 'TCPA consent is required'),
+});
 
 // GET /applications — list for tenant (agents only)
 router.get(
@@ -38,13 +46,24 @@ router.get(
 router.post(
   '/',
   ...guestAccess,
+  validate(createAppSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { contactFirstName, contactLastName, contactEmail, contactPhone } =
+      req.body as z.infer<typeof createAppSchema>;
+    const now = new Date();
     const app = await prisma.application.create({
       data: {
         tenantId: req.tenantId!,
         userId: req.userId,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
+        contactFirstName,
+        contactLastName,
+        contactEmail,
+        contactPhone,
+        tcpaConsentStep1: true,
+        tcpaConsentStep1At: now,
+        lastActivityAt: now,
       },
     });
     await writeAuditLog({ applicationId: app.id, action: 'APPLICATION_CREATED', actor: req.userId, ipAddress: req.ip });
@@ -77,7 +96,7 @@ router.patch(
     const appId = String(req.params.id);
     await prisma.application.updateMany({
       where: { id: appId, tenantId: req.tenantId! },
-      data: { currentStep, completionPct: Math.round((currentStep - 1) * 20) },
+      data: { currentStep, completionPct: Math.round((currentStep - 1) * 20), lastActivityAt: new Date() },
     });
     await writeAuditLog({ applicationId: appId, action: `STEP_${currentStep}_REACHED`, actor: req.userId, ipAddress: req.ip });
     res.json({ success: true });
@@ -100,15 +119,19 @@ router.post(
     await prisma.application.update({ where: { id: app.id }, data: { status: 'submitted', completionPct: 100 } });
     await writeAuditLog({ applicationId: app.id, action: 'APPLICATION_SUBMITTED', actor: req.userId, ipAddress: req.ip });
 
-    pushToSwitchboxCrm({
-      applicationId: app.id,
-      tenantId: app.tenantId,
-      status: 'submitted',
-      business: app.business as Record<string, unknown> ?? undefined,
-      owners: (app.owners as Record<string, unknown>[]) ?? undefined,
-      financial: app.financial as Record<string, unknown> ?? undefined,
-      loanRequest: app.loanRequest as Record<string, unknown> ?? undefined,
-      submittedAt: new Date().toISOString(),
+    // Build analytics heatmap and push to CRM asynchronously
+    buildHeatmap(app.id).then((analyticsHeatmap) => {
+      return pushToSwitchboxCrm({
+        applicationId: app.id,
+        tenantId: app.tenantId,
+        status: 'submitted',
+        business: app.business as Record<string, unknown> ?? undefined,
+        owners: (app.owners as Record<string, unknown>[]) ?? undefined,
+        financial: app.financial as Record<string, unknown> ?? undefined,
+        loanRequest: app.loanRequest as Record<string, unknown> ?? undefined,
+        submittedAt: new Date().toISOString(),
+        analyticsHeatmap,
+      });
     }).catch((err: Error) => console.error('CRM push error:', err.message));
 
     res.json({ success: true });

@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { BusinessInfo, US_STATES } from '@/types/application';
+import { BusinessInfo, ContactInfo, US_STATES } from '@/types/application';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
@@ -27,24 +27,33 @@ interface LookupResult {
 interface Props {
   business: BusinessInfo;
   onAutoPopulate: (data: Partial<BusinessInfo>, populated: Record<string, boolean>) => void;
-  onNext: () => void;
+  onNext: (contact: ContactInfo) => Promise<void>;
   token: string | null;
 }
 
+const TCPA_TEXT =
+  'By clicking "Continue", I consent to be contacted about my loan application via phone, email, or text message. Standard message and data rates may apply. This consent is not a condition of applying for a loan.';
+
 export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Props) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [tcpaConsent, setTcpaConsent] = useState(false);
   const [searchName, setSearchName] = useState(business.legalName || '');
   const [searchState, setSearchState] = useState(business.stateOfFormation || '');
-  const [loading, setLoading] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleLookup = async () => {
     if (!searchName.trim() || !searchState) {
-      setError('Business name and state are required for lookup.');
+      setErrors((p) => ({ ...p, lookup: 'Business name and state are required for lookup.' }));
       return;
     }
-    setError('');
-    setLoading(true);
+    setErrors((p) => ({ ...p, lookup: '' }));
+    setLookupLoading(true);
     try {
       const res = await api.get<{ success: boolean } & LookupResult>(
         '/api/business/lookup',
@@ -69,67 +78,94 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
         }, populated);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Lookup failed');
+      setErrors((p) => ({ ...p, lookup: e instanceof Error ? e.message : 'Lookup failed' }));
     } finally {
-      setLoading(false);
+      setLookupLoading(false);
+    }
+  };
+
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!firstName.trim()) errs.firstName = 'First name is required';
+    if (!lastName.trim()) errs.lastName = 'Last name is required';
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Valid email is required';
+    if (!phone.trim() || phone.replace(/\D/g, '').length < 10) errs.phone = 'Valid 10-digit phone is required';
+    if (!searchName.trim()) errs.searchName = 'Business name is required';
+    if (!searchState) errs.searchState = 'State of formation is required';
+    if (!tcpaConsent) errs.tcpaConsent = 'You must agree to continue';
+    return errs;
+  };
+
+  const handleNext = async () => {
+    const errs = validate();
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    setSubmitting(true);
+    try {
+      await onNext({ firstName, lastName, email, phone, tcpaConsent });
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Business Lookup</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">Let&apos;s Get Started</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Enter your business name and state to search public records and pre-fill your application.
-        You can skip this step and enter information manually.
+        Tell us a bit about yourself and your business so we can pre-fill your application.
       </p>
 
+      {/* Contact Info */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
-        <Input
-          label="Business Legal Name"
-          required
-          autoComplete="organization"
-          value={searchName}
-          onChange={(e) => setSearchName(e.target.value)}
-          placeholder="Exact legal business name"
-        />
-        <Select
-          label="State of Formation"
-          required
-          value={searchState}
-          onChange={(e) => setSearchState(e.target.value)}
-          options={[...US_STATES]}
-        />
+        <Input label="First Name" required autoComplete="given-name" value={firstName}
+          onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
+        <Input label="Last Name" required autoComplete="family-name" value={lastName}
+          onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
+        <Input label="Email Address" required type="email" autoComplete="email" value={email}
+          onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+        <Input label="Phone Number" required type="tel" autoComplete="tel" value={phone}
+          onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" error={errors.phone} />
       </div>
 
-      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {/* Business Lookup */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-3">
+        <Input label="Business Legal Name" required autoComplete="organization" value={searchName}
+          onChange={(e) => setSearchName(e.target.value)} placeholder="Exact legal business name" error={errors.searchName} />
+        <Select label="State of Formation" required value={searchState}
+          onChange={(e) => setSearchState(e.target.value)} options={[...US_STATES]} error={errors.searchState} />
+      </div>
 
-      <Button onClick={handleLookup} loading={loading} type="button" variant="secondary">
-        🔍 Search Public Records
+      {errors.lookup && <p className="text-sm text-red-600 mb-2">{errors.lookup}</p>}
+
+      <Button onClick={handleLookup} loading={lookupLoading} type="button" variant="secondary">
+        🔍 Search Public Records (Optional)
       </Button>
 
       {result && (
-        <div className={`mt-5 p-4 rounded-lg border ${result.found ? 'border-green-300 bg-green-50' : 'border-yellow-300 bg-yellow-50'}`}>
+        <div className={`mt-4 p-4 rounded-lg border ${result.found ? 'border-green-300 bg-green-50' : 'border-yellow-300 bg-yellow-50'}`}>
           {result.found && result.data ? (
             <>
-              <p className="font-semibold text-green-800 mb-2">
-                ✓ Found! {result.data.fieldsPopulated.length} fields auto-populated.
-              </p>
-              <ul className="text-sm text-green-700 list-disc list-inside space-y-1">
-                {result.data.fieldsPopulated.map((f) => (
-                  <li key={f}>{f.replace(/([A-Z])/g, ' $1').trim()}</li>
-                ))}
-              </ul>
-              <p className="text-xs text-green-600 mt-2">You can review and edit all fields on the next step.</p>
+              <p className="font-semibold text-green-800 mb-1">✓ Found! {result.data.fieldsPopulated.length} fields will be auto-filled.</p>
+              <p className="text-xs text-green-600">You can review and edit all fields on the next step.</p>
             </>
           ) : (
-            <p className="text-yellow-800 text-sm">{result.message ?? 'No data found. You can enter your information manually on the next step.'}</p>
+            <p className="text-yellow-800 text-sm">{result.message ?? 'No data found. Enter information manually on the next step.'}</p>
           )}
         </div>
       )}
 
-      <div className="flex justify-end mt-8">
-        <Button type="button" onClick={onNext}>
-          {result?.found ? 'Continue with Auto-filled Data' : 'Skip & Enter Manually'}
+      {/* TCPA Consent */}
+      <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" checked={tcpaConsent} onChange={(e) => setTcpaConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+          <span className="text-xs text-gray-600">{TCPA_TEXT}</span>
+        </label>
+        {errors.tcpaConsent && <p className="text-xs text-red-600 mt-1 ml-7">{errors.tcpaConsent}</p>}
+      </div>
+
+      <div className="flex justify-end mt-6">
+        <Button type="button" onClick={handleNext} loading={submitting}>
+          {result?.found ? 'Continue with Auto-filled Data →' : 'Continue →'}
         </Button>
       </div>
     </div>
