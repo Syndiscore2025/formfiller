@@ -73,25 +73,21 @@ export interface FormState {
   currentStep: number;
   contact: ContactInfo;
   business: BusinessInfo;
-  businessConfirmed: boolean | null; // true = confirmed, false = needs edit, null = not yet answered
   owners: OwnerInfo[];
   financial: FinancialInfo;
   loanRequest: LoanRequest;
   hasAdditionalOwners: boolean | null;
+  homeAddressSameAsBusiness: boolean | null;
   isSaving: boolean;
   lastSaved: string | null;
 }
 
-// Micro-step flow (Step 3 is conditional - only if business not confirmed)
 export const STEPS = [
-  { id: 1, label: 'About You' },
-  { id: 2, label: 'Confirm Business' },
-  { id: 3, label: 'Business Details' },  // conditional
-  { id: 4, label: 'Revenue' },
-  { id: 5, label: 'Funding Request' },
-  { id: 6, label: 'Owner Details' },
-  { id: 7, label: 'Additional Owners' },
-  { id: 8, label: 'Review & Sign' },
+  { id: 1, label: 'Get Started' },
+  { id: 2, label: 'Business Details' },
+  { id: 3, label: 'Revenue & Funding' },
+  { id: 4, label: 'Owner Details' },
+  { id: 5, label: 'Review & Sign' },
 ] as const;
 
 export const US_STATES = [

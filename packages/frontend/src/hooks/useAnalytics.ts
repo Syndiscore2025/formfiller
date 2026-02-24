@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, createContext, useContext } from 'react';
 import { api } from '@/lib/api';
 
 type EventType =
@@ -70,3 +70,17 @@ export function useAnalytics(applicationId: string | null, token: string | null)
   return { onFocus, onBlur, onKeyDown, trackStep, flush };
 }
 
+/* ── React Context so Input/Select auto-fire analytics without prop drilling ── */
+export interface AnalyticsHandlers {
+  onFocus: (fieldName: string) => void;
+  onBlur: (fieldName: string) => void;
+  onKeyDown: (fieldName: string) => void;
+  trackStep: (stepId: number, eventType: 'step_view' | 'step_complete' | 'step_abandon') => void;
+  flush: () => Promise<void>;
+}
+
+export const AnalyticsContext = createContext<AnalyticsHandlers | null>(null);
+
+export function useAnalyticsContext(): AnalyticsHandlers | null {
+  return useContext(AnalyticsContext);
+}

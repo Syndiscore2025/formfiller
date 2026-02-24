@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/cn';
+import { useAnalyticsContext } from '@/hooks/useAnalytics';
 
 interface SelectOption {
   value: string;
@@ -8,15 +9,16 @@ interface SelectOption {
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label: string;
-  options: SelectOption[] | readonly string[];
+  options: SelectOption[] | readonly SelectOption[] | readonly string[];
   error?: string;
   required?: boolean;
   autoPopulated?: boolean;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, options, error, required, autoPopulated, className, id, ...props }, ref) => {
+  ({ label, options, error, required, autoPopulated, className, id, onFocus, onBlur, onChange, ...props }, ref) => {
     const selectId = id || label.toLowerCase().replace(/\s+/g, '_');
+    const analytics = useAnalyticsContext();
     const normalised: SelectOption[] = options.map((o) =>
       typeof o === 'string' ? { value: o, label: o } : o
     );
@@ -42,6 +44,9 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             error && 'border-red-500 focus:ring-red-500',
             className
           )}
+          onFocus={(e) => { analytics?.onFocus(selectId); onFocus?.(e); }}
+          onBlur={(e) => { analytics?.onBlur(selectId); onBlur?.(e); }}
+          onChange={(e) => { analytics?.onKeyDown(selectId); onChange?.(e); }}
           {...props}
         >
           <option value="">Please Select</option>

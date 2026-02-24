@@ -17,7 +17,7 @@ const businessSchema = z.object({
   entityType: z.string().optional(),
   industry: z.string().optional(),
   stateOfFormation: z.string().optional(),
-  ein: z.string().regex(/^\d{9}$/, 'EIN must be 9 digits').optional(),
+  ein: z.string().refine((val) => val === '' || /^\d{9}$/.test(val), 'EIN must be 9 digits').optional(),
   businessStartDate: z.string().optional(),
   phone: z.string().optional(),
   website: z.string().url().optional().or(z.literal('')),

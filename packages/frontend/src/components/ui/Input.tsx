@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/cn';
+import { useAnalyticsContext } from '@/hooks/useAnalytics';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -10,8 +11,9 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, hint, autoPopulated, required, className, id, ...props }, ref) => {
+  ({ label, error, hint, autoPopulated, required, className, id, onFocus, onBlur, onKeyDown, ...props }, ref) => {
     const inputId = id || label.toLowerCase().replace(/\s+/g, '_');
+    const analytics = useAnalyticsContext();
     return (
       <div className="flex flex-col gap-1">
         <label htmlFor={inputId} className="text-sm font-semibold text-gray-800">
@@ -34,6 +36,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             error && 'border-red-500 focus:ring-red-500',
             className
           )}
+          onFocus={(e) => { analytics?.onFocus(inputId); onFocus?.(e); }}
+          onBlur={(e) => { analytics?.onBlur(inputId); onBlur?.(e); }}
+          onKeyDown={(e) => { analytics?.onKeyDown(inputId); onKeyDown?.(e); }}
           {...props}
         />
         {hint && !error && <p className="text-xs text-gray-500">{hint}</p>}

@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 
 const CONSENT_TEXT =
   'By signing below, I certify that all information provided is true, accurate, and complete. ' +
-  'I authorize the lender to obtain credit reports, verify all submitted information, and share data with necessary parties. ' +
+  'I authorize the lender to conduct a soft credit inquiry, verify all submitted information, and share data with necessary parties. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
 interface Props {
@@ -86,27 +86,27 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       <p className="text-sm text-gray-500 mb-5">Please review your information before signing.</p>
 
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-5 text-sm">
-        <ReviewSection title="Contact" rows={[
-          ['Name', `${contact.firstName} ${contact.lastName}`.trim()],
-          ['Email', contact.email], ['Phone', contact.phone],
-        ]} />
         <ReviewSection title="Business" rows={[
-          ['Legal Name', business.legalName], ['DBA', business.dba],
+          ['Business Name', business.legalName], ['DBA', business.dba],
           ['Entity Type', business.entityType], ['State', business.stateOfFormation],
-          ['EIN', business.ein ? `***-**-${business.ein.slice(-4)}` : undefined],
+          ['EIN', business.ein || undefined],
+          ['Business Start Date', business.businessStartDate],
+          ['Phone', business.phone], ['Website', business.website],
           ['Address', [business.streetAddress, business.city, business.state, business.zipCode].filter(Boolean).join(', ')],
-        ]} />
-        <ReviewSection title="Revenue" rows={[['Estimated Annual Revenue', financial.annualRevenue]]} />
-        <ReviewSection title="Funding Request" rows={[
-          ['Amount', loanRequest.amountRequested], ['Purpose', loanRequest.purpose],
-          ['Timeline', loanRequest.urgency], ['Term', loanRequest.termPreference],
         ]} />
         {owner && <ReviewSection title="Owner" rows={[
           ['Name', `${owner.firstName} ${owner.lastName}`.trim()],
+          ['SSN', owner.ssn],
           ['Ownership', owner.ownershipPct ? `${owner.ownershipPct}%` : undefined],
-          ['Credit Score', owner.creditScore], ['DOB', owner.dateOfBirth],
+          ['DOB', owner.dateOfBirth],
+        ]} />}
+        {owner && <ReviewSection title="Home Address" rows={[
           ['Address', [owner.streetAddress, owner.city, owner.state, owner.zipCode].filter(Boolean).join(', ')],
         ]} />}
+        <ReviewSection title="Contact Information" rows={[
+          ['Email', contact.email], ['Phone', contact.phone],
+        ]} />
+        <ReviewSection title="Revenue" rows={[['Estimated Annual Revenue', financial.annualRevenue]]} />
         <ReviewSection title="Additional Owners" rows={[
           ['Has Other Owners (20%+)', hasAdditionalOwners === true ? 'Yes' : hasAdditionalOwners === false ? 'No' : 'Not specified'],
         ]} />
