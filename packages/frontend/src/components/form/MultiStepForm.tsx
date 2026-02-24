@@ -10,6 +10,9 @@ import type { FormState, ContactInfo, BusinessInfo, OwnerInfo, FinancialInfo, Lo
 import { api } from '@/lib/api';
 import { useAnalytics, AnalyticsContext } from '@/hooks/useAnalytics';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG || 'default';
+
 const EMPTY_CONTACT: ContactInfo = { firstName: '', lastName: '', email: '', phone: '', tcpaConsent: false };
 const EMPTY_BUSINESS: BusinessInfo = {
   legalName: '', dba: '', entityType: '', industry: '', stateOfFormation: '',
@@ -144,6 +147,33 @@ export function MultiStepForm({ token }: Props) {
     setState((prev) => ({ ...prev, business: { ...prev.business, ...data } }));
   }, []);
 
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!state.applicationId) return;
+    setPdfDownloading(true);
+    try {
+      const headers: HeadersInit = { 'x-tenant-slug': TENANT_SLUG };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/api/applications/${state.applicationId}/pdf`, { headers });
+      if (!res.ok) throw new Error('Failed to download PDF');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `application-${state.applicationId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download error:', err);
+      alert('Unable to download PDF. Please try again.');
+    } finally {
+      setPdfDownloading(false);
+    }
+  }, [state.applicationId, token]);
+
   if (submittedAt) {
     return (
       <div className="text-center py-12">
@@ -152,9 +182,13 @@ export function MultiStepForm({ token }: Props) {
         <p className="text-gray-600 mb-1">Your request has been received and is under review.</p>
         <p className="text-xs text-gray-400">Signed at: {new Date(submittedAt).toISOString()}</p>
         {state.applicationId && (
-          <a href={`/api/applications/${state.applicationId}/pdf`} className="mt-5 inline-block text-violet-700 underline text-sm">
-            Download Signed PDF
-          </a>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfDownloading}
+            className="mt-5 inline-block text-violet-700 underline text-sm hover:text-violet-900 disabled:opacity-50"
+          >
+            {pdfDownloading ? 'Downloading…' : 'Download Signed PDF'}
+          </button>
         )}
       </div>
     );
