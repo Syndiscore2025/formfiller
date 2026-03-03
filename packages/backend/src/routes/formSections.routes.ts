@@ -20,7 +20,7 @@ const businessSchema = z.object({
   ein: z.string().refine((val) => val === '' || /^\d{9}$/.test(val), 'EIN must be 9 digits').optional(),
   businessStartDate: z.string().optional(),
   phone: z.string().optional(),
-  website: z.string().url().optional().or(z.literal('')),
+  website: z.string().optional(),
   streetAddress: z.string().optional(),
   streetAddress2: z.string().optional(),
   city: z.string().optional(),
@@ -54,9 +54,7 @@ const financialSchema = z.object({
 
 const loanSchema = z.object({
   amountRequested: z.string().optional(), // dropdown range value
-  purpose: z.string().optional(),
   urgency: z.string().optional(),
-  termPreference: z.string().optional(),
 });
 
 async function assertAppOwnership(appId: string, tenantId: string): Promise<void> {
@@ -68,11 +66,24 @@ async function assertAppOwnership(appId: string, tenantId: string): Promise<void
 router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const appId = String(req.params.appId);
   await assertAppOwnership(appId, req.tenantId!);
-  const { ein, ...rest } = req.body as z.infer<typeof businessSchema>;
+  const { ein, website, businessStartDate, ...rest } = req.body as z.infer<typeof businessSchema>;
+
+  // Normalize website: prepend https:// if a value was given but has no protocol
+  const normalizedWebsite =
+    website && !/^https?:\/\//i.test(website) ? `https://${website}` : website || undefined;
+
+  // Guard against empty string reaching a DateTime column
+	const normalizedDate = (() => {
+		const v = (businessStartDate ?? '').trim();
+		if (!v) return undefined;
+		const d = new Date(v);
+		return Number.isNaN(d.getTime()) ? undefined : d;
+	})();
+
   await prisma.businessInfo.upsert({
     where: { applicationId: appId },
-    update: { ...rest, ein },
-    create: { applicationId: appId, ...rest, ein },
+    update: { ...rest, ein, website: normalizedWebsite, businessStartDate: normalizedDate },
+    create: { applicationId: appId, ...rest, ein, website: normalizedWebsite, businessStartDate: normalizedDate },
   });
   await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'BUSINESS_INFO_SAVED', actor: req.userId, ipAddress: req.ip });

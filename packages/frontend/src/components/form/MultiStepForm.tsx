@@ -21,7 +21,7 @@ const EMPTY_BUSINESS: BusinessInfo = {
   sicCode: '', naicsCode: '',
 };
 const EMPTY_FINANCIAL: FinancialInfo = { annualRevenue: '' };
-const EMPTY_LOAN: LoanRequest = { amountRequested: '', purpose: '', urgency: '', termPreference: '' };
+const EMPTY_LOAN: LoanRequest = { amountRequested: '', urgency: '' };
 
 interface Props { token: string | null; }
 
@@ -82,14 +82,16 @@ export function MultiStepForm({ token }: Props) {
     return id;
   }, [state.applicationId, token]);
 
-  const saveSection = useCallback(async (path: string, body: unknown, appId: string) => {
+  const saveSection = useCallback(async (path: string, body: unknown, appId: string): Promise<boolean> => {
     setState((prev) => ({ ...prev, isSaving: true }));
     try {
       await api.put(`/api/forms/${appId}/${path}`, body, token ?? undefined);
       setState((prev) => ({ ...prev, isSaving: false, lastSaved: new Date().toISOString() }));
+      return true;
     } catch (err) {
       console.error('Save error:', err);
       setState((prev) => ({ ...prev, isSaving: false }));
+      return false;
     }
   }, [token]);
 
@@ -118,7 +120,11 @@ export function MultiStepForm({ token }: Props) {
     const appId = state.applicationId;
     if (!appId) return;
     setState((prev) => ({ ...prev, business: businessData, homeAddressSameAsBusiness: homeAddrSame }));
-    await saveSection('business', businessData, appId);
+    const ok = await saveSection('business', businessData, appId);
+    if (!ok) {
+      alert('We could not save your business information. Please double-check the form and try again.');
+      return;
+    }
     await advanceStep(3);
   }, [state.applicationId, saveSection, advanceStep]);
 
@@ -127,8 +133,12 @@ export function MultiStepForm({ token }: Props) {
     const appId = state.applicationId;
     if (!appId) return;
     setState((prev) => ({ ...prev, financial, loanRequest }));
-    await saveSection('financial', { annualRevenue: financial.annualRevenue }, appId);
-    await saveSection('loan', loanRequest, appId);
+    const ok1 = await saveSection('financial', { annualRevenue: financial.annualRevenue }, appId);
+    const ok2 = await saveSection('loan', loanRequest, appId);
+    if (!ok1 || !ok2) {
+      alert('We could not save your financial information. Please try again.');
+      return;
+    }
     await advanceStep(4);
   }, [state.applicationId, saveSection, advanceStep]);
 
@@ -137,7 +147,11 @@ export function MultiStepForm({ token }: Props) {
     const appId = state.applicationId;
     if (!appId) return;
     setState((prev) => ({ ...prev, owners: [owner], hasAdditionalOwners: hasAdditional }));
-    await saveSection('owners', owner, appId);
+    const ok = await saveSection('owners', owner, appId);
+    if (!ok) {
+      alert('We could not save the owner details. Please try again.');
+      return;
+    }
     await api.patch(`/api/applications/${appId}`, { hasAdditionalOwners: hasAdditional }, token ?? undefined);
     await advanceStep(5);
   }, [state.applicationId, saveSection, advanceStep, token]);

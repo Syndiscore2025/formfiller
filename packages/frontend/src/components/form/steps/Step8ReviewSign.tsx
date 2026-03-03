@@ -1,6 +1,6 @@
 'use client';
-import { useRef, useCallback, useState, useMemo } from 'react';
-import type { FormState, ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES, URGENCY_OPTIONS, TERM_PREFERENCES, CREDIT_SCORE_RANGES } from '@/types/application';
+import { useRef, useCallback, useState, useMemo, useEffect, type PointerEvent } from 'react';
+import type { FormState, ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES, URGENCY_OPTIONS, CREDIT_SCORE_RANGES } from '@/types/application';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
@@ -78,25 +78,143 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const [hasSignature, setHasSignature] = useState(false);
+  const [signatureMode, setSignatureMode] = useState<'auto' | 'drawn' | 'cleared'>('auto');
+  const drawingRef = useRef<{ isDrawing: boolean; last?: { x: number; y: number } }>({ isDrawing: false });
+
   /** Format dateSigned (YYYY-MM-DD) to user-friendly MM/DD/YYYY for display */
   const dateSignedDisplay = useMemo(() => {
     const m = dateSigned.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return m ? `${m[2]}/${m[3]}/${m[1]}` : dateSigned;
   }, [dateSigned]);
 
-  const generateSignatureImage = useCallback((name: string): string => {
+  const resetCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return '';
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return '';
+    if (!ctx) return;
+
+    // white background so the resulting PNG isn't transparent
     ctx.fillStyle = 'rgb(255,255,255)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // pen defaults
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }, []);
+
+  useEffect(() => {
+    resetCanvas();
+  }, [resetCanvas]);
+
+  const applyTypedSignature = useCallback((name: string) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    resetCanvas();
+
+    // Draw a script-like typed signature from the signer name.
+    // Uses system fonts only (no custom font downloads) for reliability.
+    const paddingX = 22;
+    const maxWidth = canvas.width - paddingX * 2;
+    const y = Math.round(canvas.height * 0.62);
+
+    // Start large and scale down to fit.
+    let fontSize = 80;
+    const fontFamily = '"Segoe Script", "Brush Script MT", cursive';
     ctx.fillStyle = '#1a1a2e';
-    const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-dancing-script').trim() || 'cursive';
-    ctx.font = `italic 48px ${fontFamily}, cursive`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+    ctx.textBaseline = 'alphabetic';
+
+    const safeName = name.trim();
+    if (!safeName) return;
+
+    for (let i = 0; i < 6; i++) {
+      ctx.font = `${fontSize}px ${fontFamily}`;
+      const w = ctx.measureText(safeName).width;
+      if (w <= maxWidth || fontSize <= 28) break;
+      fontSize = Math.max(28, Math.floor((fontSize * maxWidth) / w));
+    }
+
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    const textW = ctx.measureText(safeName).width;
+    const x = Math.max(paddingX, Math.round((canvas.width - textW) / 2));
+    ctx.fillText(safeName, x, y);
+
+    setHasSignature(true);
+  }, [resetCanvas]);
+
+  // Auto-populate typed signature from the auto-filled signer name.
+  useEffect(() => {
+    if (signatureMode !== 'auto') return;
+    if (!signerName.trim()) return;
+    applyTypedSignature(signerName);
+    setHasSignature(true);
+  }, [applyTypedSignature, signatureMode, signerName]);
+
+
+
+  const pointFromEvent = useCallback((e: PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  }, []);
+
+  const onPointerDown = useCallback((e: PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const p = pointFromEvent(e);
+    if (!canvas || !ctx || !p) return;
+
+    if (signatureMode !== 'drawn') setSignatureMode('drawn');
+    canvas.setPointerCapture(e.pointerId);
+    drawingRef.current.isDrawing = true;
+    drawingRef.current.last = p;
+
+    // draw a tiny dot so taps count as a signature
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + 0.01, p.y + 0.01);
+    ctx.stroke();
+    setHasSignature(true);
+  }, [pointFromEvent, signatureMode]);
+
+  const onPointerMove = useCallback((e: PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current.isDrawing) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const p = pointFromEvent(e);
+    const last = drawingRef.current.last;
+    if (!canvas || !ctx || !p || !last) return;
+
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    drawingRef.current.last = p;
+    setHasSignature(true);
+  }, [pointFromEvent]);
+
+  const endStroke = useCallback((e?: PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (canvas && e) {
+      try { canvas.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    }
+    drawingRef.current.isDrawing = false;
+    drawingRef.current.last = undefined;
+  }, []);
+
+  const getSignatureDataUrl = useCallback((): string => {
+    const canvas = canvasRef.current;
+    if (!canvas) return '';
     return canvas.toDataURL('image/png');
   }, []);
 
@@ -106,13 +224,23 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) { setError('Please enter a valid email.'); return; }
     if (!consentChecked) { setError('You must acknowledge the consent statement.'); return; }
     if (!state.applicationId) { setError('Session error. Please refresh.'); return; }
+    if (!hasSignature) {
+      // If we're in auto mode and the name exists, generate the typed signature on-demand.
+      if (signatureMode === 'auto' && signerName.trim()) {
+        applyTypedSignature(signerName);
+        setHasSignature(true);
+      } else {
+        setError('Please add your signature in the signature box.');
+        return;
+      }
+    }
 
     setSubmitting(true);
     try {
-      const signatureData = generateSignatureImage(signerName.trim());
+      const signatureData = getSignatureDataUrl();
       const res = await api.post<{ success: boolean; signedAt: string }>(
         `/api/signatures/${state.applicationId}/sign`,
-        { signatureData, signerName, signerEmail, consentAcknowledged: true, marketingConsent: state.contact.tcpaConsent },
+        { signatureData, signerName, signerEmail, consentAcknowledged: true, marketingConsent: true },
         token ?? undefined
       );
       await api.post(`/api/applications/${state.applicationId}/submit`, {}, token ?? undefined);
@@ -179,16 +307,21 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
         {/* Signature — 50% width */}
         <div>
           <label className="block text-sm font-semibold text-gray-800 mb-2">Signature</label>
-          <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex items-center justify-center" style={{ minHeight: 100 }}>
-            {signerName.trim() ? (
-              <p className="text-4xl text-[#1a1a2e] py-6 select-none italic" style={{ fontFamily: 'var(--font-dancing-script), cursive' }}>
-                {signerName.trim()}
-              </p>
-            ) : (
-              <p className="text-gray-400 italic text-sm py-6">Enter your name above to generate signature</p>
-            )}
+          <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white" style={{ minHeight: 100 }}>
+            <canvas
+              ref={canvasRef}
+              width={700}
+              height={180}
+              className="w-full h-[100px]"
+              style={{ touchAction: 'none' }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={endStroke}
+              onPointerCancel={endStroke}
+              onPointerLeave={() => endStroke()}
+            />
           </div>
-          <canvas ref={canvasRef} width={700} height={180} className="hidden" />
+
         </div>
 
         {/* Date Signed — 50% width */}
@@ -198,6 +331,9 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
             type="date"
             value={dateSigned}
             onChange={(e) => setDateSigned(e.target.value)}
+            disabled
+            autoPopulated
+            hint="Recorded at submission time."
             required
           />
         </div>

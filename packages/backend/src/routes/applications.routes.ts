@@ -8,6 +8,7 @@ import { createError } from '../middleware/errorHandler';
 import { writeAuditLog } from '../services/auditLog.service';
 import { pushToSwitchboxCrm, buildHeatmap } from '../services/crm.service';
 import { generateApplicationPdf } from '../services/pdf.service';
+import { decrypt } from '../utils/encryption';
 
 const router = Router();
 
@@ -164,7 +165,7 @@ router.get(
     const pdfAppId = String(req.params.id);
     const app = await prisma.application.findFirst({
       where: { id: pdfAppId, tenantId: req.tenantId! },
-      include: { business: true, owners: true, financial: true, loanRequest: true, signature: true },
+      include: { business: true, owners: { orderBy: { ownerIndex: 'asc' } }, signature: true },
     });
     if (!app) throw createError('Application not found', 404);
     if (!app.signature) throw createError('Application not yet signed', 400);
@@ -173,19 +174,48 @@ router.get(
     res.setHeader('Content-Disposition', `attachment; filename="application-${app.id}.pdf"`);
 
     const sig = app.signature;
+    const owner = app.owners[0] ?? null;
+
+    // Decrypt SSN for PDF display
+    let ownerSsn: string | undefined;
+    if (owner?.ssnEncrypted) {
+      try { ownerSsn = decrypt(owner.ssnEncrypted); } catch { /* leave undefined */ }
+    }
+
     const stream = generateApplicationPdf({
-      applicationId: app.id,
-      business: app.business as Record<string, unknown> ?? undefined,
-      owners: (app.owners as Record<string, unknown>[]) ?? undefined,
-      financial: app.financial as Record<string, unknown> ?? undefined,
-      loanRequest: app.loanRequest as Record<string, unknown> ?? undefined,
+      business: app.business ? {
+        legalName: app.business.legalName ?? undefined,
+        entityType: app.business.entityType ?? undefined,
+        stateOfFormation: app.business.stateOfFormation ?? undefined,
+        ein: app.business.ein ?? undefined,
+        businessStartDate: app.business.businessStartDate?.toISOString().slice(0, 10) ?? undefined,
+        phone: app.business.phone ?? undefined,
+        website: app.business.website ?? undefined,
+        streetAddress: app.business.streetAddress ?? undefined,
+        city: app.business.city ?? undefined,
+        state: app.business.state ?? undefined,
+        zipCode: app.business.zipCode ?? undefined,
+      } : undefined,
+      owner: owner ? {
+        firstName: owner.firstName ?? undefined,
+        lastName: owner.lastName ?? undefined,
+        ssn: ownerSsn,
+        ownershipPct: owner.ownershipPct ?? undefined,
+        dateOfBirth: owner.dateOfBirth ?? undefined,
+        streetAddress: owner.streetAddress ?? undefined,
+        city: owner.city ?? undefined,
+        state: owner.state ?? undefined,
+        zipCode: owner.zipCode ?? undefined,
+      } : undefined,
+      contact: {
+        email: app.contactEmail ?? undefined,
+        phone: app.contactPhone ?? undefined,
+      },
       signature: {
         signerName: sig.signerName,
         signerEmail: sig.signerEmail,
         signedAt: sig.signedAt.toISOString(),
-        ipAddress: sig.ipAddress,
-        marketingConsent: sig.marketingConsent,
-        marketingConsentTimestamp: sig.marketingConsentTimestamp?.toISOString(),
+        signatureData: sig.signatureData,
       },
     });
     stream.pipe(res);

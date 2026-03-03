@@ -119,19 +119,12 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
         <Input label="Date of Birth" required type="date" value={dateOfBirth}
           onChange={(e) => setDateOfBirth(e.target.value)} error={errors.dateOfBirth} autoComplete="bday" />
 
-        <div className="border-t border-gray-200 pt-4 mt-4" />
-        <p className="text-sm font-medium text-gray-700">Home Address</p>
+        {/* Home Address — hidden entirely when user already said "same as business" on Step 2 */}
+        {!addrFromBiz && (<>
+          <div className="border-t border-gray-200 pt-4 mt-4" />
+          <p className="text-sm font-medium text-gray-700">Home Address</p>
 
-        {/* If user already chose "same as business" on Step 2, show a compact summary */}
-        {addrFromBiz ? (
-          <div className="rounded-lg border border-violet-200 bg-violet-50 p-3">
-            <p className="text-sm text-violet-700 font-medium mb-1">✓ Same as business address</p>
-            <p className="text-xs text-gray-600">{streetAddress}{streetAddress2 ? `, ${streetAddress2}` : ''}, {city}, {state} {zipCode}</p>
-            <button type="button" onClick={() => { setSameAsBusiness(false); }}
-              className="text-xs text-violet-600 hover:underline mt-1">Enter a different address</button>
-          </div>
-        ) : (<>
-          {hasBusinessAddress && !addrFromBiz && (
+          {hasBusinessAddress && (
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
               <input type="checkbox" checked={sameAsBusiness}
                 onChange={(e) => handleSameAsBusinessChange(e.target.checked)}

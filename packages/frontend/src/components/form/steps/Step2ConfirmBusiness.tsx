@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/Select';
 interface Props {
   business: BusinessInfo;
   homeAddressSameAsBusiness: boolean | null;
-  onNext: (data: BusinessInfo, homeAddressSameAsBusiness: boolean) => void;
+  onNext: (data: BusinessInfo, homeAddressSameAsBusiness: boolean) => Promise<void>;
   onBack: () => void;
 }
 
@@ -82,7 +82,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [legalName, setLegalName] = useState(business.legalName || '');
   const [dba, setDba] = useState(business.dba || '');
   // Auto-infer entity type from the legal name if APIs didn't provide it
-  const [entityType, setEntityType] = useState(
+  const [entityType, setEntityType] = useState<BusinessInfo['entityType']>(
     business.entityType || inferEntityType(business.legalName || ''),
   );
   const [stateOfFormation, setStateOfFormation] = useState(business.stateOfFormation || '');
@@ -139,7 +139,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSubmitting(true);
-    try { onNext(buildPayload(), homeAddrSame ?? false); } finally { setSubmitting(false); }
+    try { await onNext(buildPayload(), homeAddrSame ?? false); } finally { setSubmitting(false); }
   };
 
   /* ---------- helper to render a display value for the confirmation card ---------- */
@@ -197,24 +197,23 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
           </div>
         )}
 
-        {missingFields.length > 0 && (
-          <p className="text-xs text-gray-400 mt-4">
-            {missingFields.length} additional field{missingFields.length > 1 ? 's' : ''} will need to be completed on the next screen.
-          </p>
-        )}
-
         <div className="flex gap-3 justify-between mt-8">
           <Button variant="secondary" onClick={onBack}>← Back</Button>
           <div className="flex gap-3">
             <Button variant="secondary" onClick={() => { setEditing(true); setEditAll(true); }}>Edit</Button>
-            <Button onClick={() => {
+            <Button disabled={submitting} loading={submitting} onClick={async () => {
               const newErrs: Record<string, string> = {};
               if (hasBusinessAddr && homeAddrSame === null) newErrs.homeAddrSame = 'Please answer this question';
               if (Object.keys(newErrs).length > 0) { setErrors(newErrs); return; }
               if (missingFields.length > 0) { setEditing(true); setEditAll(false); return; }
               const errs = validate();
               if (Object.keys(errs).length > 0) { setEditing(true); setEditAll(false); setErrors(errs); return; }
-              onNext(buildPayload(), homeAddrSame ?? false);
+              setSubmitting(true);
+              try {
+                await onNext(buildPayload(), homeAddrSame ?? false);
+              } finally {
+                setSubmitting(false);
+              }
             }}>
               Confirm &amp; Continue →
             </Button>
@@ -243,9 +242,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const visibleMissing = missingFields.filter((f) => show(f.key));
 
   const title = showAll ? 'Business Details' : 'A few more details needed';
-  const subtitle = showAll
-    ? 'Please provide the details for your business.'
-    : `Just ${visibleMissing.length} field${visibleMissing.length > 1 ? 's' : ''} to go — almost done.`;
+  const subtitle = 'Please provide the details for your business.';
 
   return (
     <div>
@@ -277,7 +274,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {show('entityType') && <Select label="Entity Type" value={entityType}
               options={ENTITY_TYPES.map((e) => ({ value: e.value, label: e.label }))}
-              onChange={(e) => setEntityType(e.target.value)} />}
+              onChange={(e) => setEntityType(e.target.value as BusinessInfo['entityType'])} />}
             {show('stateOfFormation') && <Select label="State of Formation" required value={stateOfFormation}
               options={[...US_STATES]}
               onChange={(e) => setStateOfFormation(e.target.value)} error={errors.stateOfFormation} />}

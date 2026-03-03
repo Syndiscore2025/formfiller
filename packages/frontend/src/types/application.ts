@@ -55,9 +55,7 @@ export interface FinancialInfo {
 
 export interface LoanRequest {
   amountRequested: string;
-  purpose: string;
   urgency: string;
-  termPreference: string;
 }
 
 export interface ContactInfo {
@@ -115,10 +113,7 @@ export const INDUSTRIES = [
   'Transportation','Wholesale','Other',
 ] as const;
 
-export const LOAN_PURPOSES = [
-  'Working Capital','Equipment Purchase','Inventory','Expansion','Payroll',
-  'Debt Consolidation','Marketing','Real Estate','Other',
-] as const;
+
 
 export const ANNUAL_REVENUE_RANGES = [
   { value: '0-100k', label: '$0 - $100,000' },
@@ -146,12 +141,7 @@ export const URGENCY_OPTIONS = [
   { value: 'flexible', label: 'Flexible / No rush' },
 ] as const;
 
-export const TERM_PREFERENCES = [
-  { value: 'short', label: 'Short-term (3-12 months)' },
-  { value: 'medium', label: 'Medium-term (1-3 years)' },
-  { value: 'long', label: 'Long-term (3+ years)' },
-  { value: 'flexible', label: 'Flexible' },
-] as const;
+
 
 export const CREDIT_SCORE_RANGES = [
   { value: 'excellent', label: 'Excellent (750+)' },

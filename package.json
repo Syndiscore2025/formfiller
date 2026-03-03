@@ -9,8 +9,8 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:frontend": "npm run dev --workspace=packages/frontend",
-    "dev:backend": "npm run dev --workspace=packages/backend",
+    "dev:frontend": "npm --workspace=packages/frontend run dev",
+    "dev:backend": "npm --workspace=packages/backend run dev",
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces"
   },
