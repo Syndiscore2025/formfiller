@@ -53,6 +53,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const formatEin = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 9);
@@ -78,6 +79,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
   const handleNext = async () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    setSubmitError(null);
     setSubmitting(true);
     const einDigits = searchEin.replace(/\D/g, '');
     try {
@@ -117,6 +119,12 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
         onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState || undefined, ein: einDigits });
       }
       await onNext({ firstName, lastName, email, phone, tcpaConsent });
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : 'We could not continue your application right now. Please try again.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -163,7 +171,13 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
         {errors.tcpaConsent && <p className="text-xs text-red-600 mt-1 ml-7">{errors.tcpaConsent}</p>}
       </div>
 
-      <div className="flex justify-end mt-6">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {submitError ? (
+          <p className="text-sm text-red-400">{submitError}</p>
+        ) : (
+          <div />
+        )}
+
         <Button type="button" onClick={handleNext} loading={submitting}>
           Continue →
         </Button>

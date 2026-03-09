@@ -7,12 +7,21 @@ function requireEnv(key: string): string {
   return val;
 }
 
+const configuredAllowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const devAllowedOrigins = process.env.NODE_ENV === 'production'
+  ? []
+  : ['http://localhost:3003', 'http://127.0.0.1:3003'];
+
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'change-in-production',
   encryptionKey: process.env.ENCRYPTION_KEY || '',
-  allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(','),
+  allowedOrigins: Array.from(new Set([...configuredAllowedOrigins, ...devAllowedOrigins])),
   openCorporatesApiKey: process.env.OPENCORPORATES_API_KEY || '',
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || '',
   crmWebhookUrl: process.env.CRM_WEBHOOK_URL || '',

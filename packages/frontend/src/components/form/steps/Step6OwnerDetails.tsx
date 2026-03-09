@@ -16,10 +16,10 @@ interface Props {
 }
 
 export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, onNext, onBack }: Props) {
-  const [firstName] = useState(owner.firstName || contact.firstName || '');
-  const [lastName] = useState(owner.lastName || contact.lastName || '');
-  const [email] = useState(owner.email || contact.email || '');
-  const [phone] = useState(owner.phone || contact.phone || '');
+  const firstName = owner.firstName || contact.firstName || '';
+  const lastName = owner.lastName || contact.lastName || '';
+  const email = owner.email || contact.email || '';
+  const phone = owner.phone || contact.phone || '';
 
   const [ownershipPct, setOwnershipPct] = useState(owner.ownershipPct || '');
   const [ssn, setSsn] = useState(owner.ssn || '');
@@ -104,13 +104,6 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
       <p className="mb-6 text-sm text-slate-400">Tell us about yourself as the primary owner.</p>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Input label="First Name" value={firstName} disabled autoComplete="given-name" />
-          <Input label="Last Name" value={lastName} disabled autoComplete="family-name" />
-        </div>
-
-        <div className="mt-4 border-t border-white/10 pt-4" />
-
         <Input label="Ownership %" required placeholder="e.g., 51" value={ownershipPct}
           onChange={(e) => setOwnershipPct(e.target.value.replace(/\D/g, '').slice(0, 3))}
           error={errors.ownershipPct} autoComplete="off" />

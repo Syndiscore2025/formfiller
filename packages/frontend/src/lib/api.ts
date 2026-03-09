@@ -14,8 +14,14 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
     ...rest.headers,
   };
 
-  const res = await fetch(`${API_BASE}${path}`, { ...rest, headers });
-  const data = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...rest, headers });
+  } catch {
+    throw new Error('Unable to reach the application service. Make sure the backend server is running and try again.');
+  }
+
+  const data = await res.json().catch(() => null);
 
   if (!res.ok) {
     const message = data?.error || data?.errors?.[0]?.message || 'Request failed';
