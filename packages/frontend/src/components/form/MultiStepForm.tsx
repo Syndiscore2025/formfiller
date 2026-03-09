@@ -1,5 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { Step1EINLookup } from './steps/Step1EINLookup';
 import { Step2ConfirmBusiness } from './steps/Step2ConfirmBusiness';
@@ -190,16 +191,16 @@ export function MultiStepForm({ token }: Props) {
 
   if (submittedAt) {
     return (
-      <div className="text-center py-12">
+      <div className="surface-panel-soft py-12 text-center">
         <div className="text-5xl mb-4">🎉</div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Submitted!</h2>
-        <p className="text-gray-600 mb-1">Your request has been received and is under review.</p>
-        <p className="text-xs text-gray-400">Signed at: {new Date(submittedAt).toISOString()}</p>
+        <h2 className="mb-2 text-2xl font-bold text-white">Submitted!</h2>
+        <p className="mb-1 text-slate-300">Your request has been received and is under review.</p>
+        <p className="text-xs text-slate-500">Signed at: {new Date(submittedAt).toISOString()}</p>
         {state.applicationId && (
           <button
             onClick={handleDownloadPdf}
             disabled={pdfDownloading}
-            className="mt-5 inline-block text-violet-700 underline text-sm hover:text-violet-900 disabled:opacity-50"
+            className="mt-5 inline-block text-sm text-cyan-300 underline transition hover:text-cyan-200 disabled:opacity-50"
           >
             {pdfDownloading ? 'Downloading…' : 'Download Signed PDF'}
           </button>
@@ -211,7 +212,10 @@ export function MultiStepForm({ token }: Props) {
   return (
     <AnalyticsContext.Provider value={analytics}>
       <div>
-        <div className="flex justify-end mb-4">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="w-full max-w-2xl">
+            <ProgressBar currentStep={state.currentStep} />
+          </div>
           <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
         </div>
 

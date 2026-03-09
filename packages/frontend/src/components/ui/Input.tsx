@@ -16,11 +16,11 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const analytics = useAnalyticsContext();
     return (
       <div className="flex flex-col gap-1">
-        <label htmlFor={inputId} className="text-sm font-semibold text-gray-800">
+        <label htmlFor={inputId} className="text-sm font-semibold text-slate-100">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
           {autoPopulated && (
-            <span className="ml-2 text-xs font-normal text-violet-700 bg-violet-100 rounded px-1 py-0.5">
+            <span className="ml-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
               Auto-filled
             </span>
           )}
@@ -29,11 +29,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'w-full rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900',
-            'placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500',
-            autoPopulated && 'border-violet-300 bg-violet-50',
-            !autoPopulated && 'border-gray-300',
-            error && 'border-red-500 focus:ring-red-500',
+            'w-full rounded-xl border bg-slate-950/55 px-3.5 py-3 text-sm text-slate-100 shadow-inner shadow-black/10',
+            'placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40',
+            'disabled:cursor-not-allowed disabled:bg-white/[0.03] disabled:text-slate-400',
+            autoPopulated && 'border-cyan-400/30 bg-cyan-400/[0.07]',
+            !autoPopulated && 'border-white/10',
+            error && 'border-red-400/60 focus:ring-red-400/30',
             className
           )}
           onFocus={(e) => { analytics?.onFocus(inputId); onFocus?.(e); }}
@@ -41,7 +42,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           onKeyDown={(e) => { analytics?.onKeyDown(inputId); onKeyDown?.(e); }}
           {...props}
         />
-        {hint && !error && <p className="text-xs text-gray-500">{hint}</p>}
+        {hint && !error && <p className="text-xs text-slate-400">{hint}</p>}
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     );

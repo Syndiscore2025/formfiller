@@ -17,10 +17,10 @@ export function ProgressBar({ currentStep }: ProgressBarProps) {
           <div key={step.id} className="flex flex-col items-center flex-1">
             <div
               className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all',
-                step.id < currentStep && 'bg-violet-700 border-violet-700 text-white',
-                step.id === currentStep && 'bg-white border-violet-700 text-violet-700',
-                step.id > currentStep && 'bg-white border-gray-300 text-gray-400'
+                'flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold transition-all',
+                step.id < currentStep && 'border-cyan-300/40 bg-cyan-400/20 text-cyan-100',
+                step.id === currentStep && 'border-cyan-300/60 bg-white/10 text-white shadow-[0_0_20px_rgba(34,211,238,0.2)]',
+                step.id > currentStep && 'border-white/10 bg-white/[0.03] text-slate-500'
               )}
             >
               {step.id < currentStep ? '✓' : step.id}
@@ -28,7 +28,7 @@ export function ProgressBar({ currentStep }: ProgressBarProps) {
             <span
               className={cn(
                 'text-xs mt-1 font-medium text-center leading-tight hidden sm:block',
-                step.id <= currentStep ? 'text-violet-700' : 'text-gray-400'
+                step.id <= currentStep ? 'text-slate-200' : 'text-slate-500'
               )}
             >
               {step.label}
@@ -38,15 +38,15 @@ export function ProgressBar({ currentStep }: ProgressBarProps) {
       </div>
 
       {/* Bar */}
-      <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div className="relative h-2 overflow-hidden rounded-full bg-white/[0.06]">
         <div
-          className="absolute left-0 top-0 h-full bg-violet-700 rounded-full transition-all duration-500"
+          className="absolute left-0 top-0 h-full rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.9),rgba(96,165,250,0.9))] transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
       <div className="flex justify-between mt-1">
-        <span className="text-xs text-gray-500">{pct}% complete</span>
-        <span className="text-xs text-gray-500">Step {currentStep} of {STEPS.length}</span>
+        <span className="text-xs text-slate-400">{pct}% complete</span>
+        <span className="text-xs text-slate-400">Step {currentStep} of {STEPS.length}</span>
       </div>
     </div>
   );

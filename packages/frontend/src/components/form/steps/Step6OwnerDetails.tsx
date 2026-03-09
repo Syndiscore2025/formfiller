@@ -100,8 +100,8 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">Owner Details</h2>
-      <p className="text-sm text-gray-500 mb-6">Tell us about yourself as the primary owner.</p>
+      <h2 className="mb-2 text-xl font-bold text-white">Owner Details</h2>
+      <p className="mb-6 text-sm text-slate-400">Tell us about yourself as the primary owner.</p>
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -109,7 +109,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
           <Input label="Last Name" value={lastName} disabled autoComplete="family-name" />
         </div>
 
-        <div className="border-t border-gray-200 pt-4 mt-4" />
+        <div className="mt-4 border-t border-white/10 pt-4" />
 
         <Input label="Ownership %" required placeholder="e.g., 51" value={ownershipPct}
           onChange={(e) => setOwnershipPct(e.target.value.replace(/\D/g, '').slice(0, 3))}
@@ -121,14 +121,14 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
         {/* Home Address — hidden entirely when user already said "same as business" on Step 2 */}
         {!addrFromBiz && (<>
-          <div className="border-t border-gray-200 pt-4 mt-4" />
-          <p className="text-sm font-medium text-gray-700">Home Address</p>
+          <div className="mt-4 border-t border-white/10 pt-4" />
+          <p className="text-sm font-medium text-slate-200">Home Address</p>
 
           {hasBusinessAddress && (
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-slate-400">
               <input type="checkbox" checked={sameAsBusiness}
                 onChange={(e) => handleSameAsBusinessChange(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
+                className="h-4 w-4 cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-300" />
               Same as business address
             </label>
           )}
@@ -154,22 +154,22 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
         {/* Additional Owners — hidden when ownership >= 81% */}
         {showAdditionalQuestion && (
           <>
-            <div className="border-t border-gray-200 pt-4 mt-4" />
-            <p className="text-sm font-medium text-gray-700">
+            <div className="mt-4 border-t border-white/10 pt-4" />
+            <p className="text-sm font-medium text-slate-200">
               Are there any other owners with 20% or more ownership?
             </p>
             <div className="flex gap-3">
               <button type="button" onClick={() => { setHasAdditional(true); setErrors((p) => ({ ...p, hasAdditional: '' })); }}
                 className={`flex-1 py-3 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
-                  hasAdditional === true ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  hasAdditional === true ? 'border-cyan-300/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20'
                 }`}>Yes</button>
               <button type="button" onClick={() => { setHasAdditional(false); setErrors((p) => ({ ...p, hasAdditional: '' })); }}
                 className={`flex-1 py-3 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
-                  hasAdditional === false ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  hasAdditional === false ? 'border-cyan-300/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20'
                 }`}>No</button>
             </div>
             {errors.hasAdditional && <p className="text-xs text-red-600">{errors.hasAdditional}</p>}
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-500">
               If yes, our team will follow up to collect their information separately.
             </p>
           </>

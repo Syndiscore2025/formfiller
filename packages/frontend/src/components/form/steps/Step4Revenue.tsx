@@ -40,8 +40,8 @@ export function Step4Revenue({ financial, loanRequest, onNext, onBack }: Props) 
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">Revenue &amp; Funding</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <h2 className="mb-2 text-xl font-bold text-white">Revenue &amp; Funding</h2>
+      <p className="mb-6 text-sm text-slate-400">
         Tell us about your business revenue and funding needs.
       </p>
 

@@ -56,12 +56,12 @@ interface Props {
 function ReviewSection({ title, rows }: { title: string; rows: [string, string | undefined][] }) {
   return (
     <div className="mb-4">
-      <h3 className="font-semibold text-violet-800 text-sm border-b border-violet-200 pb-1 mb-2">{title}</h3>
+      <h3 className="mb-2 border-b border-white/10 pb-2 text-sm font-semibold text-cyan-200">{title}</h3>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {rows.filter(([, v]) => v).map(([k, v], i) => (
           <div key={`${k}-${i}`} className="contents">
-            <span className="text-xs text-gray-500">{k}</span>
-            <span className="text-xs text-gray-900 font-medium">{v}</span>
+            <span className="text-xs text-slate-400">{k}</span>
+            <span className="text-xs font-medium text-slate-100">{v}</span>
           </div>
         ))}
       </div>
@@ -257,10 +257,10 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Review & Sign</h2>
-      <p className="text-sm text-gray-500 mb-5">Please review your information before signing.</p>
+      <h2 className="mb-1 text-xl font-bold text-white">Review & Sign</h2>
+      <p className="mb-5 text-sm text-slate-400">Please review your information before signing.</p>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-5 text-sm">
+      <div className="mb-5 rounded-[24px] border border-white/10 bg-white/[0.04] p-5 text-sm">
         <ReviewSection title="Business" rows={[
           ['Business Name', business.legalName], ['DBA', business.dba],
           ['Entity Type', business.entityType], ['State', business.stateOfFormation],
@@ -289,12 +289,12 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
         ]} />
       </div>
 
-      <div className="bg-violet-50 border border-violet-200 rounded-lg p-4 mb-5">
-        <h3 className="font-semibold text-violet-900 mb-2 text-sm">Electronic Signature Consent</h3>
-        <p className="text-xs text-gray-700 leading-relaxed mb-3">{CONSENT_TEXT}</p>
+      <div className="mb-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] p-4">
+        <h3 className="mb-2 text-sm font-semibold text-cyan-100">Electronic Signature Consent</h3>
+        <p className="mb-3 text-xs leading-relaxed text-slate-300">{CONSENT_TEXT}</p>
         <label className="flex items-start gap-2 cursor-pointer">
-          <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} className="mt-0.5 accent-violet-700" />
-          <span className="text-xs text-gray-700">I have read and agree to the above consent statement.</span>
+          <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} className="mt-0.5 accent-cyan-300" />
+          <span className="text-xs text-slate-300">I have read and agree to the above consent statement.</span>
         </label>
       </div>
 
@@ -306,8 +306,8 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         {/* Signature — 50% width */}
         <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Signature</label>
-          <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white" style={{ minHeight: 100 }}>
+          <label className="mb-2 block text-sm font-semibold text-slate-100">Signature</label>
+          <div className="overflow-hidden rounded-xl border-2 border-white/10 bg-slate-950/70" style={{ minHeight: 100 }}>
             <canvas
               ref={canvasRef}
               width={700}

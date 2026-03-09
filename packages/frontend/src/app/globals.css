@@ -3,11 +3,98 @@
 @tailwind utilities;
 
 :root {
-  --bg-gradient: linear-gradient(135deg, #3b0764 0%, #6b21a8 50%, #4c1d95 100%);
+  --bg-gradient:
+    radial-gradient(circle at top left, rgba(28, 99, 255, 0.22), transparent 32%),
+    radial-gradient(circle at top right, rgba(0, 196, 255, 0.14), transparent 28%),
+    radial-gradient(circle at bottom center, rgba(98, 0, 234, 0.18), transparent 36%),
+    linear-gradient(135deg, #030712 0%, #071225 46%, #081529 100%);
+  --surface-border: rgba(148, 163, 184, 0.16);
+  --surface-copy: #d7e1f3;
+  --surface-muted: #8ca0bf;
 }
 
-body {
-  background: var(--bg-gradient);
-  min-height: 100vh;
+@layer base {
+  * {
+    border-color: var(--surface-border);
+  }
+
+  html {
+    background: #030712;
+  }
+
+  body {
+    background: var(--bg-gradient);
+    color: var(--surface-copy);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+    font-feature-settings: 'ss01' on, 'cv02' on, 'cv11' on;
+  }
+
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  body::before {
+    background:
+      radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.12), transparent 18%),
+      radial-gradient(circle at 80% 10%, rgba(59, 130, 246, 0.12), transparent 20%),
+      radial-gradient(circle at 50% 90%, rgba(168, 85, 247, 0.1), transparent 24%);
+    filter: blur(8px);
+  }
+
+  body::after {
+    background-image:
+      linear-gradient(rgba(96, 165, 250, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(96, 165, 250, 0.08) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent 92%);
+    opacity: 0.28;
+  }
+
+  ::selection {
+    background: rgba(34, 211, 238, 0.28);
+    color: #f8fafc;
+  }
+
+  input,
+  select {
+    color-scheme: dark;
+  }
+
+  select option {
+    background-color: #081120;
+    color: #e5eefb;
+  }
+}
+
+@layer components {
+  .surface-shell {
+    @apply relative mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .surface-panel {
+    @apply rounded-[28px] border border-white/10 bg-slate-950/45 backdrop-blur-xl shadow-[0_20px_80px_rgba(2,8,23,0.55)];
+  }
+
+  .surface-panel-soft {
+    @apply rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.42)];
+  }
+
+  .surface-kicker {
+    @apply inline-flex items-center rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.32em] text-emerald-200;
+  }
+
+  .surface-pill {
+    @apply inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-300;
+  }
+
+  .surface-stat {
+    @apply rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm;
+  }
 }
 

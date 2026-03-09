@@ -163,16 +163,16 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
     return (
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-1">Is this information correct?</h2>
-        <p className="text-sm text-gray-500 mb-6">
+        <h2 className="mb-1 text-xl font-bold text-white">Is this information correct?</h2>
+        <p className="mb-6 text-sm text-slate-400">
           We found the following details about your business.
         </p>
 
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-5 space-y-3">
+        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
           {confirmedFields.map(({ key, label }) => (
             <div key={key} className="flex justify-between text-sm">
-              <span className="text-gray-500">{label}</span>
-              <span className="font-medium text-gray-900 text-right">{displayVal(key)}</span>
+              <span className="text-slate-400">{label}</span>
+              <span className="text-right font-medium text-slate-100">{displayVal(key)}</span>
             </div>
           ))}
         </div>
@@ -180,17 +180,17 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
         {/* Home address same as business — required before continuing */}
         {hasBusinessAddr && (
           <div className="mt-6">
-            <p className="text-sm font-medium text-gray-800 mb-2">
+            <p className="mb-2 text-sm font-medium text-slate-200">
               Is your home address the same as your business address?
             </p>
             <div className="flex gap-3">
               <button type="button" onClick={() => { setHomeAddrSame(true); setErrors((p) => ({ ...p, homeAddrSame: '' })); }}
                 className={`flex-1 py-3 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
-                  homeAddrSame === true ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  homeAddrSame === true ? 'border-cyan-300/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20'
                 }`}>Yes</button>
               <button type="button" onClick={() => { setHomeAddrSame(false); setErrors((p) => ({ ...p, homeAddrSame: '' })); }}
                 className={`flex-1 py-3 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
-                  homeAddrSame === false ? 'border-violet-600 bg-violet-50 text-violet-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  homeAddrSame === false ? 'border-cyan-300/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20'
                 }`}>No</button>
             </div>
             {errors.homeAddrSame && <p className="text-xs text-red-600 mt-1">{errors.homeAddrSame}</p>}
@@ -246,19 +246,19 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">{title}</h2>
-      <p className="text-sm text-gray-500 mb-2">{subtitle}</p>
+      <h2 className="mb-1 text-xl font-bold text-white">{title}</h2>
+      <p className="mb-2 text-sm text-slate-400">{subtitle}</p>
 
       {/* Progress hint */}
       {!showAll && (
-        <div className="w-full bg-gray-100 rounded-full h-1.5 mb-6">
-          <div className="bg-violet-500 h-1.5 rounded-full transition-all"
+        <div className="mb-6 h-1.5 w-full rounded-full bg-white/[0.06]">
+          <div className="h-1.5 rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.95),rgba(96,165,250,0.95))] transition-all"
             style={{ width: `${Math.round((populated.size / FIELD_META.length) * 100)}%` }} />
         </div>
       )}
       {showAll && <div className="mb-4" />}
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6 space-y-5">
+      <div className="space-y-5 rounded-[24px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
         {showIdentity && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {show('legalName') && <Input label="Legal Business Name" required value={legalName}
@@ -288,8 +288,8 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
           onChange={(e) => setBusinessStartDate(e.target.value)} />}
 
         {showAddress && (<>
-          <div className="border-t border-gray-100 pt-4" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Business Address</p>
+          <div className="border-t border-white/10 pt-4" />
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Business Address</p>
           {show('streetAddress') && <Input label="Street Address" required value={streetAddress}
             onChange={(e) => setStreetAddress(e.target.value)} error={errors.streetAddress}
             autoComplete="street-address" />}
@@ -308,8 +308,8 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
         </>)}
 
         {showContact && (<>
-          <div className="border-t border-gray-100 pt-4" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contact</p>
+          <div className="border-t border-white/10 pt-4" />
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {show('phone') && <Input label="Business Phone" value={businessPhone}
               onChange={(e) => setBusinessPhone(formatPhoneInput(e.target.value))} error={errors.businessPhone}
@@ -325,7 +325,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
       {!showAll && (
         <button type="button" onClick={() => setEditAll(true)}
-          className="text-sm text-violet-600 hover:text-violet-800 hover:underline mt-4 font-medium">
+          className="mt-4 text-sm font-medium text-cyan-300 transition hover:text-cyan-200 hover:underline">
           ✎ Show all fields
         </button>
       )}

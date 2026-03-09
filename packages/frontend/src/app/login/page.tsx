@@ -35,64 +35,99 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1 text-center">
-          {mode === 'login' ? 'Agent Login' : 'Create Account'}
-        </h1>
-        <p className="text-sm text-gray-500 text-center mb-6">Business Funding Portal</p>
+    <main className="min-h-screen py-8">
+      <div className="surface-shell flex items-center justify-center">
+        <section className="surface-panel grid w-full max-w-6xl overflow-hidden lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="border-b border-white/10 px-6 py-8 sm:px-8 lg:border-b-0 lg:border-r lg:px-10 lg:py-10">
+            <span className="surface-kicker">Operator Access</span>
+            <h1 className="mt-5 max-w-xl text-4xl font-semibold tracking-tight text-white">
+              {mode === 'login' ? 'Access the funding operations console.' : 'Create a new organization workspace.'}
+            </h1>
+            <p className="mt-4 max-w-lg text-sm leading-7 text-slate-300">
+              Keep the same premium surface across auth and intake: dark panels, clean hierarchy,
+              and stronger trust signals for every operator touchpoint.
+            </p>
 
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-          <Input
-            label="Email"
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          <Input
-            label="Password"
-            required
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            hint="Minimum 8 characters"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-          />
-          <Input
-            label="Organization Slug"
-            required
-            value={tenantSlug}
-            onChange={(e) => setTenantSlug(e.target.value)}
-            hint="Your organization identifier"
-          />
-          {mode === 'register' && (
-            <Input
-              label="Organization Name"
-              value={tenantName}
-              onChange={(e) => setTenantName(e.target.value)}
-              hint="Required for new organizations"
-            />
-          )}
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <div className="surface-stat">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Mode</p>
+                <p className="mt-2 text-lg font-semibold text-white">Secure</p>
+              </div>
+              <div className="surface-stat">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Session</p>
+                <p className="mt-2 text-lg font-semibold text-white">Tenant scoped</p>
+              </div>
+              <div className="surface-stat">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Flow</p>
+                <p className="mt-2 text-lg font-semibold text-white">Low friction</p>
+              </div>
+            </div>
+          </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
+            <div className="surface-panel-soft p-6 sm:p-7">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-300">Business Funding Portal</p>
+              <h2 className="mt-3 text-2xl font-semibold text-white">
+                {mode === 'login' ? 'Agent Login' : 'Create Account'}
+              </h2>
+              <p className="mt-2 text-sm text-slate-400">
+                {mode === 'login' ? 'Sign in to continue managing applications.' : 'Set up access for a new organization.'}
+              </p>
 
-          <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
-            {mode === 'login' ? 'Sign In' : 'Create Account'}
-          </Button>
-        </form>
+              <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-4">
+                <Input
+                  label="Email"
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
+                <Input
+                  label="Password"
+                  required
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  hint="Minimum 8 characters"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+                <Input
+                  label="Organization Slug"
+                  required
+                  value={tenantSlug}
+                  onChange={(e) => setTenantSlug(e.target.value)}
+                  hint="Your organization identifier"
+                />
+                {mode === 'register' && (
+                  <Input
+                    label="Organization Name"
+                    value={tenantName}
+                    onChange={(e) => setTenantName(e.target.value)}
+                    hint="Required for new organizations"
+                  />
+                )}
 
-        <p className="text-center text-sm text-gray-500 mt-5">
-          {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-          <button
-            type="button"
-            onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-            className="text-violet-700 hover:underline font-medium"
-          >
-            {mode === 'login' ? 'Register' : 'Sign In'}
-          </button>
-        </p>
+                {error && <p className="text-sm text-red-400">{error}</p>}
+
+                <Button type="submit" size="lg" loading={loading} className="mt-2 w-full">
+                  {mode === 'login' ? 'Sign In' : 'Create Account'}
+                </Button>
+              </form>
+
+              <p className="mt-5 text-center text-sm text-slate-400">
+                {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                <button
+                  type="button"
+                  onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+                  className="font-medium text-cyan-300 transition hover:text-cyan-200 hover:underline"
+                >
+                  {mode === 'login' ? 'Register' : 'Sign In'}
+                </button>
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );

@@ -124,8 +124,8 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Let&apos;s Get Started</h2>
-      <p className="text-sm text-gray-500 mb-6">
+      <h2 className="mb-1 text-xl font-bold text-white">Let&apos;s Get Started</h2>
+      <p className="mb-6 text-sm text-slate-400">
         Tell us a bit about yourself and your business so we can pre-fill your information.
       </p>
 
@@ -154,11 +154,11 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
       </div>
 
       {/* TCPA Consent */}
-      <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
         <label className="flex items-start gap-3 cursor-pointer">
           <input type="checkbox" checked={tcpaConsent} onChange={(e) => setTcpaConsent(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-          <span className="text-xs text-gray-600">{TCPA_TEXT}</span>
+            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-300 focus:ring-cyan-300" />
+          <span className="text-xs leading-6 text-slate-400">{TCPA_TEXT}</span>
         </label>
         {errors.tcpaConsent && <p className="text-xs text-red-600 mt-1 ml-7">{errors.tcpaConsent}</p>}
       </div>
