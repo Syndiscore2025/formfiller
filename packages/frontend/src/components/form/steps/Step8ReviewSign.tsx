@@ -70,9 +70,10 @@ function ReviewSection({ title, rows }: { title: string; rows: [string, string |
 }
 
 export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
+  const owner = state.owners[0];
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [signerName, setSignerName] = useState(`${state.contact.firstName} ${state.contact.lastName}`.trim());
-  const [signerEmail, setSignerEmail] = useState(state.contact.email || '');
+  const [signerName, setSignerName] = useState(`${owner?.firstName || state.contact.firstName} ${owner?.lastName || state.contact.lastName}`.trim());
+  const [signerEmail, setSignerEmail] = useState(owner?.email || state.contact.email || '');
   const [dateSigned, setDateSigned] = useState(todayLocal);
   const [consentChecked, setConsentChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -252,8 +253,7 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
     }
   };
 
-  const { contact, business, owners } = state;
-  const owner = owners[0];
+  const { contact, business } = state;
 
   return (
     <div>

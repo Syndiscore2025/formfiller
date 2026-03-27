@@ -132,6 +132,7 @@ export const FUNDING_AMOUNT_RANGES = [
   { value: '100k-250k', label: '$100,000 - $250,000' },
   { value: '250k-500k', label: '$250,000 - $500,000' },
   { value: '500k+', label: '$500,000+' },
+  { value: '1m+', label: '$1,000,000+' },
 ] as const;
 
 export const URGENCY_OPTIONS = [

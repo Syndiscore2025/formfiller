@@ -42,8 +42,6 @@ const TCPA_TEXT =
   'By clicking "Continue", I consent to be contacted about my funding request via phone, email, or text message. Standard message and data rates may apply. This consent is not required to receive funding.';
 
 export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Props) {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [tcpaConsent, setTcpaConsent] = useState(false);
@@ -63,12 +61,10 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
 
   const validate = () => {
     const errs: Record<string, string> = {};
-    if (!firstName.trim()) errs.firstName = 'First name is required';
-    if (!lastName.trim()) errs.lastName = 'Last name is required';
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Valid email is required';
     if (!phone.trim() || phone.replace(/\D/g, '').length < 10) errs.phone = 'Valid 10-digit phone is required';
     if (!searchName.trim()) errs.searchName = 'Business name is required';
-    if (!searchState) errs.searchState = 'State of formation is required';
+    if (!searchState) errs.searchState = 'State of incorporation is required';
     const einDigits = searchEin.replace(/\D/g, '');
     if (!einDigits) errs.searchEin = 'EIN is required';
     else if (einDigits.length !== 9) errs.searchEin = 'EIN must be 9 digits';
@@ -118,7 +114,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
       } else if (searchName.trim()) {
         onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState || undefined, ein: einDigits });
       }
-      await onNext({ firstName, lastName, email, phone, tcpaConsent });
+      await onNext({ firstName: '', lastName: '', email, phone, tcpaConsent });
     } catch (err) {
       setSubmitError(
         err instanceof Error
@@ -134,30 +130,27 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
     <div>
       <h2 className="mb-1 text-xl font-bold text-white">Let&apos;s Get Started</h2>
       <p className="mb-6 text-sm text-slate-400">
-        Tell us a bit about yourself and your business so we can pre-fill your information.
+        Tell us about your business so we can pre-fill the next steps.
       </p>
+
+      {/* Business Identity */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+        <Input label="Name of Business" required autoComplete="organization" value={searchName}
+          onChange={(e) => setSearchName(e.target.value)} placeholder="Exact legal business name" error={errors.searchName} />
+        <Select label="State of Incorporation" required value={searchState}
+          onChange={(e) => setSearchState(e.target.value)} options={[...US_STATES]} error={errors.searchState} />
+      </div>
 
       {/* Contact Info */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
-        <Input label="First Name" required autoComplete="given-name" value={firstName}
-          onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
-        <Input label="Last Name" required autoComplete="family-name" value={lastName}
-          onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
         <Input label="Email Address" required type="email" autoComplete="email" value={email}
           onChange={(e) => setEmail(e.target.value)} error={errors.email} />
         <Input label="Phone Number" required type="tel" autoComplete="tel" value={phone}
           onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" error={errors.phone} />
       </div>
 
-      {/* Business Identity */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-3">
-        <Input label="Business Legal Name" required autoComplete="organization" value={searchName}
-          onChange={(e) => setSearchName(e.target.value)} placeholder="Exact legal business name" error={errors.searchName} />
-        <Select label="State of Formation" required value={searchState}
-          onChange={(e) => setSearchState(e.target.value)} options={[...US_STATES]} error={errors.searchState} />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-3">
-        <Input label="EIN (Employer Identification Number)" required placeholder="XX-XXXXXXX" value={searchEin}
+      <div className="mb-3">
+        <Input label="EIN" required placeholder="XX-XXXXXXX" value={searchEin}
           onChange={(e) => setSearchEin(formatEin(e.target.value))} error={errors.searchEin} autoComplete="off" />
       </div>
 

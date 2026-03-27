@@ -96,8 +96,8 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [addrState, setAddrState] = useState(business.state || '');
   const [zipCode, setZipCode] = useState(business.zipCode || '');
 
-  // Home address same as business — required on confirmation card
-  const [homeAddrSame, setHomeAddrSame] = useState<boolean | null>(initialHomeAddr);
+  // Home based business toggle — off means we'll ask for a separate home address later
+  const [homeAddrSame, setHomeAddrSame] = useState<boolean>(initialHomeAddr ?? false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -177,23 +177,31 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
           ))}
         </div>
 
-        {/* Home address same as business — required before continuing */}
+        {/* Home based business toggle */}
         {hasBusinessAddr && (
-          <div className="mt-6">
-            <p className="mb-2 text-sm font-medium text-slate-200">
-              Is your home address the same as your business address?
-            </p>
-            <div className="flex gap-3">
-              <button type="button" onClick={() => { setHomeAddrSame(true); setErrors((p) => ({ ...p, homeAddrSame: '' })); }}
-                className={`flex-1 py-3 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
-                  homeAddrSame === true ? 'border-cyan-300/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20'
-                }`}>Yes</button>
-              <button type="button" onClick={() => { setHomeAddrSame(false); setErrors((p) => ({ ...p, homeAddrSame: '' })); }}
-                className={`flex-1 py-3 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
-                  homeAddrSame === false ? 'border-cyan-300/50 bg-cyan-400/10 text-cyan-200' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20'
-                }`}>No</button>
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-medium text-slate-200">Home Based Business?</p>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={homeAddrSame}
+                aria-label="Home Based Business"
+                onClick={() => setHomeAddrSame((current) => !current)}
+                className={`relative inline-flex h-7 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/60 ${
+                  homeAddrSame
+                    ? 'border-cyan-300/50 bg-cyan-400/20'
+                    : 'border-white/10 bg-slate-950/70'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    homeAddrSame ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
             </div>
-            {errors.homeAddrSame && <p className="text-xs text-red-600 mt-1">{errors.homeAddrSame}</p>}
           </div>
         )}
 
@@ -202,15 +210,12 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
           <div className="flex gap-3">
             <Button variant="secondary" onClick={() => { setEditing(true); setEditAll(true); }}>Edit</Button>
             <Button disabled={submitting} loading={submitting} onClick={async () => {
-              const newErrs: Record<string, string> = {};
-              if (hasBusinessAddr && homeAddrSame === null) newErrs.homeAddrSame = 'Please answer this question';
-              if (Object.keys(newErrs).length > 0) { setErrors(newErrs); return; }
               if (missingFields.length > 0) { setEditing(true); setEditAll(false); return; }
               const errs = validate();
               if (Object.keys(errs).length > 0) { setEditing(true); setEditAll(false); setErrors(errs); return; }
               setSubmitting(true);
               try {
-                await onNext(buildPayload(), homeAddrSame ?? false);
+                await onNext(buildPayload(), homeAddrSame);
               } finally {
                 setSubmitting(false);
               }

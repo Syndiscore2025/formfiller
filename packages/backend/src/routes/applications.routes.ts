@@ -19,8 +19,8 @@ const stepSchema = z.object({ currentStep: z.number().int().min(1).max(8) });
 const updateAppSchema = z.object({ hasAdditionalOwners: z.boolean().optional() });
 
 const createAppSchema = z.object({
-  contactFirstName: z.string().min(1, 'First name is required'),
-  contactLastName: z.string().min(1, 'Last name is required'),
+  contactFirstName: z.string().optional(),
+  contactLastName: z.string().optional(),
   contactEmail: z.string().email('Valid email is required'),
   contactPhone: z.string().min(10, 'Valid phone number is required'),
   tcpaConsent: z.boolean().refine((v) => v === true, 'TCPA consent is required'),
@@ -52,6 +52,8 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { contactFirstName, contactLastName, contactEmail, contactPhone } =
       req.body as z.infer<typeof createAppSchema>;
+    const trimmedFirstName = contactFirstName?.trim();
+    const trimmedLastName = contactLastName?.trim();
     const now = new Date();
     const app = await prisma.application.create({
       data: {
@@ -59,8 +61,8 @@ router.post(
         userId: req.userId,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        contactFirstName,
-        contactLastName,
+        ...(trimmedFirstName ? { contactFirstName: trimmedFirstName } : {}),
+        ...(trimmedLastName ? { contactLastName: trimmedLastName } : {}),
         contactEmail,
         contactPhone,
         tcpaConsentStep1: true,

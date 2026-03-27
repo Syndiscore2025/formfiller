@@ -107,7 +107,7 @@ export function MultiStepForm({ token }: Props) {
   const handleStep1Next = useCallback(async (contact: ContactInfo) => {
     const appId = await ensureApplication(contact);
     const prefilledOwner: OwnerInfo = {
-      ownerIndex: 0, firstName: contact.firstName, lastName: contact.lastName,
+      ownerIndex: 0, firstName: '', lastName: '',
       email: contact.email, phone: contact.phone,
       ownershipPct: '', ssn: '', dateOfBirth: '', creditScore: '',
       streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',

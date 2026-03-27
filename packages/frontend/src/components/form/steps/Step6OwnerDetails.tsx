@@ -16,8 +16,8 @@ interface Props {
 }
 
 export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, onNext, onBack }: Props) {
-  const firstName = owner.firstName || contact.firstName || '';
-  const lastName = owner.lastName || contact.lastName || '';
+  const [firstName, setFirstName] = useState(owner.firstName || contact.firstName || '');
+  const [lastName, setLastName] = useState(owner.lastName || contact.lastName || '');
   const email = owner.email || contact.email || '';
   const phone = owner.phone || contact.phone || '';
 
@@ -64,6 +64,8 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
   const validate = () => {
     const errs: Record<string, string> = {};
+    if (!firstName.trim()) errs.firstName = 'Required';
+    if (!lastName.trim()) errs.lastName = 'Required';
     if (!ownershipPct) errs.ownershipPct = 'Required';
     else {
       const p = Number(ownershipPct);
@@ -87,7 +89,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     setSubmitting(true);
     try {
       const ownerData: OwnerInfo = {
-        ownerIndex: 0, firstName, lastName, email, phone,
+        ownerIndex: 0, firstName: firstName.trim(), lastName: lastName.trim(), email, phone,
         ownershipPct, ssn: ssn.replace(/\D/g, ''), dateOfBirth, creditScore: '',
         streetAddress: streetAddress.trim(), streetAddress2: streetAddress2.trim(),
         city: city.trim(), state, zipCode: zipCode.trim(),
@@ -104,6 +106,13 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
       <p className="mb-6 text-sm text-slate-400">Tell us about yourself as the primary owner.</p>
 
       <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="First Name" required autoComplete="given-name" value={firstName}
+            onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
+          <Input label="Last Name" required autoComplete="family-name" value={lastName}
+            onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
+        </div>
+
         <Input label="Ownership %" required placeholder="e.g., 51" value={ownershipPct}
           onChange={(e) => setOwnershipPct(e.target.value.replace(/\D/g, '').slice(0, 3))}
           error={errors.ownershipPct} autoComplete="off" />
