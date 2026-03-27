@@ -68,6 +68,7 @@ model Application {
   financial       FinancialInfo?
   loanRequest     LoanRequest?
   signature       Signature?
+  documents       ApplicationDocument[]
   analyticsEvents AnalyticsEvent[]
   auditLogs       AuditLog[]
 
@@ -172,6 +173,24 @@ model Signature {
   createdAt                 DateTime  @default(now())
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model ApplicationDocument {
+  id            String   @id @default(uuid())
+  applicationId String
+  documentType  String   @default("bank_statement")
+  statementMonth String
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  content       Bytes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, documentType, statementMonth])
+  @@index([applicationId, documentType])
 }
 
 model AnalyticsEvent {

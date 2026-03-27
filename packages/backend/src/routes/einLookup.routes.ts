@@ -64,6 +64,7 @@ router.get(
     if (openCorpResult) {
       if (openCorpResult.legalName) { merged.legalName = openCorpResult.legalName; fieldSources.legalName = 'opencorporates'; fieldsPopulated.push('legalName'); }
       if (openCorpResult.entityType) { merged.entityType = openCorpResult.entityType; fieldSources.entityType = 'opencorporates'; fieldsPopulated.push('entityType'); }
+      if (openCorpResult.industry) { merged.industry = openCorpResult.industry; fieldSources.industry = 'opencorporates'; fieldsPopulated.push('industry'); }
       if (openCorpResult.stateOfFormation) { merged.stateOfFormation = openCorpResult.stateOfFormation; fieldSources.stateOfFormation = 'opencorporates'; fieldsPopulated.push('stateOfFormation'); }
       if (openCorpResult.registrationDate) { merged.registrationDate = openCorpResult.registrationDate; fieldSources.registrationDate = 'opencorporates'; fieldsPopulated.push('registrationDate'); }
       if (openCorpResult.sicCode) { merged.sicCode = openCorpResult.sicCode; fieldSources.sicCode = 'opencorporates'; fieldsPopulated.push('sicCode'); }

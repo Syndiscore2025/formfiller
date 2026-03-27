@@ -265,6 +265,7 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
         <ReviewSection title="Business" rows={[
           ['Business Name', business.legalName], ['DBA', business.dba],
           ['Entity Type', business.entityType], ['State', business.stateOfFormation],
+          ['Industry', business.industry], ['SIC', business.sicCode], ['NAICS', business.naicsCode],
           ['EIN', fmtEin(business.ein || undefined)],
           ['Business Start Date', fmtDate(business.businessStartDate)],
           ['Phone', fmtPhone(business.phone)], ['Website', business.website],

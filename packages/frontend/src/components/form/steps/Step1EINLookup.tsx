@@ -11,6 +11,7 @@ interface LookupResult {
   data?: {
     legalName?: string;
     entityType?: string;
+    industry?: string;
     stateOfFormation?: string;
     streetAddress?: string;
     city?: string;
@@ -92,6 +93,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
             onAutoPopulate({
               legalName: res.data.legalName || searchName.trim(),
               entityType: (res.data.entityType as BusinessInfo['entityType']) || undefined,
+              industry: res.data.industry,
               stateOfFormation: res.data.stateOfFormation || searchState,
               ein: einDigits,
               streetAddress: res.data.streetAddress,

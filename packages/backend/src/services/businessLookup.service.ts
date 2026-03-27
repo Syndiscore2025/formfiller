@@ -1,8 +1,10 @@
 import { config } from '../config';
+import { deriveIndustryFromCodes } from '../utils/industry';
 
 export interface BusinessLookupResult {
   legalName?: string;
   entityType?: string;
+  industry?: string;
   stateOfFormation?: string;
   streetAddress?: string;
   city?: string;
@@ -84,6 +86,12 @@ export async function lookupByOpenCorporates(
       result.naicsCode = naicsEntry.code;
       populated.push('naicsCode');
     }
+  }
+
+  const derivedIndustry = deriveIndustryFromCodes(result.sicCode, result.naicsCode);
+  if (derivedIndustry) {
+    result.industry = derivedIndustry;
+    populated.push('industry');
   }
 
   result.fieldsPopulated = populated;

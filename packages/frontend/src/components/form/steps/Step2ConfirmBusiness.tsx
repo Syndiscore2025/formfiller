@@ -1,10 +1,11 @@
 'use client';
 import { useState, useMemo } from 'react';
-import { BusinessInfo, ENTITY_TYPES, US_STATES } from '@/types/application';
+import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES } from '@/types/application';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { Select } from '@/components/ui/Select';
 
 interface Props {
@@ -32,6 +33,7 @@ const FIELD_META: { key: string; label: string; required?: boolean }[] = [
   { key: 'legalName', label: 'Legal Business Name', required: true },
   { key: 'dba', label: 'DBA / Trade Name' },
   { key: 'entityType', label: 'Entity Type' },
+  { key: 'industry', label: 'Industry', required: true },
   { key: 'stateOfFormation', label: 'State of Formation', required: true },
   { key: 'ein', label: 'EIN', required: true },
   { key: 'businessStartDate', label: 'Business Start Date' },
@@ -95,6 +97,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [entityType, setEntityType] = useState<BusinessInfo['entityType']>(
     business.entityType || inferEntityType(business.legalName || ''),
   );
+  const [industry, setIndustry] = useState(business.industry || '');
   const [stateOfFormation, setStateOfFormation] = useState(business.stateOfFormation || '');
   const [ein, setEin] = useState(formatEinDisplay(business.ein || ''));
   const [businessStartDate, setBusinessStartDate] = useState(normalizedBusinessStartDate);
@@ -127,6 +130,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!legalName.trim()) errs.legalName = 'Business name is required';
+    if (!industry.trim()) errs.industry = 'Industry is required';
     if (!stateOfFormation) errs.stateOfFormation = 'State of formation is required';
     const einDigits = ein.replace(/\D/g, '');
     if (!einDigits) errs.ein = 'EIN is required';
@@ -145,6 +149,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     legalName: legalName.trim(),
     dba: dba.trim(),
     entityType: entityType as BusinessInfo['entityType'],
+    industry: industry.trim(),
     stateOfFormation,
     ein: ein.replace(/\D/g, ''),
     businessStartDate,
@@ -260,7 +265,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   };
 
   const showIdentity = show('legalName') || show('dba');
-  const showClassification = show('entityType') || show('stateOfFormation') || show('ein');
+  const showClassification = show('entityType') || show('industry') || show('stateOfFormation') || show('ein');
   const showDate = show('businessStartDate');
   const showAddress = show('streetAddress') || show('city') || show('state') || show('zipCode') || (showAll && show('streetAddress2'));
   const showContact = show('phone') || show('website');
@@ -298,10 +303,21 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
         )}
 
         {showClassification && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {show('entityType') && <Select label="Entity Type" value={entityType}
               options={ENTITY_TYPES.map((e) => ({ value: e.value, label: e.label }))}
               onChange={(e) => setEntityType(e.target.value as BusinessInfo['entityType'])} />}
+            {show('industry') && (
+              <SearchableSelect
+                label="Industry"
+                required
+                value={industry}
+                options={INDUSTRIES}
+                onChange={setIndustry}
+                error={errors.industry}
+                hint={business.sicCode || business.naicsCode ? `Derived from lookup${business.sicCode ? ` • SIC ${business.sicCode}` : ''}${business.naicsCode ? ` • NAICS ${business.naicsCode}` : ''}` : 'Search the list to select the closest industry.'}
+              />
+            )}
             {show('stateOfFormation') && <Select label="State of Formation" required value={stateOfFormation}
               options={[...US_STATES]}
               onChange={(e) => setStateOfFormation(e.target.value)} error={errors.stateOfFormation} />}

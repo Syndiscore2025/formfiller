@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
+import { BankStatementUpload } from './BankStatementUpload';
 import { Step1EINLookup } from './steps/Step1EINLookup';
 import { Step2ConfirmBusiness } from './steps/Step2ConfirmBusiness';
 import { Step4Revenue } from './steps/Step4Revenue';
@@ -191,21 +192,15 @@ export function MultiStepForm({ token }: Props) {
 
   if (submittedAt) {
     return (
-      <div className="surface-panel-soft py-12 text-center">
-        <div className="text-5xl mb-4">🎉</div>
-        <h2 className="mb-2 text-2xl font-bold text-white">Submitted!</h2>
-        <p className="mb-1 text-slate-300">Your request has been received and is under review.</p>
-        <p className="text-xs text-slate-500">Signed at: {new Date(submittedAt).toISOString()}</p>
-        {state.applicationId && (
-          <button
-            onClick={handleDownloadPdf}
-            disabled={pdfDownloading}
-            className="mt-5 inline-block text-sm text-cyan-300 underline transition hover:text-cyan-200 disabled:opacity-50"
-          >
-            {pdfDownloading ? 'Downloading…' : 'Download Signed PDF'}
-          </button>
-        )}
-      </div>
+      state.applicationId ? (
+        <BankStatementUpload
+          applicationId={state.applicationId}
+          submittedAt={submittedAt}
+          token={token}
+          pdfDownloading={pdfDownloading}
+          onDownloadPdf={handleDownloadPdf}
+        />
+      ) : null
     );
   }
 

@@ -41,6 +41,7 @@ app.use(cors({
 }));
 
 app.use(compression());
+app.use('/api/applications/:id/documents', express.json({ limit: '15mb' }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 app.set('trust proxy', 1);

@@ -108,9 +108,29 @@ export const ENTITY_TYPES: { value: EntityType; label: string }[] = [
 ];
 
 export const INDUSTRIES = [
-  'Automotive','Construction','Education','Food & Beverage','Healthcare',
-  'Hospitality','Manufacturing','Professional Services','Retail','Technology',
-  'Transportation','Wholesale','Other',
+  'Agriculture',
+  'Arts & Entertainment',
+  'Automotive',
+  'Beauty & Wellness',
+  'Business Services',
+  'Construction',
+  'Education',
+  'eCommerce',
+  'Finance & Insurance',
+  'Food & Beverage',
+  'Healthcare',
+  'Home Services',
+  'Hospitality',
+  'Manufacturing',
+  'Non-Profit',
+  'Professional Services',
+  'Real Estate',
+  'Retail',
+  'Technology',
+  'Transportation',
+  'Travel',
+  'Wholesale',
+  'Other',
 ] as const;
 
 

@@ -37,6 +37,7 @@ function fmtDate(v?: string): string | undefined {
 interface ApplicationData {
   business?: {
     legalName?: string; dba?: string; entityType?: string;
+    industry?: string; sicCode?: string; naicsCode?: string;
     stateOfFormation?: string; ein?: string; businessStartDate?: string;
     phone?: string; website?: string;
     streetAddress?: string; city?: string; state?: string; zipCode?: string;
@@ -79,9 +80,13 @@ export function generateApplicationPdf(data: ApplicationData): Readable {
     const b = data.business;
     section(doc, 'Business');
     row(doc, 'Business Name', b.legalName);
+    row(doc, 'DBA', b.dba);
     row(doc, 'Entity Type', b.entityType);
+    row(doc, 'Industry', b.industry);
     row(doc, 'State of Formation', b.stateOfFormation);
     row(doc, 'EIN', fmtEin(b.ein));
+    row(doc, 'SIC', b.sicCode);
+    row(doc, 'NAICS', b.naicsCode);
     row(doc, 'Business Start Date', fmtDate(b.businessStartDate));
     row(doc, 'Phone', fmtPhone(b.phone));
     row(doc, 'Website', b.website);
