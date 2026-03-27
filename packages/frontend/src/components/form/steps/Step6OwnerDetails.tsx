@@ -140,7 +140,15 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   };
 
   return (
-    <div>
+    <div className="relative">
+      <div
+        aria-hidden="true"
+        className={cn(
+          'pointer-events-none fixed inset-0 z-40 bg-slate-950/0 transition-all duration-500 ease-out',
+          showVerification ? 'bg-slate-950/55 opacity-100' : 'opacity-0'
+        )}
+      />
+
       <h2 className="mb-2 text-xl font-bold text-white">Owner Details</h2>
       <p className="mb-6 text-sm text-slate-400">Tell us about yourself as the primary owner.</p>
 
@@ -218,15 +226,15 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
           ref={verificationCardRef}
           aria-hidden={!showVerification}
           className={cn(
-            'overflow-hidden transition-all duration-500 ease-out',
-            showVerification ? 'mt-8 max-h-80 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+            'relative z-50 mt-8 flex min-h-[220px] items-center justify-center',
+            !showVerification && 'pointer-events-none'
           )}
         >
-          <div className="mx-auto max-w-2xl">
+          <div className="mx-auto w-full max-w-2xl">
             <div
               className={cn(
-                'rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-6 shadow-[0_12px_36px_rgba(8,145,178,0.08)] transition-all duration-500 ease-out',
-                showVerification ? 'translate-y-0 scale-100' : 'translate-y-6 scale-[0.98]'
+                'rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-6 shadow-[0_12px_36px_rgba(8,145,178,0.08)] transition-opacity duration-500 ease-out',
+                showVerification ? 'opacity-100' : 'opacity-0 invisible'
               )}
             >
               <div className="mb-4 text-center">
