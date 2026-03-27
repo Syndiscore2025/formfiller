@@ -36,6 +36,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={selectId}
+          suppressHydrationWarning
           className={cn(
             'w-full rounded-xl border bg-slate-950/55 px-3.5 py-3 text-sm text-slate-100 shadow-inner shadow-black/10',
             'focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40',

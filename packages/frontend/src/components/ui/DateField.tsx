@@ -279,6 +279,7 @@ export function DateField({
         <input
           id={inputId}
           type="text"
+          suppressHydrationWarning
           inputMode="numeric"
           placeholder="MM/DD/YYYY"
           disabled={disabled}
@@ -325,6 +326,7 @@ export function DateField({
               <span aria-hidden="true">←</span>
             </button>
             <select
+              suppressHydrationWarning
               value={String(selectedMonthIndex)}
               onChange={(event) => setDisplayedMonth(clampMonth(new Date(selectedYear, Number(event.target.value), 1), minDate, maxDate))}
               className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
@@ -336,6 +338,7 @@ export function DateField({
               ))}
             </select>
             <select
+              suppressHydrationWarning
               value={String(selectedYear)}
               onChange={(event) => setDisplayedMonth(clampMonth(new Date(Number(event.target.value), selectedMonthIndex, 1), minDate, maxDate))}
               className="w-28 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"

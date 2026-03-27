@@ -128,6 +128,7 @@ export function SearchableSelect({
         <input
           id={inputId}
           type="text"
+          suppressHydrationWarning
           value={inputValue}
           placeholder={placeholder}
           disabled={disabled}
