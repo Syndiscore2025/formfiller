@@ -5,12 +5,24 @@ import { requireAuth, optionalAuth, requireTenant, AuthRequest } from '../middle
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
+import { bankHelpLimiter } from '../middleware/rateLimiter';
 import { writeAuditLog } from '../services/auditLog.service';
 import { pushToSwitchboxCrm, buildHeatmap } from '../services/crm.service';
 import { generateApplicationPdf } from '../services/pdf.service';
+import { generateBankStatementHelp } from '../services/bankHelp.service';
 import { decrypt } from '../utils/encryption';
 
 const router = Router();
+
+function isApplicationDocumentTableMissing(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+  return code === 'P2021'
+    || (message.includes('applicationdocument') && message.includes('does not exist'));
+}
 
 // Guest-accessible middleware chain (JWT or x-tenant-slug header)
 const guestAccess = [optionalAuth, requireTenant];
@@ -22,6 +34,10 @@ const documentUploadSchema = z.object({
   fileName: z.string().trim().min(1, 'File name is required'),
   mimeType: z.string().trim().min(1, 'MIME type is required'),
   fileData: z.string().min(20, 'PDF content is required'),
+});
+const bankHelpSchema = z.object({
+  bankName: z.string().trim().min(2, 'Bank name is required').max(120, 'Bank name is too long'),
+  bankUrl: z.string().trim().url('Bank website must be a valid URL').optional().or(z.literal('')),
 });
 
 const createAppSchema = z.object({
@@ -138,11 +154,20 @@ router.get(
     const app = await prisma.application.findFirst({ where: { id: appId, tenantId: req.tenantId! }, select: { id: true } });
     if (!app) throw createError('Application not found', 404);
 
-    const documents = await prisma.applicationDocument.findMany({
-      where: { applicationId: appId, documentType: 'bank_statement' },
-      orderBy: [{ statementMonth: 'desc' }, { createdAt: 'desc' }],
-      select: { id: true, statementMonth: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true },
-    });
+    let documents;
+    try {
+      documents = await prisma.applicationDocument.findMany({
+        where: { applicationId: appId, documentType: 'bank_statement' },
+        orderBy: [{ statementMonth: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true, statementMonth: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true },
+      });
+    } catch (error) {
+      if (isApplicationDocumentTableMissing(error)) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+      throw error;
+    }
 
     res.json({ success: true, data: documents });
   })
@@ -167,36 +192,98 @@ router.post(
     if (!content.length) throw createError('The uploaded PDF was empty', 400);
     if (content.length > 10 * 1024 * 1024) throw createError('Each PDF must be 10MB or smaller', 400);
 
-    const saved = await prisma.applicationDocument.upsert({
-      where: {
-        applicationId_documentType_statementMonth: {
+    let saved;
+    try {
+      saved = await prisma.applicationDocument.upsert({
+        where: {
+          applicationId_documentType_statementMonth: {
+            applicationId: appId,
+            documentType: 'bank_statement',
+            statementMonth,
+          },
+        },
+        update: {
+          fileName: normalizedFileName,
+          mimeType: 'application/pdf',
+          sizeBytes: content.length,
+          content,
+        },
+        create: {
           applicationId: appId,
           documentType: 'bank_statement',
           statementMonth,
+          fileName: normalizedFileName,
+          mimeType: 'application/pdf',
+          sizeBytes: content.length,
+          content,
         },
-      },
-      update: {
-        fileName: normalizedFileName,
-        mimeType: 'application/pdf',
-        sizeBytes: content.length,
-        content,
-      },
-      create: {
-        applicationId: appId,
-        documentType: 'bank_statement',
-        statementMonth,
-        fileName: normalizedFileName,
-        mimeType: 'application/pdf',
-        sizeBytes: content.length,
-        content,
-      },
-      select: { id: true, statementMonth: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true },
-    });
+        select: { id: true, statementMonth: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true },
+      });
+    } catch (error) {
+      if (isApplicationDocumentTableMissing(error)) {
+        throw createError('Document uploads are not available yet in this environment. Please try again shortly.', 503);
+      }
+      throw error;
+    }
 
     await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
     await writeAuditLog({ applicationId: appId, action: 'BANK_STATEMENT_UPLOADED', actor: req.userId, ipAddress: req.ip, details: { statementMonth, fileName: normalizedFileName, sizeBytes: content.length } });
 
     res.status(201).json({ success: true, data: saved });
+  })
+);
+
+router.post(
+  '/:id/bank-help',
+  ...guestAccess,
+  bankHelpLimiter,
+  validate(bankHelpSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const appId = String(req.params.id);
+    const app = await prisma.application.findFirst({ where: { id: appId, tenantId: req.tenantId! }, select: { id: true } });
+    if (!app) throw createError('Application not found', 404);
+
+    const { bankName, bankUrl } = req.body as z.infer<typeof bankHelpSchema>;
+
+    try {
+      const help = await generateBankStatementHelp({
+        bankName,
+        bankUrl: bankUrl || undefined,
+      });
+
+      await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
+      await writeAuditLog({
+        applicationId: appId,
+        action: 'BANK_HELP_LOOKUP',
+        actor: req.userId,
+        ipAddress: req.ip,
+        details: {
+          bankName,
+          bankUrl: help.bankUrl,
+          cached: help.cached,
+          sourcePages: help.sourcePages,
+        },
+      });
+
+      res.json({ success: true, data: help });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to retrieve bank download instructions right now.';
+
+      if (
+        message.includes('Bank name is required')
+        || message.includes('invalid')
+        || message.includes('supported')
+        || message.includes('safely')
+      ) {
+        throw createError(message, 400);
+      }
+
+      if (message.includes('not configured')) {
+        throw createError(message, 503);
+      }
+
+      throw createError('Unable to retrieve bank download instructions right now.', 502);
+    }
   })
 );
 

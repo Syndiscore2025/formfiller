@@ -5,6 +5,31 @@ interface ApiOptions extends RequestInit {
   token?: string;
 }
 
+function sanitizeApiErrorMessage(message: unknown): string {
+  if (typeof message !== 'string') return 'Request failed';
+
+  const trimmed = message.trim();
+  if (!trimmed) return 'Request failed';
+
+  const lower = trimmed.toLowerCase();
+  const looksSensitive = [
+    'prisma',
+    'connectorerror',
+    'query engine',
+    'schema.prisma',
+    'invalid `prisma.',
+    'c:\\',
+    '/src/',
+    '.dll',
+  ].some((token) => lower.includes(token));
+
+  if (looksSensitive || trimmed.length > 220) {
+    return 'We hit a temporary application error. Please try again.';
+  }
+
+  return trimmed;
+}
+
 async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { token, ...rest } = options;
   const headers: HeadersInit = {
@@ -25,7 +50,7 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const message = data?.error || data?.errors?.[0]?.message || 'Request failed';
-    throw new Error(message);
+    throw new Error(sanitizeApiErrorMessage(message));
   }
   return data as T;
 }

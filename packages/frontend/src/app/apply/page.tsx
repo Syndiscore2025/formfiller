@@ -1,18 +1,4 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-
-const ApplyFormClient = dynamic(
-  () => import('@/components/form/ApplyFormClient').then((mod) => mod.ApplyFormClient),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="surface-panel-soft py-12 text-center text-sm text-slate-400">
-        Loading application form…
-      </div>
-    ),
-  }
-);
+import { ApplyFormClient } from '@/components/form/ApplyFormClient';
 
 export default function ApplyPage() {
   return (

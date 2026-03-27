@@ -24,6 +24,8 @@ export const config = {
   allowedOrigins: Array.from(new Set([...configuredAllowedOrigins, ...devAllowedOrigins])),
   openCorporatesApiKey: process.env.OPENCORPORATES_API_KEY || '',
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || '',
+  openAiApiKey: process.env.OPENAI_API_KEY || '',
+  openAiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   crmWebhookUrl: process.env.CRM_WEBHOOK_URL || '',
   crmApiKey: process.env.CRM_API_KEY || '',
   isProduction: process.env.NODE_ENV === 'production',

@@ -32,3 +32,19 @@ export const addressAutocompleteLimiter = rateLimit({
   message: { success: false, error: 'Address autocomplete rate limit exceeded' },
 });
 
+export const bankHelpLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 2,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const tenant = req.get('x-tenant-slug') || 'default';
+    const applicationId = req.params.id || 'unknown';
+    const identity = ('userId' in req && typeof req.userId === 'string' && req.userId)
+      ? req.userId
+      : (req.ip || 'unknown');
+    return `${tenant}:${applicationId}:${identity}`;
+  },
+  message: { success: false, error: 'Bank help lookup limit reached. Please try again tomorrow.' },
+});
+
