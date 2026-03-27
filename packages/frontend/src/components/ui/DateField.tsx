@@ -17,39 +17,109 @@ interface DateFieldProps {
   id?: string;
 }
 
-const MONTHS = [
-  { value: '01', label: 'Jan' }, { value: '02', label: 'Feb' }, { value: '03', label: 'Mar' },
-  { value: '04', label: 'Apr' }, { value: '05', label: 'May' }, { value: '06', label: 'Jun' },
-  { value: '07', label: 'Jul' }, { value: '08', label: 'Aug' }, { value: '09', label: 'Sep' },
-  { value: '10', label: 'Oct' }, { value: '11', label: 'Nov' }, { value: '12', label: 'Dec' },
-];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function buildDate(year: number, monthIndex: number, day: number) {
+  const candidate = new Date(year, monthIndex, day);
+  return candidate.getFullYear() === year && candidate.getMonth() === monthIndex && candidate.getDate() === day
+    ? candidate
+    : null;
+}
 
 function parseIsoDate(value?: string | null) {
   const match = (value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return match ? { year: match[1], month: match[2], day: match[3] } : null;
+  if (!match) return null;
+  return buildDate(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
-function daysInMonth(year: string, month: string) {
-  return new Date(Number(year), Number(month), 0).getDate();
+function parseDisplayDate(value?: string | null) {
+  const match = (value || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  return buildDate(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
 }
 
-function formatDisplay(month: string, day: string, year: string) {
-  return `${month || 'MM'}/${day || 'DD'}/${year || 'YYYY'}`;
+function formatDisplayDate(date?: Date | null) {
+  if (!date) return '';
+  return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
 }
 
-function getAllowedMonths(year: string, minDate: ReturnType<typeof parseIsoDate>, maxDate: ReturnType<typeof parseIsoDate>) {
-  if (!year) return MONTHS;
-  const minMonth = minDate?.year === year ? Number(minDate.month) : 1;
-  const maxMonth = maxDate?.year === year ? Number(maxDate.month) : 12;
-  return MONTHS.filter((month) => Number(month.value) >= minMonth && Number(month.value) <= maxMonth);
+function formatIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function getAllowedDays(year: string, month: string, minDate: ReturnType<typeof parseIsoDate>, maxDate: ReturnType<typeof parseIsoDate>) {
-  if (!year || !month) return [] as string[];
-  const lastDay = daysInMonth(year, month);
-  const minDay = minDate?.year === year && minDate.month === month ? Number(minDate.day) : 1;
-  const maxDay = maxDate?.year === year && maxDate.month === month ? Number(maxDate.day) : lastDay;
-  return Array.from({ length: Math.max(maxDay - minDay + 1, 0) }, (_, index) => String(minDay + index).padStart(2, '0'));
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function compareDates(left: Date, right: Date) {
+  if (left.getFullYear() !== right.getFullYear()) return left.getFullYear() - right.getFullYear();
+  if (left.getMonth() !== right.getMonth()) return left.getMonth() - right.getMonth();
+  return left.getDate() - right.getDate();
+}
+
+function isSameDay(left: Date, right: Date) {
+  return compareDates(left, right) === 0;
+}
+
+function isSameMonth(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth();
+}
+
+function isWithinRange(date: Date, minDate: Date | null, maxDate: Date | null) {
+  if (minDate && compareDates(date, minDate) < 0) return false;
+  if (maxDate && compareDates(date, maxDate) > 0) return false;
+  return true;
+}
+
+function clampMonth(date: Date, minDate: Date | null, maxDate: Date | null) {
+  const monthStart = startOfMonth(date);
+  const minMonth = minDate ? startOfMonth(minDate) : null;
+  const maxMonth = maxDate ? startOfMonth(maxDate) : null;
+  if (minMonth && compareDates(monthStart, minMonth) < 0) return minMonth;
+  if (maxMonth && compareDates(monthStart, maxMonth) > 0) return maxMonth;
+  return monthStart;
+}
+
+function getCalendarDays(month: Date) {
+  const firstDay = startOfMonth(month);
+  const gridStart = new Date(firstDay.getFullYear(), firstDay.getMonth(), 1 - firstDay.getDay());
+  return Array.from({ length: 42 }, (_, index) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index));
+}
+
+function sanitizeTypedDate(value: string) {
+  const cleaned = value.replace(/[^0-9/]/g, '');
+  if (!cleaned.includes('/')) {
+    const digits = cleaned.slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  }
+
+  let result = '';
+  let segment = 0;
+  let segmentLength = 0;
+
+  for (const character of cleaned) {
+    if (character === '/') {
+      if (segment >= 2 || segmentLength === 0 || result.endsWith('/')) continue;
+      result += '/';
+      segment += 1;
+      segmentLength = 0;
+      continue;
+    }
+
+    const maxLength = segment === 2 ? 4 : 2;
+    if (segmentLength >= maxLength) continue;
+    result += character;
+    segmentLength += 1;
+  }
+
+  return result.slice(0, 10);
 }
 
 export function DateField({
@@ -67,21 +137,25 @@ export function DateField({
 }: DateFieldProps) {
   const inputId = id || label.toLowerCase().replace(/\s+/g, '_');
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const parsedValue = useMemo(() => parseIsoDate(value), [value]);
+  const selectedDate = useMemo(() => parseIsoDate(value), [value]);
   const minDate = useMemo(() => parseIsoDate(min), [min]);
   const maxDate = useMemo(() => parseIsoDate(max), [max]);
   const currentYear = new Date().getFullYear();
+  const today = useMemo(() => new Date(), []);
 
   const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(parsedValue?.month || '');
-  const [day, setDay] = useState(parsedValue?.day || '');
-  const [year, setYear] = useState(parsedValue?.year || '');
+  const [inputValue, setInputValue] = useState(formatDisplayDate(selectedDate));
+  const [internalError, setInternalError] = useState<string>();
+  const [displayedMonth, setDisplayedMonth] = useState(() => {
+    if (selectedDate) return startOfMonth(selectedDate);
+    return clampMonth(today, minDate, maxDate);
+  });
 
   useEffect(() => {
-    setMonth(parsedValue?.month || '');
-    setDay(parsedValue?.day || '');
-    setYear(parsedValue?.year || '');
-  }, [parsedValue]);
+    setInputValue(formatDisplayDate(selectedDate));
+    setInternalError(undefined);
+    setDisplayedMonth((current) => (selectedDate ? startOfMonth(selectedDate) : clampMonth(current, minDate, maxDate)));
+  }, [selectedDate, minDate, maxDate]);
 
   useEffect(() => {
     if (!open) return;
@@ -100,43 +174,93 @@ export function DateField({
   }, [open]);
 
   const yearOptions = useMemo(() => {
-    const minYear = Number(minDate?.year || '1900');
-    const maxYear = Number(maxDate?.year || String(currentYear));
+    const minYear = minDate?.getFullYear() || 1900;
+    const maxYear = maxDate?.getFullYear() || currentYear;
     return Array.from({ length: Math.max(maxYear - minYear + 1, 0) }, (_, index) => String(maxYear - index));
-  }, [currentYear, maxDate?.year, minDate?.year]);
+  }, [currentYear, maxDate, minDate]);
 
-  const monthOptions = useMemo(() => getAllowedMonths(year, minDate, maxDate), [year, minDate, maxDate]);
-  const dayOptions = useMemo(() => getAllowedDays(year, month, minDate, maxDate), [year, month, minDate, maxDate]);
+  const selectedYear = displayedMonth.getFullYear();
+  const selectedMonthIndex = displayedMonth.getMonth();
+  const canGoPrev = !minDate || compareDates(addMonths(displayedMonth, -1), startOfMonth(minDate)) >= 0;
+  const canGoNext = !maxDate || compareDates(addMonths(displayedMonth, 1), startOfMonth(maxDate)) <= 0;
+  const calendarDays = useMemo(() => getCalendarDays(displayedMonth), [displayedMonth]);
+  const monthOptions = useMemo(
+    () => MONTHS.map((monthLabel, monthIndex) => ({
+      value: String(monthIndex),
+      label: monthLabel,
+      disabled: Boolean(
+        (minDate && selectedYear === minDate.getFullYear() && monthIndex < minDate.getMonth()) ||
+        (maxDate && selectedYear === maxDate.getFullYear() && monthIndex > maxDate.getMonth()),
+      ),
+    })),
+    [maxDate, minDate, selectedYear]
+  );
 
-  const syncValue = (nextYear: string, nextMonth: string, nextDay: string) => {
-    const nextValue = nextYear && nextMonth && nextDay ? `${nextYear}-${nextMonth}-${nextDay}` : '';
-    if (nextValue !== value) onChange(nextValue);
+  const commitDate = (date: Date | null, closePopover = false) => {
+    if (!date) {
+      setInputValue('');
+      setInternalError(undefined);
+      if (value) onChange('');
+      if (closePopover) setOpen(false);
+      return;
+    }
+
+    if (!isWithinRange(date, minDate, maxDate)) {
+      setInternalError('Enter a valid date');
+      return;
+    }
+
+    const nextIso = formatIsoDate(date);
+    if (nextIso !== value) onChange(nextIso);
+    setInputValue(formatDisplayDate(date));
+    setDisplayedMonth(startOfMonth(date));
+    setInternalError(undefined);
+    if (closePopover) setOpen(false);
   };
 
-  const updateParts = (next: { year?: string; month?: string; day?: string }) => {
-    let nextYear = next.year ?? year;
-    let nextMonth = next.month ?? month;
-    let nextDay = next.day ?? day;
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = sanitizeTypedDate(event.target.value);
+    setInputValue(nextValue);
+    setInternalError(undefined);
 
-    const allowedMonths = getAllowedMonths(nextYear, minDate, maxDate).map((option) => option.value);
-    if (nextMonth && !allowedMonths.includes(nextMonth)) nextMonth = '';
+    if (!nextValue) {
+      if (value) onChange('');
+      return;
+    }
 
-    const allowedDays = getAllowedDays(nextYear, nextMonth, minDate, maxDate);
-    if (nextDay && !allowedDays.includes(nextDay)) nextDay = '';
-
-    setYear(nextYear);
-    setMonth(nextMonth);
-    setDay(nextDay);
-    syncValue(nextYear, nextMonth, nextDay);
+    const parsed = parseDisplayDate(nextValue);
+    if (parsed && isWithinRange(parsed, minDate, maxDate)) {
+      const nextIso = formatIsoDate(parsed);
+      if (nextIso !== value) onChange(nextIso);
+      setDisplayedMonth(startOfMonth(parsed));
+    }
   };
+
+  const handleInputBlur = () => {
+    if (!inputValue.trim()) {
+      setInternalError(undefined);
+      if (value) onChange('');
+      return;
+    }
+
+    const parsed = parseDisplayDate(inputValue);
+    if (!parsed || !isWithinRange(parsed, minDate, maxDate)) {
+      setInternalError('Enter a valid date');
+      return;
+    }
+
+    commitDate(parsed);
+  };
+
+  const activeError = internalError || error;
 
   const triggerClasses = cn(
-    'flex w-full items-center justify-between rounded-xl border bg-slate-950/55 px-3.5 py-3 text-left text-sm shadow-inner shadow-black/10',
+    'w-full rounded-xl border bg-slate-950/55 px-3.5 py-3 pr-11 text-sm text-slate-100 shadow-inner shadow-black/10',
     'transition focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40',
     disabled && 'cursor-not-allowed bg-white/[0.03] text-slate-400',
     autoPopulated && 'border-cyan-400/30 bg-cyan-400/[0.07]',
     !autoPopulated && 'border-white/10',
-    error && 'border-red-400/60 focus:ring-red-400/30',
+    activeError && 'border-red-400/60 focus:ring-red-400/30',
   );
 
   return (
@@ -151,57 +275,121 @@ export function DateField({
         )}
       </label>
 
-      <button
-        id={inputId}
-        type="button"
-        disabled={disabled}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen((prev) => !prev)}
-        className={triggerClasses}
-      >
-        <span className={cn(month && day && year ? 'text-slate-100' : 'text-slate-500')}>
-          {formatDisplay(month, day, year)}
-        </span>
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 text-slate-400">
-          <path fill="currentColor" d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1m12 8H5v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1zm-1-4H6a1 1 0 0 0-1 1v1h14V7a1 1 0 0 0-1-1" />
-        </svg>
-      </button>
+      <div className="relative">
+        <input
+          id={inputId}
+          type="text"
+          inputMode="numeric"
+          placeholder="MM/DD/YYYY"
+          disabled={disabled}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          value={inputValue}
+          onFocus={() => !disabled && setOpen(true)}
+          onChange={handleInputChange}
+          onBlur={handleInputBlur}
+          className={cn(triggerClasses, 'placeholder:text-slate-500')}
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label={open ? 'Close calendar' : 'Open calendar'}
+          onClick={() => setOpen((prev) => !prev)}
+          className="absolute inset-y-0 right-3 my-auto h-8 w-8 rounded-lg text-slate-400 transition hover:bg-cyan-400/10 hover:text-cyan-200 disabled:cursor-not-allowed disabled:text-slate-500"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5">
+            <path fill="currentColor" d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1m12 8H5v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1zm-1-4H6a1 1 0 0 0-1 1v1h14V7a1 1 0 0 0-1-1" />
+          </svg>
+        </button>
+      </div>
 
       {open && !disabled && (
-        <div className="surface-panel-soft absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[70] border border-cyan-400/20 p-4">
+        <div className="surface-panel-soft absolute left-0 top-[calc(100%+0.5rem)] z-[70] w-[20rem] max-w-[calc(100vw-2rem)] border border-cyan-400/20 bg-slate-950/85 p-4 shadow-[0_20px_80px_rgba(8,145,178,0.14)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Select date</p>
-              <p className="mt-1 text-sm text-slate-300">{formatDisplay(month, day, year)}</p>
+              <p className="mt-1 text-sm text-slate-300">{inputValue || 'MM/DD/YYYY'}</p>
             </div>
-            <button type="button" onClick={() => updateParts({ year: '', month: '', day: '' })} className="text-xs font-medium text-slate-400 transition hover:text-slate-200">
+            <button type="button" onClick={() => commitDate(null)} className="text-xs font-medium text-slate-400 transition hover:text-slate-200">
               Clear
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Month</span>
-              <select value={month} onChange={(e) => updateParts({ month: e.target.value })} className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40">
-                <option value="">MM</option>
-                {monthOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Day</span>
-              <select value={day} onChange={(e) => updateParts({ day: e.target.value })} className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40">
-                <option value="">DD</option>
-                {dayOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Year</span>
-              <select value={year} onChange={(e) => updateParts({ year: e.target.value })} className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40">
-                <option value="">YYYY</option>
-                {yearOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </div>
+          <div className="mb-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => canGoPrev && setDisplayedMonth((current) => addMonths(current, -1))}
+              disabled={!canGoPrev}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+            <select
+              value={String(selectedMonthIndex)}
+              onChange={(event) => setDisplayedMonth(clampMonth(new Date(selectedYear, Number(event.target.value), 1), minDate, maxDate))}
+              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+            >
+              {monthOptions.map((option) => (
+                <option key={option.value} value={option.value} disabled={option.disabled}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={String(selectedYear)}
+              onChange={(event) => setDisplayedMonth(clampMonth(new Date(Number(event.target.value), selectedMonthIndex, 1), minDate, maxDate))}
+              className="w-28 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+            >
+              {yearOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => canGoNext && setDisplayedMonth((current) => addMonths(current, 1))}
+              disabled={!canGoNext}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {WEEKDAYS.map((weekday) => (
+              <span key={weekday} className="py-1">
+                {weekday}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-2 grid grid-cols-7 gap-1">
+            {calendarDays.map((calendarDate) => {
+              const inCurrentMonth = isSameMonth(calendarDate, displayedMonth);
+              const isSelected = selectedDate ? isSameDay(calendarDate, selectedDate) : false;
+              const isToday = isSameDay(calendarDate, today);
+              const unavailable = !isWithinRange(calendarDate, minDate, maxDate);
+
+              return (
+                <button
+                  key={calendarDate.toISOString()}
+                  type="button"
+                  disabled={unavailable}
+                  onClick={() => commitDate(calendarDate, true)}
+                  className={cn(
+                    'flex h-10 items-center justify-center rounded-xl border text-sm transition',
+                    unavailable && 'cursor-not-allowed border-transparent text-slate-600',
+                    !unavailable && !isSelected && 'border-transparent text-slate-200 hover:border-cyan-300/40 hover:bg-cyan-400/10',
+                    !inCurrentMonth && !isSelected && 'text-slate-500',
+                    isToday && !isSelected && 'border-cyan-400/30 bg-cyan-400/5 text-cyan-100',
+                    isSelected && 'border-cyan-300/50 bg-cyan-400/15 text-cyan-100 shadow-[0_0_0_1px_rgba(103,232,249,0.18)]'
+                  )}
+                >
+                  {calendarDate.getDate()}
+                </button>
+              );
+            })}
           </div>
 
           <div className="mt-4 flex justify-end">
@@ -212,8 +400,8 @@ export function DateField({
         </div>
       )}
 
-      {hint && !error && <p className="text-xs text-slate-400">{hint}</p>}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {hint && !activeError && <p className="text-xs text-slate-400">{hint}</p>}
+      {activeError && <p className="text-xs text-red-600">{activeError}</p>}
     </div>
   );
 }
