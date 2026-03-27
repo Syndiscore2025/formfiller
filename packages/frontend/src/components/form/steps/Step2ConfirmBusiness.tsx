@@ -401,13 +401,13 @@ function formatPhoneDisplay(value: string): string {
   return value;
 }
 
-function getPartialBusinessStartYear(value: string): string | null {
-  const trimmed = value.trim();
+function getPartialBusinessStartYear(value: string | null | undefined): string | null {
+  const trimmed = (value || '').trim();
   return /^\d{4}$/.test(trimmed) ? trimmed : null;
 }
 
-function normalizeBusinessStartDateInput(value: string): string {
-  const trimmed = value.trim();
+function normalizeBusinessStartDateInput(value: string | null | undefined): string {
+  const trimmed = (value || '').trim();
   if (!trimmed) return '';
   if (/^\d{4}$/.test(trimmed)) return `${trimmed}-01-01`;
   if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);

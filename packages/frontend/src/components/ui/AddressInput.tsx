@@ -23,7 +23,7 @@ interface AddressDetails {
 
 interface AddressInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   label: string;
-  value: string;
+  value?: string;
   onChange: (value: string) => void;
   onSelectAddress: (address: AddressDetails) => void;
   error?: string;
@@ -48,6 +48,7 @@ export function AddressInput({
   ...props
 }: AddressInputProps) {
   const inputId = id || label.toLowerCase().replace(/\s+/g, '_');
+  const normalizedValue = value || '';
   const analytics = useAnalyticsContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<number | null>(null);
@@ -71,7 +72,7 @@ export function AddressInput({
       skipNextLookupRef.current = false;
       return;
     }
-    if (disabled || value.trim().length < 3) {
+    if (disabled || normalizedValue.trim().length < 3) {
       setSuggestions([]);
       setOpen(false);
       setLoading(false);
@@ -82,7 +83,7 @@ export function AddressInput({
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const params: Record<string, string> = { input: value.trim() };
+        const params: Record<string, string> = { input: normalizedValue.trim() };
         if (coords) {
           params.lat = String(coords.lat);
           params.lng = String(coords.lng);
@@ -105,7 +106,7 @@ export function AddressInput({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [coords, disabled, value]);
+  }, [coords, disabled, normalizedValue]);
 
   const handleSelect = async (suggestion: AddressSuggestion) => {
     try {
@@ -134,7 +135,7 @@ export function AddressInput({
         ref={inputRef}
         id={inputId}
         suppressHydrationWarning
-        value={value}
+        value={normalizedValue}
         disabled={disabled}
         className={cn(
           'w-full rounded-xl border border-white/10 bg-slate-950/55 px-3.5 py-3 pr-10 text-sm text-slate-100 shadow-inner shadow-black/10',
