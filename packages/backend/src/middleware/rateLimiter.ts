@@ -24,3 +24,11 @@ export const einLookupLimiter = rateLimit({
   message: { success: false, error: 'EIN lookup rate limit exceeded' },
 });
 
+export const addressAutocompleteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Address autocomplete rate limit exceeded' },
+});
+

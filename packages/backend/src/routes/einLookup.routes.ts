@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { optionalAuth, requireTenant } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { einLookupLimiter } from '../middleware/rateLimiter';
+import { addressAutocompleteLimiter, einLookupLimiter } from '../middleware/rateLimiter';
 import { lookupByOpenCorporates, BusinessLookupResult } from '../services/businessLookup.service';
-import { lookupByGooglePlaces } from '../services/googlePlaces.service';
+import { autocompleteAddresses, getPlaceAddressDetails, lookupByGooglePlaces } from '../services/googlePlaces.service';
 
 const router = Router();
 const guestAccess = [optionalAuth, requireTenant];
@@ -13,6 +13,16 @@ const guestAccess = [optionalAuth, requireTenant];
 const lookupSchema = z.object({
   businessName: z.string().min(2),
   state: z.string().length(2, 'Use 2-letter state code'),
+});
+
+const autocompleteSchema = z.object({
+  input: z.string().trim().min(3),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+});
+
+const placeSchema = z.object({
+  placeId: z.string().min(1),
 });
 
 router.get(
@@ -87,6 +97,40 @@ router.get(
         googlePlaces: !!googleResult,
       },
     });
+  })
+);
+
+router.get(
+  '/autocomplete',
+  ...guestAccess,
+  addressAutocompleteLimiter,
+  validate(autocompleteSchema, 'query'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { input, lat, lng } = req.query as unknown as z.infer<typeof autocompleteSchema>;
+    const data = await autocompleteAddresses(
+      input,
+      lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng } : undefined,
+    );
+
+    res.json({ success: true, data });
+  })
+);
+
+router.get(
+  '/place',
+  ...guestAccess,
+  addressAutocompleteLimiter,
+  validate(placeSchema, 'query'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { placeId } = req.query as unknown as z.infer<typeof placeSchema>;
+    const data = await getPlaceAddressDetails(placeId);
+
+    if (!data) {
+      res.status(404).json({ success: false, error: 'Address not found' });
+      return;
+    }
+
+    res.json({ success: true, data });
   })
 );
 

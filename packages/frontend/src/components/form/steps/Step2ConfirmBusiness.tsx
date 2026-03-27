@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
 import { BusinessInfo, ENTITY_TYPES, US_STATES } from '@/types/application';
+import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -44,6 +45,8 @@ const FIELD_META: { key: string; label: string; required?: boolean }[] = [
 
 export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: initialHomeAddr, onNext, onBack }: Props) {
   const src = business.fieldSources || {};
+  const partialBusinessStartYear = getPartialBusinessStartYear(business.businessStartDate);
+  const normalizedBusinessStartDate = normalizeBusinessStartDateInput(business.businessStartDate);
 
   // Did the APIs actually find anything beyond what the user typed on Step 1?
   const hasLookupData = useMemo(
@@ -55,7 +58,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const inferredEntity = useMemo(() => inferEntityType(business.legalName || ''), [business.legalName]);
 
   // Which fields are populated (have a non-empty value)?
-  const populated = useMemo(() => {
+  const filledFields = useMemo(() => {
     const biz = business as unknown as Record<string, unknown>;
     const set = new Set<string>();
     for (const { key } of FIELD_META) {
@@ -67,10 +70,16 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     return set;
   }, [business, inferredEntity]);
 
+  const completedFields = useMemo(() => {
+    const set = new Set(filledFields);
+    if (partialBusinessStartYear) set.delete('businessStartDate');
+    return set;
+  }, [filledFields, partialBusinessStartYear]);
+
   // Which fields still need to be filled in?
   const missingFields = useMemo(
-    () => FIELD_META.filter((f) => !populated.has(f.key)),
-    [populated],
+    () => FIELD_META.filter((f) => !completedFields.has(f.key)),
+    [completedFields],
   );
 
   // Confirmation mode: user hasn't clicked "Edit" yet
@@ -87,7 +96,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   );
   const [stateOfFormation, setStateOfFormation] = useState(business.stateOfFormation || '');
   const [ein, setEin] = useState(formatEinDisplay(business.ein || ''));
-  const [businessStartDate, setBusinessStartDate] = useState(business.businessStartDate || '');
+  const [businessStartDate, setBusinessStartDate] = useState(normalizedBusinessStartDate);
   const [businessPhone, setBusinessPhone] = useState(business.phone || '');
   const [website, setWebsite] = useState(business.website || '');
   const [streetAddress, setStreetAddress] = useState(business.streetAddress || '');
@@ -101,6 +110,18 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  const handleBusinessAddressSelect = (address: {
+    streetAddress?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  }) => {
+    setStreetAddress(address.streetAddress || '');
+    setCity(address.city || '');
+    setAddrState(address.state || '');
+    setZipCode(address.zipCode || '');
+  };
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -158,8 +179,8 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
   // ─── CONFIRMATION MODE (APIs found data) ───
   if (hasLookupData && !editing) {
-    const confirmedFields = FIELD_META.filter((f) => populated.has(f.key));
-    const hasBusinessAddr = populated.has('streetAddress') || populated.has('city') || populated.has('state');
+    const confirmedFields = FIELD_META.filter((f) => filledFields.has(f.key));
+    const hasBusinessAddr = filledFields.has('streetAddress') || filledFields.has('city') || filledFields.has('state');
 
     return (
       <div>
@@ -234,7 +255,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   // just an apt/suite field is confusing when the address was already confirmed).
   const show = (key: string) => {
     if (!showAll && key === 'streetAddress2') return false;
-    return showAll || !populated.has(key);
+    return showAll || !completedFields.has(key);
   };
 
   const showIdentity = show('legalName') || show('dba');
@@ -258,7 +279,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
       {!showAll && (
         <div className="mb-6 h-1.5 w-full rounded-full bg-white/[0.06]">
           <div className="h-1.5 rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.95),rgba(96,165,250,0.95))] transition-all"
-            style={{ width: `${Math.round((populated.size / FIELD_META.length) * 100)}%` }} />
+            style={{ width: `${Math.round((completedFields.size / FIELD_META.length) * 100)}%` }} />
         </div>
       )}
       {showAll && <div className="mb-4" />}
@@ -289,15 +310,27 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
           </div>
         )}
 
-        {showDate && <Input label="Business Start Date" type="date" value={businessStartDate}
-          onChange={(e) => setBusinessStartDate(e.target.value)} />}
+        {showDate && (
+          <div className="space-y-3">
+            {partialBusinessStartYear && (
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 text-sm text-slate-300">
+                We found the start year as <span className="font-semibold text-slate-100">{partialBusinessStartYear}</span>. Please confirm the exact month and day.
+              </div>
+            )}
+            <Input label="Business Start Date" type="date" value={businessStartDate}
+              onChange={(e) => setBusinessStartDate(e.target.value)}
+              min={partialBusinessStartYear ? `${partialBusinessStartYear}-01-01` : undefined}
+              max={partialBusinessStartYear ? `${partialBusinessStartYear}-12-31` : undefined}
+              hint={partialBusinessStartYear ? `Calendar starts at January 1, ${partialBusinessStartYear}.` : undefined} />
+          </div>
+        )}
 
         {showAddress && (<>
           <div className="border-t border-white/10 pt-4" />
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Business Address</p>
-          {show('streetAddress') && <Input label="Street Address" required value={streetAddress}
-            onChange={(e) => setStreetAddress(e.target.value)} error={errors.streetAddress}
-            autoComplete="street-address" />}
+          {show('streetAddress') && <AddressInput label="Street Address" required value={streetAddress}
+            onChange={setStreetAddress} onSelectAddress={handleBusinessAddressSelect} error={errors.streetAddress}
+            autoComplete="street-address" placeholder="Start typing your business address" />}
           {show('streetAddress2') && <Input label="Apt / Suite" value={streetAddress2}
             onChange={(e) => setStreetAddress2(e.target.value)} autoComplete="address-line2" />}
           <div className="grid grid-cols-3 gap-4">
@@ -366,5 +399,20 @@ function formatPhoneDisplay(value: string): string {
   const digits = value.replace(/\D/g, '');
   if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   return value;
+}
+
+function getPartialBusinessStartYear(value: string): string | null {
+  const trimmed = value.trim();
+  return /^\d{4}$/.test(trimmed) ? trimmed : null;
+}
+
+function normalizeBusinessStartDateInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^\d{4}$/.test(trimmed)) return `${trimmed}-01-01`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
 }
 

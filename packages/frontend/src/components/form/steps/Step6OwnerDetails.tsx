@@ -1,9 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { OwnerInfo, ContactInfo, BusinessInfo, US_STATES } from '@/types/application';
+import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { cn } from '@/lib/cn';
 
 interface Props {
   owner: OwnerInfo;
@@ -34,13 +36,21 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const [hasAdditional, setHasAdditional] = useState<boolean | null>(initialHasAdditional);
 
   const [sameAsBusiness, setSameAsBusiness] = useState(addrFromBiz);
+  const [showVerification, setShowVerification] = useState(Boolean(owner.ssn || owner.dateOfBirth));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const ssnInputRef = useRef<HTMLInputElement>(null);
 
   const pct = Number(ownershipPct);
   const showAdditionalQuestion = !(pct >= 81 && pct <= 100);
 
   const hasBusinessAddress = !!(business.streetAddress || business.city || business.state || business.zipCode);
+
+  useEffect(() => {
+    if (showVerification) {
+      ssnInputRef.current?.focus();
+    }
+  }, [showVerification]);
 
   const handleSameAsBusinessChange = (checked: boolean) => {
     setSameAsBusiness(checked);
@@ -53,6 +63,18 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     } else {
       setStreetAddress(''); setStreetAddress2(''); setCity(''); setState(''); setZipCode('');
     }
+  };
+
+  const handleHomeAddressSelect = (address: {
+    streetAddress?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  }) => {
+    setStreetAddress(address.streetAddress || '');
+    setCity(address.city || '');
+    setState(address.state || '');
+    setZipCode(address.zipCode || '');
   };
 
   const formatSsn = (value: string) => {
@@ -83,7 +105,22 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     return errs;
   };
 
+  const revealVerification = () => {
+    setShowVerification(true);
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.ssn;
+      delete next.dateOfBirth;
+      return next;
+    });
+  };
+
   const handleSubmit = async () => {
+    if (!showVerification) {
+      revealVerification();
+      return;
+    }
+
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSubmitting(true);
@@ -116,10 +153,6 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
         <Input label="Ownership %" required placeholder="e.g., 51" value={ownershipPct}
           onChange={(e) => setOwnershipPct(e.target.value.replace(/\D/g, '').slice(0, 3))}
           error={errors.ownershipPct} autoComplete="off" />
-        <Input label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
-          onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
-        <Input label="Date of Birth" required type="date" value={dateOfBirth}
-          onChange={(e) => setDateOfBirth(e.target.value)} error={errors.dateOfBirth} autoComplete="bday" />
 
         {/* Home Address — hidden entirely when user already said "same as business" on Step 2 */}
         {!addrFromBiz && (<>
@@ -134,9 +167,11 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
               Same as business address
             </label>
           )}
-          <Input label="Street Address" required value={streetAddress}
-            onChange={(e) => { if (!sameAsBusiness) setStreetAddress(e.target.value); }}
-            error={errors.streetAddress} autoComplete="street-address" disabled={sameAsBusiness} />
+          <AddressInput label="Street Address" required value={streetAddress}
+            onChange={(value) => { if (!sameAsBusiness) setStreetAddress(value); }}
+            onSelectAddress={handleHomeAddressSelect} error={errors.streetAddress}
+            autoComplete="street-address" disabled={sameAsBusiness}
+            placeholder="Start typing your home address" />
           <Input label="Apt / Suite (optional)" value={streetAddress2}
             onChange={(e) => { if (!sameAsBusiness) setStreetAddress2(e.target.value); }}
             autoComplete="address-line2" disabled={sameAsBusiness} />
@@ -176,11 +211,47 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
             </p>
           </>
         )}
+
+        <div className="mt-4 border-t border-white/10 pt-4" />
+        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 shadow-[0_12px_36px_rgba(8,145,178,0.08)]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-100">Owner Verification</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                {showVerification
+                  ? 'Enter your Social Security Number and Date of Birth so we can verify your identity.'
+                  : 'Your Social Security Number and Date of Birth stay hidden until you proceed to verification.'}
+              </p>
+            </div>
+            {!showVerification && (
+              <span className="surface-pill self-start text-[10px] tracking-[0.24em] text-cyan-200">
+                Hidden until proceed
+              </span>
+            )}
+          </div>
+
+          <div
+            aria-hidden={!showVerification}
+            className={cn(
+              'overflow-hidden transition-all duration-300 ease-out',
+              showVerification ? 'mt-4 max-h-56 opacity-100' : 'max-h-0 opacity-0 pointer-events-none invisible'
+            )}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
+                onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
+              <Input label="Date of Birth" required type="date" value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)} error={errors.dateOfBirth} autoComplete="bday" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex gap-3 justify-between mt-8">
         <Button variant="secondary" onClick={onBack} disabled={submitting}>← Back</Button>
-        <Button onClick={handleSubmit} loading={submitting}>Continue →</Button>
+        <Button onClick={handleSubmit} loading={submitting}>
+          {showVerification ? 'Continue →' : 'Proceed to verification →'}
+        </Button>
       </div>
     </div>
   );
