@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { BusinessInfo, ENTITY_TYPES, US_STATES } from '@/types/application';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 
@@ -317,8 +318,8 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
                 We found the start year as <span className="font-semibold text-slate-100">{partialBusinessStartYear}</span>. Please confirm the exact month and day.
               </div>
             )}
-            <Input label="Business Start Date" type="date" value={businessStartDate}
-              onChange={(e) => setBusinessStartDate(e.target.value)}
+            <DateField label="Business Start Date" value={businessStartDate}
+              onChange={setBusinessStartDate}
               min={partialBusinessStartYear ? `${partialBusinessStartYear}-01-01` : undefined}
               max={partialBusinessStartYear ? `${partialBusinessStartYear}-12-31` : undefined}
               hint={partialBusinessStartYear ? `Calendar starts at January 1, ${partialBusinessStartYear}.` : undefined} />

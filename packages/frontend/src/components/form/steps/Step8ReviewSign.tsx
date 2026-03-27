@@ -2,6 +2,7 @@
 import { useRef, useCallback, useState, useMemo, useEffect, type PointerEvent } from 'react';
 import type { FormState, ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES, URGENCY_OPTIONS, CREDIT_SCORE_RANGES } from '@/types/application';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
 
@@ -326,11 +327,10 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
 
         {/* Date Signed — 50% width */}
         <div>
-          <Input
+          <DateField
             label="Date Signed"
-            type="date"
             value={dateSigned}
-            onChange={(e) => setDateSigned(e.target.value)}
+            onChange={setDateSigned}
             disabled
             autoPopulated
             hint="Recorded at submission time."

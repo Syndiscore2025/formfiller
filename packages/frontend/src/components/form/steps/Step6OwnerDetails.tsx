@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { OwnerInfo, ContactInfo, BusinessInfo, US_STATES } from '@/types/application';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
+import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { cn } from '@/lib/cn';
@@ -40,7 +41,6 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const ssnInputRef = useRef<HTMLInputElement>(null);
-  const verificationCardRef = useRef<HTMLDivElement>(null);
 
   const pct = Number(ownershipPct);
   const showAdditionalQuestion = !(pct >= 81 && pct <= 100);
@@ -49,10 +49,22 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
   useEffect(() => {
     if (showVerification) {
-      verificationCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      ssnInputRef.current?.focus();
+      document.body.style.overflow = 'hidden';
+      requestAnimationFrame(() => ssnInputRef.current?.focus());
+      return () => {
+        document.body.style.overflow = '';
+      };
     }
   }, [showVerification]);
+
+  useEffect(() => {
+    if (!showVerification) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) setShowVerification(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showVerification, submitting]);
 
   const handleSameAsBusinessChange = (checked: boolean) => {
     setSameAsBusiness(checked);
@@ -86,7 +98,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     return digits;
   };
 
-  const validate = () => {
+  const validateOwnerDetails = () => {
     const errs: Record<string, string> = {};
     if (!firstName.trim()) errs.firstName = 'Required';
     if (!lastName.trim()) errs.lastName = 'Required';
@@ -95,10 +107,6 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
       const p = Number(ownershipPct);
       if (p < 1 || p > 100) errs.ownershipPct = 'Must be 1-100';
     }
-    const ssnDigits = ssn.replace(/\D/g, '');
-    if (!ssnDigits) errs.ssn = 'Required';
-    else if (ssnDigits.length !== 9) errs.ssn = 'SSN must be 9 digits';
-    if (!dateOfBirth) errs.dateOfBirth = 'Required';
     if (!streetAddress.trim()) errs.streetAddress = 'Required';
     if (!city.trim()) errs.city = 'Required';
     if (!state) errs.state = 'Required';
@@ -107,8 +115,27 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     return errs;
   };
 
+  const validateVerification = () => {
+    const errs: Record<string, string> = {};
+    const ssnDigits = ssn.replace(/\D/g, '');
+    if (!ssnDigits) errs.ssn = 'Required';
+    else if (ssnDigits.length !== 9) errs.ssn = 'SSN must be 9 digits';
+    if (!dateOfBirth) errs.dateOfBirth = 'Required';
+    return errs;
+  };
+
   const revealVerification = () => {
+    const detailErrs = validateOwnerDetails();
+    if (Object.keys(detailErrs).length > 0) {
+      setErrors(detailErrs);
+      return;
+    }
+    setErrors({});
     setShowVerification(true);
+  };
+
+  const closeVerification = () => {
+    setShowVerification(false);
     setErrors((prev) => {
       const next = { ...prev };
       delete next.ssn;
@@ -123,8 +150,19 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
       return;
     }
 
-    const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    const detailErrs = validateOwnerDetails();
+    if (Object.keys(detailErrs).length > 0) {
+      setErrors(detailErrs);
+      setShowVerification(false);
+      return;
+    }
+
+    const verificationErrs = validateVerification();
+    if (Object.keys(verificationErrs).length > 0) {
+      setErrors(verificationErrs);
+      return;
+    }
+
     setSubmitting(true);
     try {
       const ownerData: OwnerInfo = {
@@ -144,15 +182,17 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
       <div
         aria-hidden="true"
         className={cn(
-          'pointer-events-none fixed inset-0 z-40 bg-slate-950/0 transition-all duration-500 ease-out',
-          showVerification ? 'bg-slate-950/55 opacity-100' : 'opacity-0'
+          'fixed inset-0 z-40 transition-all duration-300 ease-out',
+          showVerification ? 'bg-slate-950/75 opacity-100 backdrop-blur-[3px]' : 'pointer-events-none bg-slate-950/0 opacity-0'
         )}
+        onClick={closeVerification}
       />
 
-      <h2 className="mb-2 text-xl font-bold text-white">Owner Details</h2>
-      <p className="mb-6 text-sm text-slate-400">Tell us about yourself as the primary owner.</p>
+      <div className={cn('transition duration-300', showVerification && 'pointer-events-none select-none blur-[1px] saturate-50')}>
+        <h2 className="mb-2 text-xl font-bold text-white">Owner Details</h2>
+        <p className="mb-6 text-sm text-slate-400">Tell us about yourself as the primary owner.</p>
 
-      <div className="space-y-4">
+        <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="First Name" required autoComplete="given-name" value={firstName}
             onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
@@ -222,44 +262,61 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
           </>
         )}
 
-        <div
-          ref={verificationCardRef}
-          aria-hidden={!showVerification}
-          className={cn(
-            'relative z-50 mt-8 flex min-h-[220px] items-center justify-center',
-            !showVerification && 'pointer-events-none'
-          )}
-        >
-          <div className="mx-auto w-full max-w-2xl">
-            <div
-              className={cn(
-                'rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-6 shadow-[0_12px_36px_rgba(8,145,178,0.08)] transition-opacity duration-500 ease-out',
-                showVerification ? 'opacity-100' : 'opacity-0 invisible'
-              )}
-            >
-              <div className="mb-4 text-center">
-                <p className="text-sm font-semibold text-slate-100">Owner Verification</p>
-                <p className="mt-1 text-sm leading-6 text-slate-400">
-                  Enter your Social Security Number and Date of Birth to verify your identity.
-                </p>
-              </div>
+        </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
-                  onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
-                <Input label="Date of Birth" required type="date" value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)} error={errors.dateOfBirth} autoComplete="bday" />
-              </div>
-            </div>
-          </div>
+        <div className="flex gap-3 justify-between mt-8">
+          <Button variant="secondary" onClick={onBack} disabled={submitting}>← Back</Button>
+          <Button onClick={handleSubmit} loading={submitting}>
+            Proceed to verification →
+          </Button>
         </div>
       </div>
 
-      <div className="flex gap-3 justify-between mt-8">
-        <Button variant="secondary" onClick={onBack} disabled={submitting}>← Back</Button>
-        <Button onClick={handleSubmit} loading={submitting}>
-          {showVerification ? 'Continue →' : 'Proceed to verification →'}
-        </Button>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="owner-verification-title"
+        className={cn(
+          'fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300',
+          showVerification ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+      >
+        <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="surface-panel-soft border border-cyan-400/20 bg-slate-950/95 p-7 shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(34,211,238,0.08)]">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Identity check</p>
+                <h3 id="owner-verification-title" className="mt-2 text-2xl font-semibold text-white">Owner Verification</h3>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
+                  Enter your Social Security Number and Date of Birth to verify your identity before continuing.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeVerification}
+                disabled={submitting}
+                className="rounded-full border border-white/10 bg-white/[0.03] p-2 text-slate-400 transition hover:border-white/20 hover:text-slate-200"
+                aria-label="Close verification"
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4">
+                  <path fill="currentColor" d="M4.22 4.22a.75.75 0 0 1 1.06 0L10 8.94l4.72-4.72a.75.75 0 1 1 1.06 1.06L11.06 10l4.72 4.72a.75.75 0 1 1-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 1 1-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 0 1 0-1.06" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
+                onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
+              <DateField label="Date of Birth" required value={dateOfBirth}
+                onChange={setDateOfBirth} error={errors.dateOfBirth} />
+            </div>
+
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+              <Button variant="secondary" onClick={closeVerification} disabled={submitting}>← Back to details</Button>
+              <Button onClick={handleSubmit} loading={submitting}>Continue →</Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
