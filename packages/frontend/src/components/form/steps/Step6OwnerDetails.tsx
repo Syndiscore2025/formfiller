@@ -40,6 +40,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const ssnInputRef = useRef<HTMLInputElement>(null);
+  const verificationCardRef = useRef<HTMLDivElement>(null);
 
   const pct = Number(ownershipPct);
   const showAdditionalQuestion = !(pct >= 81 && pct <= 100);
@@ -48,6 +49,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
   useEffect(() => {
     if (showVerification) {
+      verificationCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       ssnInputRef.current?.focus();
     }
   }, [showVerification]);
@@ -212,36 +214,34 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
           </>
         )}
 
-        <div className="mt-4 border-t border-white/10 pt-4" />
-        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 shadow-[0_12px_36px_rgba(8,145,178,0.08)]">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-100">Owner Verification</p>
-              <p className="mt-1 text-sm leading-6 text-slate-400">
-                {showVerification
-                  ? 'Enter your Social Security Number and Date of Birth so we can verify your identity.'
-                  : 'Your Social Security Number and Date of Birth stay hidden until you proceed to verification.'}
-              </p>
-            </div>
-            {!showVerification && (
-              <span className="surface-pill self-start text-[10px] tracking-[0.24em] text-cyan-200">
-                Hidden until proceed
-              </span>
-            )}
-          </div>
+        <div
+          ref={verificationCardRef}
+          aria-hidden={!showVerification}
+          className={cn(
+            'overflow-hidden transition-all duration-500 ease-out',
+            showVerification ? 'mt-8 max-h-80 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+          )}
+        >
+          <div className="mx-auto max-w-2xl">
+            <div
+              className={cn(
+                'rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-6 shadow-[0_12px_36px_rgba(8,145,178,0.08)] transition-all duration-500 ease-out',
+                showVerification ? 'translate-y-0 scale-100' : 'translate-y-6 scale-[0.98]'
+              )}
+            >
+              <div className="mb-4 text-center">
+                <p className="text-sm font-semibold text-slate-100">Owner Verification</p>
+                <p className="mt-1 text-sm leading-6 text-slate-400">
+                  Enter your Social Security Number and Date of Birth to verify your identity.
+                </p>
+              </div>
 
-          <div
-            aria-hidden={!showVerification}
-            className={cn(
-              'overflow-hidden transition-all duration-300 ease-out',
-              showVerification ? 'mt-4 max-h-56 opacity-100' : 'max-h-0 opacity-0 pointer-events-none invisible'
-            )}
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
-                onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
-              <Input label="Date of Birth" required type="date" value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)} error={errors.dateOfBirth} autoComplete="bday" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
+                  onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
+                <Input label="Date of Birth" required type="date" value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)} error={errors.dateOfBirth} autoComplete="bday" />
+              </div>
             </div>
           </div>
         </div>
