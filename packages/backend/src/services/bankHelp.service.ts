@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { prisma } from '../lib/prisma';
 
 interface SourcePage {
   url: string;
@@ -13,52 +14,131 @@ interface CachedBankHelpResult {
   sourcePages: string[];
 }
 
-interface CacheEntry {
-  expiresAt: number;
-  result: CachedBankHelpResult;
-}
-
 export interface BankHelpResult extends CachedBankHelpResult {
   cached: boolean;
 }
 
-const HELP_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 8000;
+const SEARCH_TIMEOUT_MS = 8000;
 const MAX_SOURCE_PAGES = 3;
 const MAX_PAGE_CHARS = 5000;
-const bankHelpCache = new Map<string, CacheEntry>();
+const SEARCH_BASE_URL = 'https://html.duckduckgo.com/html/';
+const EXCLUDED_SEARCH_HOSTS = [
+  'duckduckgo.com',
+  'google.com',
+  'bing.com',
+  'yahoo.com',
+  'facebook.com',
+  'instagram.com',
+  'linkedin.com',
+  'twitter.com',
+  'x.com',
+  'youtube.com',
+  'wikipedia.org',
+  'yelp.com',
+  'mapquest.com',
+  'zoominfo.com',
+  'crunchbase.com',
+];
 
 export async function generateBankStatementHelp(input: { bankName: string; bankUrl?: string }): Promise<BankHelpResult> {
   const bankName = input.bankName.trim();
   if (!bankName) throw new Error('Bank name is required.');
 
-  const bankUrl = normalizePublicUrl(input.bankUrl);
-  const cacheKey = `${bankName.toLowerCase()}::${bankUrl ?? ''}`;
-  const cached = bankHelpCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { ...cached.result, cached: true };
+  const normalizedBankName = normalizeBankName(bankName);
+  const providedBankUrl = normalizePublicUrl(input.bankUrl);
+  const cached = await loadPersistedBankHelp(normalizedBankName);
+  if (cached) {
+    return { ...cached, cached: true };
   }
 
   if (!config.openAiApiKey) {
     throw new Error('Bank help is not configured yet. Please try again later.');
   }
 
-  const sourcePages = await collectSourcePages(bankUrl);
-  const aiResult = await requestOpenAiInstructions(bankName, bankUrl, sourcePages);
+  const discoveredBankUrl = providedBankUrl ?? await discoverBankWebsite(bankName);
+  const sourcePages = await collectSourcePages(discoveredBankUrl);
+  const aiResult = await requestOpenAiInstructions(bankName, discoveredBankUrl, sourcePages);
 
   const result: CachedBankHelpResult = {
     bankName,
-    bankUrl: aiResult.bankUrl ?? bankUrl,
+    bankUrl: aiResult.bankUrl ?? discoveredBankUrl,
     instructions: aiResult.instructions,
     sourcePages: sourcePages.map((page) => page.url),
   };
 
-  bankHelpCache.set(cacheKey, {
-    expiresAt: Date.now() + HELP_CACHE_TTL_MS,
-    result,
-  });
+  await savePersistedBankHelp(normalizedBankName, result);
 
   return { ...result, cached: false };
+}
+
+async function loadPersistedBankHelp(normalizedBankName: string): Promise<CachedBankHelpResult | null> {
+  try {
+    const cached = await prisma.bankHelpCache.findUnique({
+      where: { normalizedBankName },
+      select: {
+        bankName: true,
+        bankUrl: true,
+        instructions: true,
+        sourcePages: true,
+      },
+    });
+
+    if (!cached) return null;
+
+    return {
+      bankName: cached.bankName,
+      bankUrl: cached.bankUrl ?? undefined,
+      instructions: cached.instructions,
+      sourcePages: cached.sourcePages,
+    };
+  } catch (error) {
+    if (isBankHelpCacheTableMissing(error)) return null;
+    throw error;
+  }
+}
+
+async function savePersistedBankHelp(normalizedBankName: string, result: CachedBankHelpResult): Promise<void> {
+  try {
+    await prisma.bankHelpCache.upsert({
+      where: { normalizedBankName },
+      update: {
+        bankName: result.bankName,
+        bankUrl: result.bankUrl,
+        instructions: result.instructions,
+        sourcePages: result.sourcePages,
+      },
+      create: {
+        normalizedBankName,
+        bankName: result.bankName,
+        bankUrl: result.bankUrl,
+        instructions: result.instructions,
+        sourcePages: result.sourcePages,
+      },
+    });
+  } catch (error) {
+    if (isBankHelpCacheTableMissing(error)) return;
+    throw error;
+  }
+}
+
+function isBankHelpCacheTableMissing(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+  return code === 'P2021'
+    || (message.includes('bankhelpcache') && message.includes('does not exist'));
+}
+
+function normalizeBankName(bankName: string): string {
+  return bankName
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 }
 
 function normalizePublicUrl(rawUrl?: string): string | undefined {
@@ -181,6 +261,90 @@ function selectFollowUpUrls(baseUrl: string, links: string[]): string[] {
     .filter((link) => keywords.some((keyword) => link.toLowerCase().includes(keyword)));
 
   return Array.from(new Set(ranked));
+}
+
+async function discoverBankWebsite(bankName: string): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+  const query = `${bankName} official business banking`;
+
+  try {
+    const res = await fetch(`${SEARCH_BASE_URL}?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'FormFillerBankHelpBot/1.0',
+        Accept: 'text/html,text/plain;q=0.9,*/*;q=0.1',
+      },
+    });
+
+    if (!res.ok) return undefined;
+
+    const html = await res.text();
+    const candidates = rankCandidateUrls(bankName, extractSearchResultUrls(html));
+    return candidates[0];
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractSearchResultUrls(html: string): string[] {
+  const hrefRegex = /href=["']([^"']+)["']/gi;
+  const urls: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = hrefRegex.exec(html)) !== null) {
+    const rawHref = match[1]?.trim().replace(/&amp;/gi, '&');
+    if (!rawHref) continue;
+
+    try {
+      const withBase = new URL(rawHref, SEARCH_BASE_URL);
+      const redirected = withBase.searchParams.get('uddg');
+      const resolved = redirected ? decodeURIComponent(redirected) : withBase.toString();
+      const normalized = normalizePublicUrl(resolved);
+      if (!normalized || isExcludedSearchHost(normalized)) continue;
+      urls.push(normalized);
+    } catch {
+      continue;
+    }
+  }
+
+  return Array.from(new Set(urls));
+}
+
+function rankCandidateUrls(bankName: string, urls: string[]): string[] {
+  const tokens = normalizeBankName(bankName)
+    .split(' ')
+    .filter((token) => token.length >= 4 && !['bank', 'credit', 'union', 'business'].includes(token));
+
+  return [...urls]
+    .sort((left, right) => scoreCandidateUrl(right, tokens) - scoreCandidateUrl(left, tokens));
+}
+
+function scoreCandidateUrl(url: string, tokens: string[]): number {
+  const parsed = new URL(url);
+  const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+  const path = parsed.pathname.toLowerCase();
+
+  let score = parsed.protocol === 'https:' ? 2 : 0;
+  if (path === '/' || path === '') score += 2;
+  if (path.includes('business')) score += 1;
+  if (path.includes('login')) score -= 1;
+
+  for (const token of tokens) {
+    if (host.includes(token)) score += 4;
+    if (path.includes(token)) score += 1;
+  }
+
+  return score;
+}
+
+function isExcludedSearchHost(url: string): boolean {
+  const hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  return EXCLUDED_SEARCH_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`));
 }
 
 function extractLinks(html: string, baseUrl: string): string[] {

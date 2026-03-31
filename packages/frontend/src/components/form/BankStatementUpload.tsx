@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { BANK_HELP_ENTRIES, type BankHelpEntry } from '@/data/bankHelp';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
@@ -25,10 +24,19 @@ interface Props {
   onDownloadPdf: () => Promise<void>;
 }
 
-interface QueuedStatementFile {
+interface StatementUploadPlan {
   id: string;
   file: File;
   statementMonth: string;
+}
+
+interface UploadActivityEntry {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  statementMonth: string;
+  status: 'queued' | 'uploading' | 'uploaded' | 'error';
+  message: string;
 }
 
 interface BankHelpResult {
@@ -40,18 +48,16 @@ interface BankHelpResult {
 }
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
-const DEFAULT_BANK_RESULTS = 10;
 
 export function BankStatementUpload({
   applicationId,
-  submittedAt,
   token,
   pdfDownloading,
   onDownloadPdf,
 }: Props) {
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
-  const [queuedFiles, setQueuedFiles] = useState<QueuedStatementFile[]>([]);
+  const [uploadActivity, setUploadActivity] = useState<UploadActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -62,35 +68,7 @@ export function BankStatementUpload({
   const [bankHelpResult, setBankHelpResult] = useState<BankHelpResult | null>(null);
 
   const requiredMonths = useMemo(() => getRequiredStatementMonths(), []);
-  const documentsByMonth = useMemo(
-    () => new Map(documents.map((document) => [document.statementMonth, document])),
-    [documents]
-  );
-  const queuedMonthCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    queuedFiles.forEach((item) => {
-      counts.set(item.statementMonth, (counts.get(item.statementMonth) || 0) + 1);
-    });
-    return counts;
-  }, [queuedFiles]);
-  const uploadedCount = requiredMonths.filter(({ value }) => documentsByMonth.has(value)).length;
-  const isComplete = uploadedCount === requiredMonths.length;
-  const missingMonths = requiredMonths.filter(({ value }) => !documentsByMonth.has(value));
-  const bankQueryNormalized = bankQuery.trim().toLowerCase();
-
-  const filteredBanks = useMemo(() => {
-    if (!bankQueryNormalized) return BANK_HELP_ENTRIES.slice(0, DEFAULT_BANK_RESULTS);
-    return BANK_HELP_ENTRIES.filter(({ name, instructions, url }) => {
-      const haystack = `${name} ${instructions} ${url}`.toLowerCase();
-      return haystack.includes(bankQueryNormalized);
-    });
-  }, [bankQueryNormalized]);
-
-  const matchedBank = useMemo(
-    () => BANK_HELP_ENTRIES.find((entry) => entry.name.toLowerCase() === bankQueryNormalized),
-    [bankQueryNormalized]
-  );
-  const suggestedBank = bankQueryNormalized ? (matchedBank ?? filteredBanks[0] ?? null) : null;
+  const uploadedCount = documents.length;
 
   useEffect(() => {
     const loadDocuments = async () => {
@@ -112,8 +90,8 @@ export function BankStatementUpload({
     void loadDocuments();
   }, [applicationId, token]);
 
-  const handleQueueFiles = (fileList: FileList | null) => {
-    if (!fileList?.length) return;
+  const handleSelectedFiles = async (fileList: FileList | null) => {
+    if (!fileList?.length || uploadingQueue) return;
 
     setError('');
     setNotice('');
@@ -143,79 +121,81 @@ export function BankStatementUpload({
 
     if (!validFiles.length) return;
 
-    setQueuedFiles((current) => {
-      const reservedMonths = new Set([
-        ...Array.from(documentsByMonth.keys()),
-        ...current.map((item) => item.statementMonth),
-      ]);
+    const uploadSlots = getNextUploadSlots(documents, validFiles.length);
 
-      const unassignedMonths = requiredMonths
-        .map((month) => month.value)
-        .filter((month) => !reservedMonths.has(month));
-
-      const nextEntries = validFiles.map((file, index) => ({
+    await uploadPlans(
+      validFiles.map((file, index) => ({
         id: createQueuedFileId(),
         file,
-        statementMonth: unassignedMonths[index] ?? requiredMonths[index % requiredMonths.length]?.value ?? requiredMonths[0].value,
-      }));
-
-      return [...current, ...nextEntries];
-    });
+        statementMonth: uploadSlots[index],
+      }))
+    );
   };
 
-  const handleUploadQueuedFiles = async () => {
+  const uploadPlans = async (plans: StatementUploadPlan[]) => {
     setError('');
     setNotice('');
 
-    if (!queuedFiles.length) {
+    if (!plans.length) {
       setError('Add one or more PDF statements first.');
       return;
     }
 
-    const duplicateMonths = Array.from(queuedMonthCounts.entries())
-      .filter(([, count]) => count > 1)
-      .map(([statementMonth]) => requiredMonths.find((month) => month.value === statementMonth)?.label || statementMonth);
-
-    if (duplicateMonths.length) {
-      setError(`Each queued file must be mapped to a different month. Duplicate assignments: ${duplicateMonths.join(', ')}.`);
-      return;
-    }
-
     setUploadingQueue(true);
-    const uploaded: Array<{ queueId: string; document: ApplicationDocument }> = [];
+    setUploadActivity(
+      plans.map((plan) => ({
+        id: plan.id,
+        fileName: plan.file.name,
+        sizeBytes: plan.file.size,
+        statementMonth: plan.statementMonth,
+        status: 'queued',
+        message: 'Queued for upload.',
+      }))
+    );
+
+    const uploaded: ApplicationDocument[] = [];
     const failures: string[] = [];
 
-    for (const item of queuedFiles) {
+    for (const plan of plans) {
+      setUploadActivity((current) => current.map((entry) => (
+        entry.id === plan.id
+          ? { ...entry, status: 'uploading', message: 'Uploading…' }
+          : entry
+      )));
+
       try {
-        const fileData = await readFileAsDataUrl(item.file);
+        const fileData = await readFileAsDataUrl(plan.file);
         const res = await api.post<{ success: boolean; data: ApplicationDocument }>(
           `/api/applications/${applicationId}/documents`,
           {
-            statementMonth: item.statementMonth,
-            fileName: item.file.name,
-            mimeType: item.file.type || 'application/pdf',
+            statementMonth: plan.statementMonth,
+            fileName: plan.file.name,
+            mimeType: plan.file.type || 'application/pdf',
             fileData,
           },
           token ?? undefined
         );
 
-        uploaded.push({ queueId: item.id, document: res.data });
+        uploaded.push(res.data);
+        setUploadActivity((current) => current.map((entry) => (
+          entry.id === plan.id
+            ? { ...entry, status: 'uploaded', message: 'Uploaded successfully.' }
+            : entry
+        )));
       } catch (err) {
-        const label = requiredMonths.find((month) => month.value === item.statementMonth)?.label || item.statementMonth;
-        failures.push(`${item.file.name} (${label}): ${err instanceof Error ? err.message : 'Upload failed'}`);
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        failures.push(`${plan.file.name}: ${message}`);
+        setUploadActivity((current) => current.map((entry) => (
+          entry.id === plan.id
+            ? { ...entry, status: 'error', message }
+            : entry
+        )));
       }
     }
 
     if (uploaded.length > 0) {
-      setDocuments((current) => {
-        const uploadedMonths = new Set(uploaded.map(({ document }) => document.statementMonth));
-        return sortDocuments([
-          ...current.filter((document) => !uploadedMonths.has(document.statementMonth)),
-          ...uploaded.map(({ document }) => document),
-        ]);
-      });
-      setQueuedFiles((current) => current.filter((item) => !uploaded.some(({ queueId }) => queueId === item.id)));
-      setNotice(uploaded.length === 1 ? '1 statement uploaded successfully.' : `${uploaded.length} statements uploaded successfully.`);
+      setDocuments((current) => sortDocuments([...uploaded, ...current]));
+      setNotice(buildUploadSuccessNotice(plans, uploaded.length));
     }
 
     if (failures.length > 0) {
@@ -238,10 +218,7 @@ export function BankStatementUpload({
     try {
       const res = await api.post<{ success: boolean; data: BankHelpResult }>(
         `/api/applications/${applicationId}/bank-help`,
-        {
-          bankName,
-          bankUrl: suggestedBank?.url ?? '',
-        },
+        { bankName },
         token ?? undefined
       );
       setBankHelpResult(res.data);
@@ -273,186 +250,122 @@ export function BankStatementUpload({
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_320px]">
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-          <div className="mb-4 flex flex-wrap gap-2">
-            {requiredMonths.map(({ value, label }) => {
-              const received = documentsByMonth.has(value);
-              return (
-                <span
-                  key={value}
-                  className={cn(
-                    'rounded-full px-3 py-1 text-xs font-semibold tracking-[0.12em]',
-                    received
-                      ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
-                      : 'border border-white/10 bg-white/[0.04] text-slate-300'
-                  )}
-                >
-                  {label} • {received ? 'Received' : 'Needed'}
-                </span>
-              );
-            })}
-          </div>
-
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-100">Statement progress</p>
-              <p className="text-xs text-slate-400">{uploadedCount} of {requiredMonths.length} monthly PDFs received</p>
-            </div>
-            <span className={cn(
-              'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]',
-              isComplete ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border border-amber-400/25 bg-amber-400/10 text-amber-200'
-            )}>
-              {isComplete ? 'Complete' : 'Pending'}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <div className="space-y-4 pt-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {requiredMonths.map(({ value, label }) => (
+              <span
+                key={value}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold tracking-[0.12em] text-slate-300"
+              >
+                {label}
+              </span>
+            ))}
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+              {uploadedCount} received
             </span>
           </div>
 
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
-            <div className="h-full rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.95),rgba(96,165,250,0.95))] transition-all" style={{ width: `${(uploadedCount / requiredMonths.length) * 100}%` }} />
-          </div>
-
-          <p className="mt-3 text-xs text-slate-400">
-            {isComplete
-              ? 'Thanks — all 4 statements have been received and your file can continue moving forward.'
-              : 'Add one or more PDFs below, review the month assignments, then send the queue in one batch.'}
-          </p>
         </div>
 
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 text-sm text-slate-300">
-          <p className="font-semibold text-slate-100">Submission notes</p>
-          <ul className="mt-3 space-y-2 text-xs leading-5 text-slate-400">
-            <li>• PDF statements only</li>
-            <li>• Up to 10MB per statement</li>
-            <li>• Last 4 completed monthly statements</li>
-            <li>• Same business bank account for all 4 uploads</li>
-          </ul>
-          <p className="mt-4 text-xs text-slate-500">
-            Application signed {formatTimestamp(submittedAt)}.
-          </p>
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Upload bank statement PDFs</h3>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <input
+                  ref={filePickerRef}
+                  type="file"
+                  accept="application/pdf"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    const input = event.currentTarget;
+                    void handleSelectedFiles(input.files);
+                    input.value = '';
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => filePickerRef.current?.click()}
+                  disabled={uploadingQueue}
+                >
+                  {uploadingQueue ? 'Uploading…' : 'Select PDFs'}
+                </Button>
+              </div>
+            </div>
+
+            {uploadActivity.length > 0 ? (
+              <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
+                {uploadActivity.map((item) => {
+                  const statusClasses = getUploadStatusClasses(item.status);
+                  const statusLabel = getUploadStatusLabel(item.status);
+
+                  return (
+                    <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="break-all font-medium text-slate-100">{item.fileName}</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {formatBytes(item.sizeBytes)} • PDF file
+                        </p>
+                        <p className="mt-2 break-words text-xs text-slate-300">{item.message}</p>
+                      </div>
+                      <span className={cn('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]', statusClasses)}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/35 px-4 py-10 text-center text-sm text-slate-400">
+                No upload in progress. Select any statement PDFs the merchant wants to send and we will upload them automatically.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {error && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
       {notice && <p className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{notice}</p>}
 
-      <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-white">Batch statement upload</h3>
-            <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              Add as many statement PDFs as you have, then match each file to the correct month and upload everything together.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <input
-              ref={filePickerRef}
-              type="file"
-              accept="application/pdf"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                handleQueueFiles(event.target.files);
-                event.target.value = '';
-              }}
-            />
-            <Button type="button" variant="secondary" onClick={() => filePickerRef.current?.click()}>
-              Add PDFs
-            </Button>
-            <Button type="button" loading={uploadingQueue} disabled={!queuedFiles.length} onClick={() => void handleUploadQueuedFiles()}>
-              Upload queued files
-            </Button>
-          </div>
-        </div>
-
-        {queuedFiles.length > 0 ? (
-          <div className="mt-5 space-y-3">
-            {queuedFiles.map((item) => {
-              const duplicateAssignment = (queuedMonthCounts.get(item.statementMonth) || 0) > 1;
-              const replacingExisting = documentsByMonth.has(item.statementMonth);
-
-              return (
-                <div key={item.id} className="grid gap-4 rounded-2xl border border-white/10 bg-slate-950/45 p-4 lg:grid-cols-[minmax(0,1.35fr)_240px_auto] lg:items-end">
-                  <div>
-                    <p className="font-medium text-slate-100">{item.file.name}</p>
-                    <p className="mt-1 text-xs text-slate-400">{formatBytes(item.file.size)} • PDF statement queued</p>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Assign to month
-                    </label>
-                    <select
-                      value={item.statementMonth}
-                      onChange={(event) => {
-                        const nextMonth = event.target.value;
-                        setQueuedFiles((current) => current.map((entry) => (
-                          entry.id === item.id ? { ...entry, statementMonth: nextMonth } : entry
-                        )));
-                      }}
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/55 px-3.5 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40"
-                    >
-                      {requiredMonths.map((month) => (
-                        <option key={month.value} value={month.value}>
-                          {month.label}{documentsByMonth.has(month.value) ? ' — received already' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {duplicateAssignment && <p className="mt-2 text-xs text-amber-300">Another queued file is already assigned to this month.</p>}
-                    {!duplicateAssignment && replacingExisting && <p className="mt-2 text-xs text-cyan-200">Uploading this file will replace the PDF already on file for this month.</p>}
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setQueuedFiles((current) => current.filter((entry) => entry.id !== item.id))}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-slate-950/35 px-4 py-10 text-center text-sm text-slate-400">
-            No PDFs queued yet. Add the statements for {missingMonths.map((month) => month.label).join(', ') || 'the required months'} and send them together.
-          </div>
-        )}
-      </div>
-
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold text-white">Received statements</h3>
-              <p className="mt-1 text-sm text-slate-400">We will keep checking this list until all 4 required months are on file.</p>
+              <h3 className="text-lg font-semibold text-white">Files received</h3>
+              <p className="mt-1 text-sm text-slate-400">This is the raw list of PDFs the merchant has sent so far.</p>
             </div>
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-              {uploadedCount}/{requiredMonths.length}
+              {uploadedCount} total
             </span>
           </div>
 
-          <div className="space-y-3">
-            {requiredMonths.map(({ value, label }) => {
-              const document = documentsByMonth.get(value);
-              return (
-                <div key={value} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium text-slate-100">{label}</p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      {document ? `${document.fileName} • ${formatBytes(document.sizeBytes)} • Updated ${formatTimestamp(document.updatedAt)}` : 'No PDF received yet for this month.'}
+          {documents.length > 0 ? (
+            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+              {documents.map((document) => (
+                <div key={document.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="break-all font-medium text-slate-100">{document.fileName}</p>
+                    <p className="mt-1 break-all text-sm text-slate-400">
+                      {formatBytes(document.sizeBytes)} • Received {formatTimestamp(document.updatedAt)}
                     </p>
                   </div>
-                  <span className={cn(
-                    'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]',
-                    document ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border border-white/10 bg-white/[0.04] text-slate-300'
-                  )}>
-                    {document ? 'Received' : 'Needed'}
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                    Received
                   </span>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/35 px-4 py-10 text-center text-sm text-slate-400">
+              No statement PDFs have been received yet.
+            </div>
+          )}
         </div>
 
         <details className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
@@ -475,56 +388,25 @@ export function BankStatementUpload({
               onChange={(event) => {
                 setBankQuery(event.target.value);
                 setBankHelpError('');
+                setBankHelpResult(null);
               }}
-              placeholder="Start typing your bank name"
+              placeholder="Enter your bank name"
             />
 
-            <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Popular banks</p>
-              <div className="space-y-2">
-                {filteredBanks.length > 0 ? (
-                  filteredBanks.slice(0, DEFAULT_BANK_RESULTS).map((bank) => (
-                    <BankSuggestionRow
-                      key={bank.name}
-                      bank={bank}
-                      onUse={() => {
-                        setBankQuery(bank.name);
-                        setBankHelpError('');
-                      }}
-                    />
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-400">
-                    No bank matches that search yet. Try a broader name like <span className="text-slate-200">Chase</span> or <span className="text-slate-200">Bank of America</span>.
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div className="flex flex-wrap gap-3">
-              <Button type="button" loading={bankHelpLoading} onClick={() => void handleBankHelpLookup()}>
+              <Button type="button" loading={bankHelpLoading} disabled={!bankQuery.trim()} onClick={() => void handleBankHelpLookup()}>
                 Find statement download steps
               </Button>
-              {suggestedBank?.url && (
-                <a
-                  href={suggestedBank.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-2.5 text-sm font-semibold text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/15"
-                >
-                  Open bank site
-                </a>
-              )}
             </div>
 
             <p className="text-xs leading-5 text-slate-500">
-              We use the bank name and, when available, the public website from our bank directory. If we do not have a site match yet, the guidance may be more general.
+              Limited to 2 lookups per application every 24 hours. First-time lookups may take a few seconds while we check the bank&apos;s public site.
             </p>
 
             {bankHelpError && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{bankHelpError}</p>}
 
             {bankHelpResult && (
-              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 sm:p-5">
+              <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 pr-3 sm:p-5 sm:pr-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-base font-semibold text-white">{bankHelpResult.bankName}</p>
@@ -544,6 +426,24 @@ export function BankStatementUpload({
                   )}
                 </div>
                 <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-200">{bankHelpResult.instructions}</p>
+                {bankHelpResult.sourcePages.length > 0 && (
+                  <div className="mt-4 border-t border-white/10 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Checked pages</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {bankHelpResult.sourcePages.map((sourcePage) => (
+                        <a
+                          key={sourcePage}
+                          href={sourcePage}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200"
+                        >
+                          {sourcePage}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -551,34 +451,6 @@ export function BankStatementUpload({
       </div>
 
       {loading && <p className="text-sm text-slate-400">Loading uploaded statements…</p>}
-    </div>
-  );
-}
-
-function BankSuggestionRow({ bank, onUse }: { bank: BankHelpEntry; onUse: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="font-medium text-slate-100">{bank.name}</p>
-        <p className="mt-1 text-sm text-slate-400">{bank.instructions}</p>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        <button
-          type="button"
-          onClick={onUse}
-          className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/[0.08]"
-        >
-          Use bank
-        </button>
-        <a
-          href={bank.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/15"
-        >
-          Open site
-        </a>
-      </div>
     </div>
   );
 }
@@ -611,7 +483,61 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 function sortDocuments(documents: ApplicationDocument[]): ApplicationDocument[] {
-  return [...documents].sort((left, right) => right.statementMonth.localeCompare(left.statementMonth));
+  return [...documents].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
+function buildUploadSuccessNotice(
+  plans: StatementUploadPlan[],
+  uploadedCount: number
+): string {
+  return uploadedCount === 1
+    ? `${plans[0]?.file.name || '1 file'} uploaded successfully.`
+    : `${uploadedCount} files uploaded successfully.`;
+}
+
+function getNextUploadSlots(documents: ApplicationDocument[], count: number): string[] {
+  const used = new Set(documents.map((document) => document.statementMonth));
+  const slots: string[] = [];
+  const cursor = new Date();
+  cursor.setDate(1);
+  cursor.setMonth(cursor.getMonth() - 1);
+
+  while (slots.length < count) {
+    const slot = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+    if (!used.has(slot)) {
+      slots.push(slot);
+      used.add(slot);
+    }
+    cursor.setMonth(cursor.getMonth() - 1);
+  }
+
+  return slots;
+}
+
+function getUploadStatusClasses(status: UploadActivityEntry['status']): string {
+  switch (status) {
+    case 'uploaded':
+      return 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-200';
+    case 'uploading':
+      return 'border border-cyan-400/30 bg-cyan-400/10 text-cyan-200';
+    case 'error':
+      return 'border border-red-400/30 bg-red-500/10 text-red-200';
+    default:
+      return 'border border-white/10 bg-white/[0.04] text-slate-300';
+  }
+}
+
+function getUploadStatusLabel(status: UploadActivityEntry['status']): string {
+  switch (status) {
+    case 'uploaded':
+      return 'Uploaded';
+    case 'uploading':
+      return 'Uploading';
+    case 'error':
+      return 'Error';
+    default:
+      return 'Waiting';
+  }
 }
 
 function createQueuedFileId(): string {

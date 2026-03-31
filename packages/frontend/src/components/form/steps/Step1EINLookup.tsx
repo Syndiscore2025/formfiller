@@ -49,6 +49,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
   const [searchName, setSearchName] = useState(business.legalName || '');
   const [searchState, setSearchState] = useState(business.stateOfFormation || '');
   const [searchEin, setSearchEin] = useState(business.ein || '');
+  const [soleProprietorship, setSoleProprietorship] = useState(business.entityType === 'SOLE_PROPRIETORSHIP');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -66,9 +67,11 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
     if (!phone.trim() || phone.replace(/\D/g, '').length < 10) errs.phone = 'Valid 10-digit phone is required';
     if (!searchName.trim()) errs.searchName = 'Business name is required';
     if (!searchState) errs.searchState = 'State of incorporation is required';
-    const einDigits = searchEin.replace(/\D/g, '');
-    if (!einDigits) errs.searchEin = 'EIN is required';
-    else if (einDigits.length !== 9) errs.searchEin = 'EIN must be 9 digits';
+    if (!soleProprietorship) {
+      const einDigits = searchEin.replace(/\D/g, '');
+      if (!einDigits) errs.searchEin = 'EIN is required';
+      else if (einDigits.length !== 9) errs.searchEin = 'EIN must be 9 digits';
+    }
     if (!tcpaConsent) errs.tcpaConsent = 'You must agree to continue';
     return errs;
   };
@@ -92,7 +95,7 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
           if (res.found && res.data) {
             onAutoPopulate({
               legalName: res.data.legalName || searchName.trim(),
-              entityType: (res.data.entityType as BusinessInfo['entityType']) || undefined,
+              entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : ((res.data.entityType as BusinessInfo['entityType']) || undefined),
               industry: res.data.industry,
               stateOfFormation: res.data.stateOfFormation || searchState,
               ein: einDigits,
@@ -108,13 +111,13 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
               fieldSources: res.data.fieldSources,
             });
           } else {
-            onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState, ein: einDigits });
+            onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState, ein: einDigits, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : undefined });
           }
         } catch {
-          onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState, ein: einDigits });
+          onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState, ein: einDigits, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : undefined });
         }
       } else if (searchName.trim()) {
-        onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState || undefined, ein: einDigits });
+        onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState || undefined, ein: einDigits, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : undefined });
       }
       await onNext({ firstName: '', lastName: '', email, phone, tcpaConsent });
     } catch (err) {
@@ -151,9 +154,22 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
           onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" error={errors.phone} />
       </div>
 
-      <div className="mb-3">
-        <Input label="EIN" required placeholder="XX-XXXXXXX" value={searchEin}
-          onChange={(e) => setSearchEin(formatEin(e.target.value))} error={errors.searchEin} autoComplete="off" />
+      <div className="mb-3 grid grid-cols-2 gap-5 items-end">
+        <Input label="EIN" required={!soleProprietorship} placeholder="XX-XXXXXXX" value={searchEin}
+          onChange={(e) => { setSearchEin(formatEin(e.target.value)); if (soleProprietorship) setSoleProprietorship(false); }}
+          error={errors.searchEin} autoComplete="off" disabled={soleProprietorship} />
+        <label className="flex items-center gap-2.5 cursor-pointer pb-3 select-none">
+          <input
+            type="checkbox"
+            checked={soleProprietorship}
+            onChange={(e) => {
+              setSoleProprietorship(e.target.checked);
+              if (e.target.checked) { setSearchEin(''); setErrors((p) => ({ ...p, searchEin: '' })); }
+            }}
+            className="h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-300 focus:ring-cyan-300 accent-cyan-400"
+          />
+          <span className="text-sm font-semibold text-slate-100">Sole Proprietorship</span>
+        </label>
       </div>
 
       {/* TCPA Consent */}

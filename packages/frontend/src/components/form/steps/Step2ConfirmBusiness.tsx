@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES } from '@/types/application';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +17,7 @@ interface Props {
 
 /* Fields the user already typed on Step 1 — these don't count as "lookup data" */
 const STEP1_FIELDS = new Set(['legalName', 'stateOfFormation', 'ein']);
+const TOLL_FREE_PREFIXES = new Set(['800', '888', '877', '866', '855', '844', '833', '822']);
 
 /** Infer entity type from the legal business name */
 function inferEntityType(name: string): import('@/types/application').EntityType | '' {
@@ -26,6 +27,17 @@ function inferEntityType(name: string): import('@/types/application').EntityType
   if (/\bCORP(ORATION)?\b/.test(n)) return 'C_CORP';
   if (/\bL\.?P\.?\b/.test(n) || /\bPARTNERSHIP\b/.test(n)) return 'PARTNERSHIP';
   return '';
+}
+
+function normalizeUsPhoneDigits(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length > 10 && digits.startsWith('1')) return digits.slice(1, 11);
+  return digits.slice(0, 10);
+}
+
+function isTollFreePhone(value: string): boolean {
+  const digits = normalizeUsPhoneDigits(value);
+  return digits.length === 10 && TOLL_FREE_PREFIXES.has(digits.slice(0, 3));
 }
 
 /* All editable business fields and their labels */
@@ -101,7 +113,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [stateOfFormation, setStateOfFormation] = useState(business.stateOfFormation || '');
   const [ein, setEin] = useState(formatEinDisplay(business.ein || ''));
   const [businessStartDate, setBusinessStartDate] = useState(normalizedBusinessStartDate);
-  const [businessPhone, setBusinessPhone] = useState(business.phone || '');
+  const [businessPhone, setBusinessPhone] = useState(formatPhoneInput(business.phone || ''));
   const [website, setWebsite] = useState(business.website || '');
   const [streetAddress, setStreetAddress] = useState(business.streetAddress || '');
   const [streetAddress2, setStreetAddress2] = useState(business.streetAddress2 || '');
@@ -114,6 +126,20 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [showTollFreeModal, setShowTollFreeModal] = useState(false);
+
+  useEffect(() => {
+    if (!showTollFreeModal) return;
+    document.body.style.overflow = 'hidden';
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) setShowTollFreeModal(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showTollFreeModal, submitting]);
 
   const handleBusinessAddressSelect = (address: {
     streetAddress?: string;
@@ -127,20 +153,29 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     setZipCode(address.zipCode || '');
   };
 
+  const isSoleProp = entityType === 'SOLE_PROPRIETORSHIP';
+
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!legalName.trim()) errs.legalName = 'Business name is required';
     if (!industry.trim()) errs.industry = 'Industry is required';
     if (!stateOfFormation) errs.stateOfFormation = 'State of formation is required';
-    const einDigits = ein.replace(/\D/g, '');
-    if (!einDigits) errs.ein = 'EIN is required';
-    else if (einDigits.length !== 9) errs.ein = 'EIN must be 9 digits';
+    if (!isSoleProp) {
+      const einDigits = ein.replace(/\D/g, '');
+      if (!einDigits) errs.ein = 'EIN is required';
+      else if (einDigits.length !== 9) errs.ein = 'EIN must be 9 digits';
+    }
     if (!streetAddress.trim()) errs.streetAddress = 'Street address is required';
     if (!city.trim()) errs.city = 'City is required';
     if (!addrState) errs.addrState = 'State is required';
     if (!zipCode.trim()) errs.zipCode = 'ZIP code is required';
     const phoneDigits = businessPhone.replace(/\D/g, '');
-    if (phoneDigits && phoneDigits.length !== 10) errs.businessPhone = 'Phone must be 10 digits';
+    if (phoneDigits) {
+      const normalizedDigits = normalizeUsPhoneDigits(businessPhone);
+      if (normalizedDigits.length !== 10) {
+        errs.businessPhone = 'Phone must be 10 digits';
+      }
+    }
     return errs;
   };
 
@@ -153,7 +188,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     stateOfFormation,
     ein: ein.replace(/\D/g, ''),
     businessStartDate,
-    phone: businessPhone.replace(/\D/g, ''),
+    phone: normalizeUsPhoneDigits(businessPhone),
     website: website.trim(),
     streetAddress: streetAddress.trim(),
     streetAddress2: streetAddress2.trim(),
@@ -162,12 +197,84 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     zipCode: zipCode.trim(),
   });
 
+  const openTollFreeModal = () => {
+    setErrors((prev) => {
+      if (!prev.businessPhone) return prev;
+      const next = { ...prev };
+      delete next.businessPhone;
+      return next;
+    });
+    setShowTollFreeModal(true);
+  };
+
+  const closeTollFreeModal = () => setShowTollFreeModal(false);
+
+  const handleTollFreeModalAction = () => {
+    setShowTollFreeModal(false);
+    setEditing(true);
+    setEditAll(true);
+  };
+
   const handleSubmit = async () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    if (isTollFreePhone(businessPhone)) { openTollFreeModal(); return; }
     setSubmitting(true);
     try { await onNext(buildPayload(), homeAddrSame ?? false); } finally { setSubmitting(false); }
   };
+
+  const tollFreeModal = (
+    <>
+      <div
+        aria-hidden="true"
+        className={`fixed inset-0 z-40 transition-all duration-300 ease-out ${
+          showTollFreeModal
+            ? 'bg-slate-950/75 opacity-100 backdrop-blur-[3px]'
+            : 'pointer-events-none bg-slate-950/0 opacity-0'
+        }`}
+        onClick={closeTollFreeModal}
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="toll-free-modal-title"
+        className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300 ${
+          showTollFreeModal ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      >
+        <div className="w-full max-w-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="surface-panel-soft border border-amber-400/20 bg-slate-950/95 p-7 shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(251,191,36,0.08)]">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">Phone number needed</p>
+                <h3 id="toll-free-modal-title" className="mt-2 text-2xl font-semibold text-white">We can’t accept a toll-free number</h3>
+                <p className="mt-2 max-w-lg text-sm leading-6 text-slate-400">
+                  Please enter your local business phone number with the area code first. Do not include <strong className="text-slate-200">+1</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeTollFreeModal}
+                disabled={submitting}
+                className="rounded-full border border-white/10 bg-white/[0.03] p-2 text-slate-400 transition hover:border-white/20 hover:text-slate-200"
+                aria-label="Close toll-free number notice"
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4">
+                  <path fill="currentColor" d="M4.22 4.22a.75.75 0 0 1 1.06 0L10 8.94l4.72-4.72a.75.75 0 1 1 1.06 1.06L11.06 10l4.72 4.72a.75.75 0 1 1-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 1 1-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 0 1 0-1.06" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+              <Button variant="secondary" onClick={closeTollFreeModal} disabled={submitting}>Back</Button>
+              <Button onClick={handleTollFreeModalAction} disabled={submitting}>Edit phone number</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 
   /* ---------- helper to render a display value for the confirmation card ---------- */
   const displayVal = (key: string): string => {
@@ -189,66 +296,71 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     const hasBusinessAddr = filledFields.has('streetAddress') || filledFields.has('city') || filledFields.has('state');
 
     return (
-      <div>
-        <h2 className="mb-1 text-xl font-bold text-white">Is this information correct?</h2>
-        <p className="mb-6 text-sm text-slate-400">
-          We found the following details about your business.
-        </p>
+      <div className="relative">
+        {tollFreeModal}
 
-        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-          {confirmedFields.map(({ key, label }) => (
-            <div key={key} className="flex justify-between text-sm">
-              <span className="text-slate-400">{label}</span>
-              <span className="text-right font-medium text-slate-100">{displayVal(key)}</span>
-            </div>
-          ))}
-        </div>
+        <div className={`transition duration-300 ${showTollFreeModal ? 'pointer-events-none select-none blur-[1px] saturate-50' : ''}`}>
+          <h2 className="mb-1 text-xl font-bold text-white">Is this information correct?</h2>
+          <p className="mb-6 text-sm text-slate-400">
+            We found the following details about your business.
+          </p>
 
-        {/* Home based business toggle */}
-        {hasBusinessAddr && (
-          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm font-medium text-slate-200">Home Based Business?</p>
-
-              <button
-                type="button"
-                role="switch"
-                aria-checked={homeAddrSame}
-                aria-label="Home Based Business"
-                onClick={() => setHomeAddrSame((current) => !current)}
-                className={`relative inline-flex h-7 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/60 ${
-                  homeAddrSame
-                    ? 'border-cyan-300/50 bg-cyan-400/20'
-                    : 'border-white/10 bg-slate-950/70'
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                    homeAddrSame ? 'translate-x-5' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
+          <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            {confirmedFields.map(({ key, label }) => (
+              <div key={key} className="flex justify-between text-sm">
+                <span className="text-slate-400">{label}</span>
+                <span className="text-right font-medium text-slate-100">{displayVal(key)}</span>
+              </div>
+            ))}
           </div>
-        )}
 
-        <div className="flex gap-3 justify-between mt-8">
-          <Button variant="secondary" onClick={onBack}>← Back</Button>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => { setEditing(true); setEditAll(true); }}>Edit</Button>
-            <Button disabled={submitting} loading={submitting} onClick={async () => {
-              if (missingFields.length > 0) { setEditing(true); setEditAll(false); return; }
-              const errs = validate();
-              if (Object.keys(errs).length > 0) { setEditing(true); setEditAll(false); setErrors(errs); return; }
-              setSubmitting(true);
-              try {
-                await onNext(buildPayload(), homeAddrSame);
-              } finally {
-                setSubmitting(false);
-              }
-            }}>
-              Confirm &amp; Continue →
-            </Button>
+          {/* Home based business toggle */}
+          {hasBusinessAddr && (
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-medium text-slate-200">Home Based Business?</p>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={homeAddrSame}
+                  aria-label="Home Based Business"
+                  onClick={() => setHomeAddrSame((current) => !current)}
+                  className={`relative inline-flex h-7 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/60 ${
+                    homeAddrSame
+                      ? 'border-cyan-300/50 bg-cyan-400/20'
+                      : 'border-white/10 bg-slate-950/70'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      homeAddrSame ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 justify-between mt-8">
+            <Button variant="secondary" onClick={onBack}>← Back</Button>
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => { setEditing(true); setEditAll(true); }}>Edit</Button>
+              <Button disabled={submitting} loading={submitting} onClick={async () => {
+                if (missingFields.length > 0) { setEditing(true); setEditAll(false); return; }
+                const errs = validate();
+                if (Object.keys(errs).length > 0) { setEditing(true); setEditAll(false); setErrors(errs); return; }
+                if (isTollFreePhone(businessPhone)) { openTollFreeModal(); return; }
+                setSubmitting(true);
+                try {
+                  await onNext(buildPayload(), homeAddrSame);
+                } finally {
+                  setSubmitting(false);
+                }
+              }}>
+                Confirm &amp; Continue →
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -277,117 +389,121 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const subtitle = 'Please provide the details for your business.';
 
   return (
-    <div>
-      <h2 className="mb-1 text-xl font-bold text-white">{title}</h2>
-      <p className="mb-2 text-sm text-slate-400">{subtitle}</p>
+    <div className="relative">
+      {tollFreeModal}
 
-      {/* Progress hint */}
-      {!showAll && (
-        <div className="mb-6 h-1.5 w-full rounded-full bg-white/[0.06]">
-          <div className="h-1.5 rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.95),rgba(96,165,250,0.95))] transition-all"
-            style={{ width: `${Math.round((completedFields.size / FIELD_META.length) * 100)}%` }} />
+      <div className={`transition duration-300 ${showTollFreeModal ? 'pointer-events-none select-none blur-[1px] saturate-50' : ''}`}>
+        <h2 className="mb-1 text-xl font-bold text-white">{title}</h2>
+        <p className="mb-2 text-sm text-slate-400">{subtitle}</p>
+
+        {/* Progress hint */}
+        {!showAll && (
+          <div className="mb-6 h-1.5 w-full rounded-full bg-white/[0.06]">
+            <div className="h-1.5 rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.95),rgba(96,165,250,0.95))] transition-all"
+              style={{ width: `${Math.round((completedFields.size / FIELD_META.length) * 100)}%` }} />
+          </div>
+        )}
+        {showAll && <div className="mb-4" />}
+
+        <div className="space-y-5 rounded-[24px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+          {showIdentity && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {show('legalName') && <Input label="Legal Business Name" required value={legalName}
+                onChange={(e) => setLegalName(e.target.value)} error={errors.legalName}
+                autoComplete="organization" />}
+              {show('dba') && <Input label="DBA / Trade Name" value={dba}
+                onChange={(e) => setDba(e.target.value)} placeholder="If different from legal name"
+                autoComplete="organization" />}
+            </div>
+          )}
+
+          {showClassification && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {show('entityType') && <Select label="Entity Type" value={entityType}
+                options={ENTITY_TYPES.map((e) => ({ value: e.value, label: e.label }))}
+                onChange={(e) => setEntityType(e.target.value as BusinessInfo['entityType'])} />}
+              {show('industry') && (
+                <SearchableSelect
+                  label="Industry"
+                  required
+                  value={industry}
+                  options={INDUSTRIES}
+                  onChange={setIndustry}
+                  error={errors.industry}
+                  hint={business.sicCode || business.naicsCode ? `Derived from lookup${business.sicCode ? ` • SIC ${business.sicCode}` : ''}${business.naicsCode ? ` • NAICS ${business.naicsCode}` : ''}` : 'Search the list to select the closest industry.'}
+                />
+              )}
+              {show('stateOfFormation') && <Select label="State of Formation" required value={stateOfFormation}
+                options={[...US_STATES]}
+                onChange={(e) => setStateOfFormation(e.target.value)} error={errors.stateOfFormation} />}
+              {show('ein') && <Input label="EIN" required={!isSoleProp} placeholder={isSoleProp ? 'N/A — Sole Proprietorship' : 'XX-XXXXXXX'} value={isSoleProp ? '' : ein}
+                onChange={(e) => setEin(formatEinInput(e.target.value))} error={errors.ein}
+                autoComplete="off" disabled={isSoleProp} />}
+            </div>
+          )}
+
+          {showDate && (
+            <div className="space-y-3">
+              {partialBusinessStartYear && (
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 text-sm text-slate-300">
+                  We found the start year as <span className="font-semibold text-slate-100">{partialBusinessStartYear}</span>. Please confirm the exact month and day.
+                </div>
+              )}
+              <DateField label="Business Start Date" value={businessStartDate}
+                onChange={setBusinessStartDate}
+                min={partialBusinessStartYear ? `${partialBusinessStartYear}-01-01` : undefined}
+                max={partialBusinessStartYear ? `${partialBusinessStartYear}-12-31` : undefined}
+                hint={partialBusinessStartYear ? `Calendar starts at January 1, ${partialBusinessStartYear}.` : undefined} />
+            </div>
+          )}
+
+          {showAddress && (<>
+            <div className="border-t border-white/10 pt-4" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Business Address</p>
+            {show('streetAddress') && <AddressInput label="Street Address" required value={streetAddress}
+              onChange={setStreetAddress} onSelectAddress={handleBusinessAddressSelect} error={errors.streetAddress}
+              autoComplete="street-address" placeholder="Start typing your business address" />}
+            {show('streetAddress2') && <Input label="Apt / Suite" value={streetAddress2}
+              onChange={(e) => setStreetAddress2(e.target.value)} autoComplete="address-line2" />}
+            <div className="grid grid-cols-3 gap-4">
+              {show('city') && <Input label="City" required value={city}
+                onChange={(e) => setCity(e.target.value)} error={errors.city}
+                autoComplete="address-level2" />}
+              {show('state') && <Select label="State" required value={addrState} options={[...US_STATES]}
+                onChange={(e) => setAddrState(e.target.value)} error={errors.addrState} />}
+              {show('zipCode') && <Input label="ZIP" required value={zipCode}
+                onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))} error={errors.zipCode}
+                autoComplete="postal-code" />}
+            </div>
+          </>)}
+
+          {showContact && (<>
+            <div className="border-t border-white/10 pt-4" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {show('phone') && <Input label="Business Phone" value={businessPhone}
+                onChange={(e) => setBusinessPhone(formatPhoneInput(e.target.value))} error={errors.businessPhone}
+                autoComplete="tel" placeholder="(555) 555-5555" />}
+              {show('website') && <Input label="Website" value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                autoComplete="url" placeholder="www.example.com" />}
+            </div>
+          </>)}
+
+          {/* Home address question is asked ONLY on the confirmation card — not repeated here */}
         </div>
-      )}
-      {showAll && <div className="mb-4" />}
 
-      <div className="space-y-5 rounded-[24px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-        {showIdentity && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {show('legalName') && <Input label="Legal Business Name" required value={legalName}
-              onChange={(e) => setLegalName(e.target.value)} error={errors.legalName}
-              autoComplete="organization" />}
-            {show('dba') && <Input label="DBA / Trade Name" value={dba}
-              onChange={(e) => setDba(e.target.value)} placeholder="If different from legal name"
-              autoComplete="organization" />}
-          </div>
+        {!showAll && (
+          <button type="button" onClick={() => setEditAll(true)}
+            className="mt-4 text-sm font-medium text-cyan-300 transition hover:text-cyan-200 hover:underline">
+            ✎ Show all fields
+          </button>
         )}
 
-        {showClassification && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {show('entityType') && <Select label="Entity Type" value={entityType}
-              options={ENTITY_TYPES.map((e) => ({ value: e.value, label: e.label }))}
-              onChange={(e) => setEntityType(e.target.value as BusinessInfo['entityType'])} />}
-            {show('industry') && (
-              <SearchableSelect
-                label="Industry"
-                required
-                value={industry}
-                options={INDUSTRIES}
-                onChange={setIndustry}
-                error={errors.industry}
-                hint={business.sicCode || business.naicsCode ? `Derived from lookup${business.sicCode ? ` • SIC ${business.sicCode}` : ''}${business.naicsCode ? ` • NAICS ${business.naicsCode}` : ''}` : 'Search the list to select the closest industry.'}
-              />
-            )}
-            {show('stateOfFormation') && <Select label="State of Formation" required value={stateOfFormation}
-              options={[...US_STATES]}
-              onChange={(e) => setStateOfFormation(e.target.value)} error={errors.stateOfFormation} />}
-            {show('ein') && <Input label="EIN" required placeholder="XX-XXXXXXX" value={ein}
-              onChange={(e) => setEin(formatEinInput(e.target.value))} error={errors.ein}
-              autoComplete="off" />}
-          </div>
-        )}
-
-        {showDate && (
-          <div className="space-y-3">
-            {partialBusinessStartYear && (
-              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 text-sm text-slate-300">
-                We found the start year as <span className="font-semibold text-slate-100">{partialBusinessStartYear}</span>. Please confirm the exact month and day.
-              </div>
-            )}
-            <DateField label="Business Start Date" value={businessStartDate}
-              onChange={setBusinessStartDate}
-              min={partialBusinessStartYear ? `${partialBusinessStartYear}-01-01` : undefined}
-              max={partialBusinessStartYear ? `${partialBusinessStartYear}-12-31` : undefined}
-              hint={partialBusinessStartYear ? `Calendar starts at January 1, ${partialBusinessStartYear}.` : undefined} />
-          </div>
-        )}
-
-        {showAddress && (<>
-          <div className="border-t border-white/10 pt-4" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Business Address</p>
-          {show('streetAddress') && <AddressInput label="Street Address" required value={streetAddress}
-            onChange={setStreetAddress} onSelectAddress={handleBusinessAddressSelect} error={errors.streetAddress}
-            autoComplete="street-address" placeholder="Start typing your business address" />}
-          {show('streetAddress2') && <Input label="Apt / Suite" value={streetAddress2}
-            onChange={(e) => setStreetAddress2(e.target.value)} autoComplete="address-line2" />}
-          <div className="grid grid-cols-3 gap-4">
-            {show('city') && <Input label="City" required value={city}
-              onChange={(e) => setCity(e.target.value)} error={errors.city}
-              autoComplete="address-level2" />}
-            {show('state') && <Select label="State" required value={addrState} options={[...US_STATES]}
-              onChange={(e) => setAddrState(e.target.value)} error={errors.addrState} />}
-            {show('zipCode') && <Input label="ZIP" required value={zipCode}
-              onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))} error={errors.zipCode}
-              autoComplete="postal-code" />}
-          </div>
-        </>)}
-
-        {showContact && (<>
-          <div className="border-t border-white/10 pt-4" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {show('phone') && <Input label="Business Phone" value={businessPhone}
-              onChange={(e) => setBusinessPhone(formatPhoneInput(e.target.value))} error={errors.businessPhone}
-              autoComplete="tel" placeholder="(555) 555-5555" />}
-            {show('website') && <Input label="Website" value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              autoComplete="url" placeholder="www.example.com" />}
-          </div>
-        </>)}
-
-        {/* Home address question is asked ONLY on the confirmation card — not repeated here */}
-      </div>
-
-      {!showAll && (
-        <button type="button" onClick={() => setEditAll(true)}
-          className="mt-4 text-sm font-medium text-cyan-300 transition hover:text-cyan-200 hover:underline">
-          ✎ Show all fields
-        </button>
-      )}
-
-      <div className="flex gap-3 justify-between mt-8">
-        <Button variant="secondary" onClick={onBack} disabled={submitting}>← Back</Button>
-        <Button onClick={handleSubmit} loading={submitting}>Continue →</Button>
+        <div className="flex gap-3 justify-between mt-8">
+          <Button variant="secondary" onClick={onBack} disabled={submitting}>← Back</Button>
+          <Button onClick={handleSubmit} loading={submitting}>Continue →</Button>
+        </div>
       </div>
     </div>
   );
@@ -406,14 +522,14 @@ function formatEinInput(value: string): string {
 }
 
 function formatPhoneInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10);
+  const digits = normalizeUsPhoneDigits(value);
   if (digits.length >= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   if (digits.length >= 3) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return digits;
 }
 
 function formatPhoneDisplay(value: string): string {
-  const digits = value.replace(/\D/g, '');
+  const digits = normalizeUsPhoneDigits(value);
   if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   return value;
 }

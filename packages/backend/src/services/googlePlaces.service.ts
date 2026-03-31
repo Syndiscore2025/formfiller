@@ -52,6 +52,12 @@ interface TextSearchResponse {
   places?: PlaceResult[];
 }
 
+function normalizeUsPhoneDigits(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length > 10 && digits.startsWith('1')) return digits.slice(1, 11);
+  return digits.slice(0, 10);
+}
+
 interface AutocompleteSuggestion {
   placePrediction?: {
     placeId?: string;
@@ -118,8 +124,14 @@ export async function lookupByGooglePlaces(
     // Extract phone (prefer national format for US numbers)
     const phone = place.nationalPhoneNumber || place.internationalPhoneNumber;
     if (phone) {
-      result.phone = phone.replace(/\D/g, ''); // normalize to digits only
-      populated.push('phone');
+      const normalizedPhone = normalizeUsPhoneDigits(phone);
+      const areaCode = normalizedPhone.slice(0, 3);
+      const TOLL_FREE_PREFIXES = new Set(['800', '888', '877', '866', '855', '844', '833', '822']);
+      if (normalizedPhone.length === 10 && !TOLL_FREE_PREFIXES.has(areaCode)) {
+        result.phone = normalizedPhone;
+        populated.push('phone');
+      }
+      // Toll-free numbers are silently dropped; the frontend will ask the user for a local number
     }
 
     // Extract website
@@ -132,14 +144,25 @@ export async function lookupByGooglePlaces(
     if (place.addressComponents) {
       let streetNumber = '';
       let route = '';
+      let cityFromLocality = '';
+      let cityFallback = ''; // sublocality / postal_town for cities like NYC boroughs
 
       for (const component of place.addressComponents) {
         if (component.types.includes('street_number')) streetNumber = component.longText;
         if (component.types.includes('route')) route = component.longText;
-        if (component.types.includes('locality')) { result.city = component.longText; populated.push('city'); }
+        if (component.types.includes('locality')) cityFromLocality = component.longText;
+        // Fallback: borough/neighbourhood (e.g. Brooklyn, Queens) when locality is absent
+        if (!cityFallback && (
+          component.types.includes('sublocality_level_1')
+          || component.types.includes('sublocality')
+          || component.types.includes('postal_town')
+        )) { cityFallback = component.longText; }
         if (component.types.includes('administrative_area_level_1')) { result.state = component.shortText; populated.push('state'); }
         if (component.types.includes('postal_code')) { result.zipCode = component.longText; populated.push('zipCode'); }
       }
+
+      const city = cityFromLocality || cityFallback;
+      if (city) { result.city = city; populated.push('city'); }
 
       const streetAddress = [streetNumber, route].filter(Boolean).join(' ');
       if (streetAddress) { result.streetAddress = streetAddress; populated.push('streetAddress'); }
@@ -245,15 +268,23 @@ export async function getPlaceAddressDetails(placeId: string): Promise<PlaceAddr
 
     let streetNumber = '';
     let route = '';
+    let cityFromLocality = '';
+    let cityFallback = '';
 
     for (const component of place.addressComponents || []) {
       if (component.types.includes('street_number')) streetNumber = component.longText;
       if (component.types.includes('route')) route = component.longText;
-      if (component.types.includes('locality')) result.city = component.longText;
+      if (component.types.includes('locality')) cityFromLocality = component.longText;
+      if (!cityFallback && (
+        component.types.includes('sublocality_level_1')
+        || component.types.includes('sublocality')
+        || component.types.includes('postal_town')
+      )) { cityFallback = component.longText; }
       if (component.types.includes('administrative_area_level_1')) result.state = component.shortText;
       if (component.types.includes('postal_code')) result.zipCode = component.longText;
     }
 
+    result.city = cityFromLocality || cityFallback || undefined;
     result.streetAddress = [streetNumber, route].filter(Boolean).join(' ');
     return result;
   } catch (err) {

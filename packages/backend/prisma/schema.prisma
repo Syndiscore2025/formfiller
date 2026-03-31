@@ -193,6 +193,19 @@ model ApplicationDocument {
   @@index([applicationId, documentType])
 }
 
+model BankHelpCache {
+  id                 String   @id @default(uuid())
+  normalizedBankName String   @unique
+  bankName           String
+  bankUrl            String?
+  instructions       String
+  sourcePages        String[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([bankName])
+}
+
 model AnalyticsEvent {
   id            String   @id @default(uuid())
   applicationId String
