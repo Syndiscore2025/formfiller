@@ -14,7 +14,12 @@ const configuredAllowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localho
 
 const devAllowedOrigins = process.env.NODE_ENV === 'production'
   ? []
-  : ['http://localhost:3003', 'http://127.0.0.1:3003'];
+  : [
+      'http://localhost:3002',
+      'http://127.0.0.1:3002',
+      'http://localhost:3003',
+      'http://127.0.0.1:3003',
+    ];
 
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),

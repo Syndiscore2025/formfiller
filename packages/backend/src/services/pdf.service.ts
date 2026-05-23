@@ -32,6 +32,69 @@ function fmtDate(v?: string): string | undefined {
   return m ? `${m[2]}-${m[3]}-${m[1]}` : v;
 }
 
+function fmtEasternTimestamp(v?: string): string | undefined {
+  if (!v) return undefined;
+  const date = new Date(v);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  }).format(date);
+}
+
+function calculateTimeInBusiness(v?: string): string | undefined {
+  const m = v?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return undefined;
+  const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(start.getTime())) return undefined;
+  const today = new Date();
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (start > current) return '0 months';
+  let totalMonths = (current.getFullYear() - start.getFullYear()) * 12 + current.getMonth() - start.getMonth();
+  if (current.getDate() < start.getDate()) totalMonths -= 1;
+  totalMonths = Math.max(0, totalMonths);
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  if (!years) return `${months} ${months === 1 ? 'month' : 'months'}`;
+  if (!months) return `${years} ${years === 1 ? 'year' : 'years'}`;
+  return `${years} ${years === 1 ? 'year' : 'years'}, ${months} ${months === 1 ? 'month' : 'months'}`;
+}
+
+function industryCodes(industry?: string): { sicCode?: string; naicsCode?: string } {
+  const map: Record<string, { sicCode: string; naicsCode: string }> = {
+    Agriculture: { sicCode: '0100', naicsCode: '111000' },
+    'Arts & Entertainment': { sicCode: '7900', naicsCode: '711000' },
+    Automotive: { sicCode: '7538', naicsCode: '811111' },
+    'Beauty & Wellness': { sicCode: '7231', naicsCode: '812112' },
+    'Business Services': { sicCode: '7389', naicsCode: '561990' },
+    Construction: { sicCode: '1542', naicsCode: '236220' },
+    Education: { sicCode: '8200', naicsCode: '611000' },
+    eCommerce: { sicCode: '5961', naicsCode: '454110' },
+    'Finance & Insurance': { sicCode: '6000', naicsCode: '522000' },
+    'Food & Beverage': { sicCode: '5812', naicsCode: '722511' },
+    Healthcare: { sicCode: '8099', naicsCode: '621999' },
+    'Home Services': { sicCode: '7349', naicsCode: '561790' },
+    Hospitality: { sicCode: '7011', naicsCode: '721110' },
+    Manufacturing: { sicCode: '3999', naicsCode: '339999' },
+    'Non-Profit': { sicCode: '8399', naicsCode: '813000' },
+    'Professional Services': { sicCode: '8999', naicsCode: '541990' },
+    'Real Estate': { sicCode: '6531', naicsCode: '531210' },
+    Retail: { sicCode: '5399', naicsCode: '455219' },
+    Technology: { sicCode: '7371', naicsCode: '541511' },
+    Transportation: { sicCode: '4213', naicsCode: '484110' },
+    Travel: { sicCode: '4724', naicsCode: '561510' },
+    Wholesale: { sicCode: '5099', naicsCode: '423990' },
+    Other: { sicCode: '9999', naicsCode: '999990' },
+  };
+  return industry ? map[industry] || {} : {};
+}
+
 /* ── data interface ── */
 
 interface ApplicationData {
@@ -78,16 +141,18 @@ export function generateApplicationPdf(data: ApplicationData): Readable {
   /* ── Business ── */
   if (data.business) {
     const b = data.business;
+    const mappedCodes = industryCodes(b.industry);
     section(doc, 'Business');
     row(doc, 'Business Name', b.legalName);
     row(doc, 'DBA', b.dba);
     row(doc, 'Entity Type', b.entityType);
     row(doc, 'Industry', b.industry);
+    row(doc, 'SIC', b.sicCode || mappedCodes.sicCode);
+    row(doc, 'NAICS', b.naicsCode || mappedCodes.naicsCode);
     row(doc, 'State of Formation', b.stateOfFormation);
     row(doc, 'EIN', fmtEin(b.ein));
-    row(doc, 'SIC', b.sicCode);
-    row(doc, 'NAICS', b.naicsCode);
     row(doc, 'Business Start Date', fmtDate(b.businessStartDate));
+    row(doc, 'Time in Business', calculateTimeInBusiness(b.businessStartDate));
     row(doc, 'Phone', fmtPhone(b.phone));
     row(doc, 'Website', b.website);
     row(doc, 'Address', b.streetAddress);
@@ -171,7 +236,7 @@ export function generateApplicationPdf(data: ApplicationData): Readable {
 	    doc.moveTo(sigX, doc.y).lineTo(sigX + sigW, doc.y).stroke('#cccccc');
     doc.moveDown(0.3);
     doc.fontSize(8).font('Helvetica').fillColor('#999999')
-      .text(`Electronically signed at ${data.signature.signedAt}`);
+	      .text(`Electronically signed at ${fmtEasternTimestamp(data.signature.signedAt) ?? data.signature.signedAt}`);
   }
 
   doc.end();

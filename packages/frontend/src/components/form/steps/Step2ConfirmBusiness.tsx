@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES } from '@/types/application';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES, getIndustryCodes } from '@/types/application';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
@@ -128,6 +128,15 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [submitting, setSubmitting] = useState(false);
   const [showTollFreeModal, setShowTollFreeModal] = useState(false);
 
+  const selectedIndustryCodes = useMemo(() => getIndustryCodes(industry), [industry]);
+  const displayIndustryCodes = useMemo(() => {
+    const mapped = getIndustryCodes(business.industry || industry);
+    return {
+      sicCode: business.sicCode || mapped?.sicCode || '',
+      naicsCode: business.naicsCode || mapped?.naicsCode || '',
+    };
+  }, [business.industry, business.naicsCode, business.sicCode, industry]);
+
   useEffect(() => {
     if (!showTollFreeModal) return;
     document.body.style.overflow = 'hidden';
@@ -195,6 +204,8 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     city: city.trim(),
     state: addrState,
     zipCode: zipCode.trim(),
+    sicCode: selectedIndustryCodes?.sicCode || '',
+    naicsCode: selectedIndustryCodes?.naicsCode || '',
   });
 
   const openTollFreeModal = () => {
@@ -307,10 +318,24 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
           <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
             {confirmedFields.map(({ key, label }) => (
-              <div key={key} className="flex justify-between text-sm">
-                <span className="text-slate-400">{label}</span>
-                <span className="text-right font-medium text-slate-100">{displayVal(key)}</span>
-              </div>
+              <Fragment key={key}>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">{label}</span>
+                  <span className="text-right font-medium text-slate-100">{displayVal(key)}</span>
+                </div>
+                {key === 'industry' && displayIndustryCodes.sicCode && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">SIC</span>
+                    <span className="text-right font-medium text-slate-100">{displayIndustryCodes.sicCode}</span>
+                  </div>
+                )}
+                {key === 'industry' && displayIndustryCodes.naicsCode && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">NAICS</span>
+                    <span className="text-right font-medium text-slate-100">{displayIndustryCodes.naicsCode}</span>
+                  </div>
+                )}
+              </Fragment>
             ))}
           </div>
 
@@ -423,15 +448,22 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
                 options={ENTITY_TYPES.map((e) => ({ value: e.value, label: e.label }))}
                 onChange={(e) => setEntityType(e.target.value as BusinessInfo['entityType'])} />}
               {show('industry') && (
-                <SearchableSelect
-                  label="Industry"
-                  required
-                  value={industry}
-                  options={INDUSTRIES}
-                  onChange={setIndustry}
-                  error={errors.industry}
-                  hint={business.sicCode || business.naicsCode ? `Derived from lookup${business.sicCode ? ` • SIC ${business.sicCode}` : ''}${business.naicsCode ? ` • NAICS ${business.naicsCode}` : ''}` : 'Search the list to select the closest industry.'}
-                />
+                <div className="space-y-2">
+                  <SearchableSelect
+                    label="Industry"
+                    required
+                    value={industry}
+                    options={INDUSTRIES}
+                    onChange={setIndustry}
+                    error={errors.industry}
+                    hint="Search the list to select the closest industry."
+                  />
+                  {selectedIndustryCodes && (
+                    <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
+                      SIC {selectedIndustryCodes.sicCode} • NAICS {selectedIndustryCodes.naicsCode}
+                    </div>
+                  )}
+                </div>
               )}
               {show('stateOfFormation') && <Select label="State of Formation" required value={stateOfFormation}
                 options={[...US_STATES]}

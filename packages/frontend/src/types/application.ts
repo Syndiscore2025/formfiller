@@ -133,6 +133,43 @@ export const INDUSTRIES = [
   'Other',
 ] as const;
 
+export type Industry = (typeof INDUSTRIES)[number];
+
+export interface IndustryCodes {
+  sicCode: string;
+  naicsCode: string;
+}
+
+export const INDUSTRY_CODE_MAP = {
+  Agriculture: { sicCode: '0100', naicsCode: '111000' },
+  'Arts & Entertainment': { sicCode: '7900', naicsCode: '711000' },
+  Automotive: { sicCode: '7538', naicsCode: '811111' },
+  'Beauty & Wellness': { sicCode: '7231', naicsCode: '812112' },
+  'Business Services': { sicCode: '7389', naicsCode: '561990' },
+  Construction: { sicCode: '1542', naicsCode: '236220' },
+  Education: { sicCode: '8200', naicsCode: '611000' },
+  eCommerce: { sicCode: '5961', naicsCode: '454110' },
+  'Finance & Insurance': { sicCode: '6000', naicsCode: '522000' },
+  'Food & Beverage': { sicCode: '5812', naicsCode: '722511' },
+  Healthcare: { sicCode: '8099', naicsCode: '621999' },
+  'Home Services': { sicCode: '7349', naicsCode: '561790' },
+  Hospitality: { sicCode: '7011', naicsCode: '721110' },
+  Manufacturing: { sicCode: '3999', naicsCode: '339999' },
+  'Non-Profit': { sicCode: '8399', naicsCode: '813000' },
+  'Professional Services': { sicCode: '8999', naicsCode: '541990' },
+  'Real Estate': { sicCode: '6531', naicsCode: '531210' },
+  Retail: { sicCode: '5399', naicsCode: '455219' },
+  Technology: { sicCode: '7371', naicsCode: '541511' },
+  Transportation: { sicCode: '4213', naicsCode: '484110' },
+  Travel: { sicCode: '4724', naicsCode: '561510' },
+  Wholesale: { sicCode: '5099', naicsCode: '423990' },
+  Other: { sicCode: '9999', naicsCode: '999990' },
+} satisfies Record<Industry, IndustryCodes>;
+
+export function getIndustryCodes(industry: string): IndustryCodes | undefined {
+  return INDUSTRY_CODE_MAP[industry as Industry];
+}
+
 
 
 export const ANNUAL_REVENUE_RANGES = [

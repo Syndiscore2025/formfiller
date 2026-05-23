@@ -250,24 +250,7 @@ export function BankStatementUpload({
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        <div className="space-y-4 pt-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {requiredMonths.map(({ value, label }) => (
-              <span
-                key={value}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold tracking-[0.12em] text-slate-300"
-              >
-                {label}
-              </span>
-            ))}
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-              {uploadedCount} received
-            </span>
-          </div>
-
-        </div>
-
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
         <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -328,12 +311,7 @@ export function BankStatementUpload({
             )}
           </div>
         </div>
-      </div>
 
-      {error && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-      {notice && <p className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{notice}</p>}
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
@@ -367,88 +345,91 @@ export function BankStatementUpload({
             </div>
           )}
         </div>
+      </div>
 
-        <details className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-white">Having a hard time uploading?</h3>
-              <p className="mt-1 text-sm text-slate-400">
-                Tell us your business bank and we&apos;ll try to find where statement downloads live. Limited to 2 lookups per application every 24 hours.
-              </p>
-            </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
-              Help
-            </span>
-          </summary>
+      {error && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+      {notice && <p className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{notice}</p>}
 
-          <div className="mt-5 space-y-4">
-            <Input
-              label="Business bank name"
-              value={bankQuery}
-              onChange={(event) => {
-                setBankQuery(event.target.value);
-                setBankHelpError('');
-                setBankHelpResult(null);
-              }}
-              placeholder="Enter your bank name"
-            />
-
-            <div className="flex flex-wrap gap-3">
-              <Button type="button" loading={bankHelpLoading} disabled={!bankQuery.trim()} onClick={() => void handleBankHelpLookup()}>
-                Find statement download steps
-              </Button>
-            </div>
-
-            <p className="text-xs leading-5 text-slate-500">
-              Limited to 2 lookups per application every 24 hours. First-time lookups may take a few seconds while we check the bank&apos;s public site.
+      <details className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Having a hard time uploading?</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              Tell us your business bank and we&apos;ll try to find where statement downloads live. Limited to 2 lookups per application every 24 hours.
             </p>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+            Help
+          </span>
+        </summary>
 
-            {bankHelpError && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{bankHelpError}</p>}
+        <div className="mt-5 space-y-4">
+          <Input
+            label="Business bank name"
+            value={bankQuery}
+            onChange={(event) => {
+              setBankQuery(event.target.value);
+              setBankHelpError('');
+              setBankHelpResult(null);
+            }}
+            placeholder="Enter your bank name"
+          />
 
-            {bankHelpResult && (
-              <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 pr-3 sm:p-5 sm:pr-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-base font-semibold text-white">{bankHelpResult.bankName}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-200">
-                      {bankHelpResult.cached ? 'Saved help result' : 'Fresh bank help result'}
-                    </p>
-                  </div>
-                  {bankHelpResult.bankUrl && (
-                    <a
-                      href={bankHelpResult.bankUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/15"
-                    >
-                      Open official site
-                    </a>
-                  )}
+          <div className="flex flex-wrap gap-3">
+            <Button type="button" loading={bankHelpLoading} disabled={!bankQuery.trim()} onClick={() => void handleBankHelpLookup()}>
+              Find statement download steps
+            </Button>
+          </div>
+
+          <p className="text-xs leading-5 text-slate-500">
+            Limited to 2 lookups per application every 24 hours. First-time lookups may take a few seconds while we check the bank&apos;s public site.
+          </p>
+
+          {bankHelpError && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{bankHelpError}</p>}
+
+          {bankHelpResult && (
+            <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 pr-3 sm:p-5 sm:pr-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-base font-semibold text-white">{bankHelpResult.bankName}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-200">
+                    {bankHelpResult.cached ? 'Saved help result' : 'Fresh bank help result'}
+                  </p>
                 </div>
-                <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-200">{bankHelpResult.instructions}</p>
-                {bankHelpResult.sourcePages.length > 0 && (
-                  <div className="mt-4 border-t border-white/10 pt-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Checked pages</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {bankHelpResult.sourcePages.map((sourcePage) => (
-                        <a
-                          key={sourcePage}
-                          href={sourcePage}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200"
-                        >
-                          {sourcePage}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
+                {bankHelpResult.bankUrl && (
+                  <a
+                    href={bankHelpResult.bankUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/15"
+                  >
+                    Open official site
+                  </a>
                 )}
               </div>
-            )}
-          </div>
-        </details>
-      </div>
+              <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-200">{bankHelpResult.instructions}</p>
+              {bankHelpResult.sourcePages.length > 0 && (
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Checked pages</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {bankHelpResult.sourcePages.map((sourcePage) => (
+                      <a
+                        key={sourcePage}
+                        href={sourcePage}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200"
+                      >
+                        {sourcePage}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </details>
 
       {loading && <p className="text-sm text-slate-400">Loading uploaded statements…</p>}
     </div>

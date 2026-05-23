@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useCallback, useState, useMemo, useEffect, type PointerEvent } from 'react';
 import type { FormState, ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES, URGENCY_OPTIONS, CREDIT_SCORE_RANGES } from '@/types/application';
+import { getIndustryCodes } from '@/types/application';
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
@@ -40,6 +41,24 @@ function fmtDate(v?: string): string | undefined {
   if (!v) return undefined;
   const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[2]}-${m[3]}-${m[1]}` : v;
+}
+
+function calculateTimeInBusiness(v?: string): string | undefined {
+  const m = v?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return undefined;
+  const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(start.getTime())) return undefined;
+  const today = new Date();
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (start > current) return '0 months';
+  let totalMonths = (current.getFullYear() - start.getFullYear()) * 12 + current.getMonth() - start.getMonth();
+  if (current.getDate() < start.getDate()) totalMonths -= 1;
+  totalMonths = Math.max(0, totalMonths);
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  if (!years) return `${months} ${months === 1 ? 'month' : 'months'}`;
+  if (!months) return `${years} ${years === 1 ? 'year' : 'years'}`;
+  return `${years} ${years === 1 ? 'year' : 'years'}, ${months} ${months === 1 ? 'month' : 'months'}`;
 }
 
 const CONSENT_TEXT =
@@ -255,6 +274,10 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
   };
 
   const { contact, business } = state;
+  const industryCodes = getIndustryCodes(business.industry);
+  const sicCode = business.sicCode || industryCodes?.sicCode;
+  const naicsCode = business.naicsCode || industryCodes?.naicsCode;
+  const timeInBusiness = calculateTimeInBusiness(business.businessStartDate);
 
   return (
     <div>
@@ -265,9 +288,10 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
         <ReviewSection title="Business" rows={[
           ['Business Name', business.legalName], ['DBA', business.dba],
           ['Entity Type', business.entityType], ['State', business.stateOfFormation],
-          ['Industry', business.industry], ['SIC', business.sicCode], ['NAICS', business.naicsCode],
+          ['Industry', business.industry], ['SIC', sicCode], ['NAICS', naicsCode],
           ['EIN', fmtEin(business.ein || undefined)],
           ['Business Start Date', fmtDate(business.businessStartDate)],
+          ['Time in Business', timeInBusiness],
           ['Phone', fmtPhone(business.phone)], ['Website', business.website],
           ['Address', business.streetAddress],
           ['City', business.city],
