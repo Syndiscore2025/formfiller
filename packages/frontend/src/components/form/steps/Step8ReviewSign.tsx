@@ -64,28 +64,19 @@ function calculateTimeInBusiness(v?: string): string | undefined {
 const CONSENT_TEXT =
   'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
   'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
+  'I consent to be contacted about this funding request by phone, text, and email. Message and data rates may apply. Reply STOP to opt out of text messages or HELP for help. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
 const ACKNOWLEDGEMENTS = [
   {
-    id: 'accuracy',
-    label: 'I reviewed all pre-filled and manually entered information and certify it is true, accurate, and complete.',
+    id: 'applicationAuthorization',
+    label:
+      'I reviewed the pre-filled and manually entered application information, certify it is true, accurate, and complete, and authorize verification of my business, ownership, identity, bank, revenue, credit, and submitted application information where permitted by law.',
   },
   {
-    id: 'verification',
-    label: 'I authorize verification of my business, ownership, identity, bank, revenue, and submitted application information.',
-  },
-  {
-    id: 'credit',
-    label: 'I authorize soft credit inquiries and business credit/report checks where permitted by law.',
-  },
-  {
-    id: 'communication',
-    label: 'I consent to be contacted about this funding request by phone, text, and email, including by authorized partners.',
-  },
-  {
-    id: 'esign',
-    label: 'I consent to use electronic records and signatures and agree my electronic signature is legally binding.',
+    id: 'esignCommunication',
+    label:
+      'I consent to use electronic records and signatures, agree my electronic signature is legally binding, and consent to be contacted by phone, text, and email about this request. Reply STOP to opt out of text messages or HELP for help.',
   },
 ] as const;
 
@@ -304,11 +295,8 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
           signerName,
           signerEmail,
           consentAcknowledged: true,
-          informationAccuracyAcknowledged: acknowledgements.accuracy,
-          verificationAuthorized: acknowledgements.verification,
-          creditAuthorized: acknowledgements.credit,
-          communicationConsent: acknowledgements.communication,
-          esignConsent: acknowledgements.esign,
+          applicationAuthorizationAcknowledged: acknowledgements.applicationAuthorization,
+          esignAndCommunicationConsent: acknowledgements.esignCommunication,
           marketingConsent: true,
         },
         token ?? undefined

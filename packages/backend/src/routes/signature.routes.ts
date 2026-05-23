@@ -20,28 +20,18 @@ const signatureSchema = z.object({
   marketingConsent: z.literal(true, {
     errorMap: () => ({ message: 'Marketing consent acknowledgment is required' }),
   }),
-  informationAccuracyAcknowledged: z.literal(true, {
-    errorMap: () => ({ message: 'Information accuracy acknowledgment is required' }),
+  applicationAuthorizationAcknowledged: z.literal(true, {
+    errorMap: () => ({ message: 'Application authorization acknowledgment is required' }),
   }),
-  verificationAuthorized: z.literal(true, {
-    errorMap: () => ({ message: 'Verification authorization is required' }),
-  }),
-  creditAuthorized: z.literal(true, {
-    errorMap: () => ({ message: 'Credit authorization is required' }),
-  }),
-  communicationConsent: z.literal(true, {
-    errorMap: () => ({ message: 'Communication consent is required' }),
-  }),
-  esignConsent: z.literal(true, {
-    errorMap: () => ({ message: 'Electronic signature consent is required' }),
+  esignAndCommunicationConsent: z.literal(true, {
+    errorMap: () => ({ message: 'Electronic signature and communication consent is required' }),
   }),
 });
 
 const CONSENT_TEXT =
   'By signing this application, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
-  'I authorize verification of business, ownership, identity, bank, revenue, and submitted application information. ' +
-  'I authorize soft credit inquiries and business credit/report checks where permitted by law. ' +
-  'I consent to be contacted about this funding request by phone, text, and email, including by authorized partners. ' +
+  'I authorize verification of business, ownership, identity, bank, revenue, credit, and submitted application information where permitted by law. ' +
+  'I consent to be contacted about this funding request by phone, text, and email. Message and data rates may apply. Reply STOP to opt out of text messages or HELP for help. ' +
   'This electronic signature is legally binding under the Electronic Signatures in Global and National Commerce Act (ESIGN) and the Uniform Electronic Transactions Act (UETA).';
 
 router.post(
@@ -54,11 +44,8 @@ router.post(
       signatureData,
       signerName,
       signerEmail,
-      informationAccuracyAcknowledged,
-      verificationAuthorized,
-      creditAuthorized,
-      communicationConsent,
-      esignConsent,
+      applicationAuthorizationAcknowledged,
+      esignAndCommunicationConsent,
     } = req.body as z.infer<typeof signatureSchema>;
     const marketingConsent = true; // validated as z.literal(true) above
 
@@ -101,11 +88,8 @@ router.post(
         marketingConsent,
         marketingConsentTimestamp: now.toISOString(),
         acknowledgements: {
-          informationAccuracyAcknowledged,
-          verificationAuthorized,
-          creditAuthorized,
-          communicationConsent,
-          esignConsent,
+          applicationAuthorizationAcknowledged,
+          esignAndCommunicationConsent,
         },
       },
     });

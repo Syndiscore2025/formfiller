@@ -133,14 +133,12 @@ interface ApplicationData {
 const CONSENT_TEXT =
   'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
   'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
+  'I consent to be contacted about this funding request by phone, text, and email. Message and data rates may apply. Reply STOP to opt out of text messages or HELP for help. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
 const ACKNOWLEDGEMENTS = [
-  'I reviewed all pre-filled and manually entered information and certify it is true, accurate, and complete.',
-  'I authorize verification of my business, ownership, identity, bank, revenue, and submitted application information.',
-  'I authorize soft credit inquiries and business credit/report checks where permitted by law.',
-  'I consent to be contacted about this funding request by phone, text, and email, including by authorized partners.',
-  'I consent to use electronic records and signatures and agree my electronic signature is legally binding.',
+  'I reviewed the pre-filled and manually entered application information, certify it is true, accurate, and complete, and authorize verification of my business, ownership, identity, bank, revenue, credit, and submitted application information where permitted by law.',
+  'I consent to use electronic records and signatures, agree my electronic signature is legally binding, and consent to be contacted by phone, text, and email about this request. Reply STOP to opt out of text messages or HELP for help.',
 ];
 
 const PAGE_MARGIN = 42;
