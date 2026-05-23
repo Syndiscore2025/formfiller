@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
+import { Button } from '@/components/ui/Button';
 import { BankStatementUpload } from './BankStatementUpload';
 import { Step1EINLookup } from './steps/Step1EINLookup';
 import { Step2ConfirmBusiness } from './steps/Step2ConfirmBusiness';
@@ -103,6 +104,20 @@ export function MultiStepForm({ token }: Props) {
     await api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: nextStep }, token ?? undefined);
     setState((prev) => ({ ...prev, currentStep: nextStep }));
   }, [state.applicationId, state.currentStep, token, analytics]);
+
+  const goBackOneSection = useCallback(async () => {
+    const previousStep = Math.max(1, state.currentStep - 1);
+    if (previousStep === state.currentStep) return;
+
+    setState((prev) => ({ ...prev, currentStep: previousStep }));
+    if (!state.applicationId) return;
+
+    try {
+      await api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: previousStep }, token ?? undefined);
+    } catch (err) {
+      console.warn('Unable to sync previous step:', err);
+    }
+  }, [state.applicationId, state.currentStep, token]);
 
   // Step 1: Contact + Business Identity + EIN + Lookup → Step 2
   const handleStep1Next = useCallback(async (contact: ContactInfo) => {
@@ -214,23 +229,31 @@ export function MultiStepForm({ token }: Props) {
           <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
         </div>
 
+        {state.currentStep > 1 && (
+          <div className="mb-5 flex justify-start">
+            <Button type="button" variant="secondary" onClick={() => void goBackOneSection()} disabled={state.isSaving}>
+              ← Back to previous section
+            </Button>
+          </div>
+        )}
+
         {state.currentStep === 1 && (
           <Step1EINLookup business={state.business} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} />
         )}
         {state.currentStep === 2 && (
           <Step2ConfirmBusiness business={state.business} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
-            onNext={handleStep2Next} onBack={() => setState((p) => ({ ...p, currentStep: 1 }))} />
+            onNext={handleStep2Next} onBack={() => void goBackOneSection()} />
         )}
         {state.currentStep === 3 && (
-          <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => setState((p) => ({ ...p, currentStep: 2 }))} />
+          <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => void goBackOneSection()} />
         )}
         {state.currentStep === 4 && (
           <Step6OwnerDetails owner={state.owners[0] || {} as OwnerInfo} contact={state.contact} business={state.business}
             hasAdditionalOwners={state.hasAdditionalOwners} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
-            onNext={handleStep4Next} onBack={() => setState((p) => ({ ...p, currentStep: 3 }))} />
+            onNext={handleStep4Next} onBack={() => void goBackOneSection()} />
           )}
         {state.currentStep === 5 && (
-          <Step8ReviewSign state={state} onBack={() => setState((p) => ({ ...p, currentStep: 4 }))} onSubmitted={setSubmittedAt} token={token} />
+          <Step8ReviewSign state={state} onBack={() => void goBackOneSection()} onSubmitted={setSubmittedAt} token={token} />
         )}
       </div>
     </AnalyticsContext.Provider>

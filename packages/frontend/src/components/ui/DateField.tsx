@@ -305,7 +305,7 @@ export function DateField({
       </div>
 
       {open && !disabled && (
-        <div className="surface-panel-soft absolute left-0 top-[calc(100%+0.5rem)] z-[70] w-[20rem] max-w-[calc(100vw-2rem)] border border-cyan-400/20 bg-slate-950/85 p-4 shadow-[0_20px_80px_rgba(8,145,178,0.14)]">
+        <div className="surface-panel-soft absolute left-0 top-[calc(100%+0.5rem)] z-[70] w-[23rem] max-w-[calc(100vw-2rem)] border border-cyan-400/20 bg-slate-950/85 p-4 shadow-[0_20px_80px_rgba(8,145,178,0.14)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Select date</p>
@@ -321,7 +321,7 @@ export function DateField({
               type="button"
               onClick={() => canGoPrev && setDisplayedMonth((current) => addMonths(current, -1))}
               disabled={!canGoPrev}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <span aria-hidden="true">←</span>
             </button>
@@ -329,7 +329,7 @@ export function DateField({
               suppressHydrationWarning
               value={String(selectedMonthIndex)}
               onChange={(event) => setDisplayedMonth(clampMonth(new Date(selectedYear, Number(event.target.value), 1), minDate, maxDate))}
-              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+              className="min-w-[9rem] flex-1 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
             >
               {monthOptions.map((option) => (
                 <option key={option.value} value={option.value} disabled={option.disabled}>
@@ -341,7 +341,7 @@ export function DateField({
               suppressHydrationWarning
               value={String(selectedYear)}
               onChange={(event) => setDisplayedMonth(clampMonth(new Date(Number(event.target.value), selectedMonthIndex, 1), minDate, maxDate))}
-              className="w-28 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+              className="w-24 shrink-0 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
             >
               {yearOptions.map((option) => (
                 <option key={option} value={option}>
@@ -353,7 +353,7 @@ export function DateField({
               type="button"
               onClick={() => canGoNext && setDisplayedMonth((current) => addMonths(current, 1))}
               disabled={!canGoNext}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <span aria-hidden="true">→</span>
             </button>

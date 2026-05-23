@@ -98,6 +98,24 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     return digits;
   };
 
+  const parseIsoDate = (value: string) => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return parsed.getFullYear() === Number(match[1]) && parsed.getMonth() === Number(match[2]) - 1 && parsed.getDate() === Number(match[3])
+      ? parsed
+      : null;
+  };
+
+  const isAtLeast18 = (value: string) => {
+    const dob = parseIsoDate(value);
+    if (!dob) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eighteenthBirthday = new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate());
+    return eighteenthBirthday <= today;
+  };
+
   const validateOwnerDetails = () => {
     const errs: Record<string, string> = {};
     if (!firstName.trim()) errs.firstName = 'Required';
@@ -121,6 +139,8 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     if (!ssnDigits) errs.ssn = 'Required';
     else if (ssnDigits.length !== 9) errs.ssn = 'SSN must be 9 digits';
     if (!dateOfBirth) errs.dateOfBirth = 'Required';
+    else if (!parseIsoDate(dateOfBirth)) errs.dateOfBirth = 'Enter a valid date of birth';
+    else if (!isAtLeast18(dateOfBirth)) errs.dateOfBirth = 'Applicant must be at least 18 years old to apply.';
     return errs;
   };
 

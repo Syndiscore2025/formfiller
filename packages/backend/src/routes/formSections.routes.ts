@@ -31,6 +31,24 @@ const businessSchema = z.object({
   autoPopulated: z.record(z.boolean()).optional(),
 });
 
+function parseIsoDateOnly(value?: string): Date | null {
+  const match = (value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return parsed.getFullYear() === Number(match[1]) && parsed.getMonth() === Number(match[2]) - 1 && parsed.getDate() === Number(match[3])
+    ? parsed
+    : null;
+}
+
+function isAtLeast18(value?: string): boolean {
+  const dob = parseIsoDateOnly(value);
+  if (!dob) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eighteenthBirthday = new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate());
+  return eighteenthBirthday <= today;
+}
+
 const ownerSchema = z.object({
   ownerIndex: z.number().int().min(0),
   firstName: z.string().optional(),
@@ -39,7 +57,9 @@ const ownerSchema = z.object({
   phone: z.string().optional(),
   ownershipPct: z.string().optional(), // now stored as string
   ssn: z.string().regex(/^\d{9}$/, 'SSN must be 9 digits').optional(),
-  dateOfBirth: z.string().optional(),
+  dateOfBirth: z.string().optional()
+    .refine((value) => !value || Boolean(parseIsoDateOnly(value)), 'Enter a valid date of birth')
+    .refine((value) => !value || isAtLeast18(value), 'Applicant must be at least 18 years old to apply.'),
   creditScore: z.string().optional(),
   streetAddress: z.string().optional(),
   streetAddress2: z.string().optional(),
