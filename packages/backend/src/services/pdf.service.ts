@@ -48,6 +48,18 @@ function fmtEasternTimestamp(v?: string): string | undefined {
   }).format(date);
 }
 
+function fmtEasternDate(v?: string): string | undefined {
+  if (!v) return undefined;
+  const date = new Date(v);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  }).format(date).replace(/\//g, '-');
+}
+
 function calculateTimeInBusiness(v?: string): string | undefined {
   const m = v?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return undefined;
@@ -119,123 +131,149 @@ interface ApplicationData {
 /* ── PDF generation ── */
 
 const CONSENT_TEXT =
-  'By signing below, I certify that all information provided is true, accurate, and complete. ' +
-  'I authorize the lender to conduct a soft credit inquiry, verify all submitted information, and share data with necessary parties. ' +
+  'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
+  'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
-const LABEL_X = 50;
-const VALUE_X = 200;
-const RIGHT_MARGIN = 560;
+const ACKNOWLEDGEMENTS = [
+  'I reviewed all pre-filled and manually entered information and certify it is true, accurate, and complete.',
+  'I authorize verification of my business, ownership, identity, bank, revenue, and submitted application information.',
+  'I authorize soft credit inquiries and business credit/report checks where permitted by law.',
+  'I consent to be contacted about this funding request by phone, text, and email, including by authorized partners.',
+  'I consent to use electronic records and signatures and agree my electronic signature is legally binding.',
+];
+
+const PAGE_MARGIN = 42;
+const RIGHT_MARGIN = 570;
+const FIELD_GAP = 8;
+const SECTION_COLOR = '#4f46e5';
+const FIELD_BORDER = '#d7dce8';
+const FIELD_BG = '#f8fafc';
 
 export function generateApplicationPdf(data: ApplicationData): Readable {
-  const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+  const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'LETTER' });
 
   /* ── Header ── */
-  doc.fontSize(18).font('Helvetica-Bold').fillColor('#111111')
-    .text('Review & Sign', { align: 'center' });
-  doc.moveDown(0.3);
-  doc.fontSize(10).font('Helvetica').fillColor('#888888')
-    .text('Please review your information before signing.', { align: 'center' });
-  doc.moveDown(1);
+  doc.save().rect(0, 0, doc.page.width, 82).fill('#111827').restore();
+  doc.fontSize(20).font('Helvetica-Bold').fillColor('#ffffff')
+    .text('Business Funding Application', PAGE_MARGIN, 24, { width: RIGHT_MARGIN - PAGE_MARGIN });
+  doc.fontSize(9).font('Helvetica').fillColor('#cbd5e1')
+    .text('Signed merchant application packet', PAGE_MARGIN, 51, { width: RIGHT_MARGIN - PAGE_MARGIN });
+  doc.y = 104;
 
   /* ── Business ── */
   if (data.business) {
     const b = data.business;
     const mappedCodes = industryCodes(b.industry);
-    section(doc, 'Business');
-    row(doc, 'Business Name', b.legalName);
-    row(doc, 'DBA', b.dba);
-    row(doc, 'Entity Type', b.entityType);
-    row(doc, 'Industry', b.industry);
-    row(doc, 'SIC', b.sicCode || mappedCodes.sicCode);
-    row(doc, 'NAICS', b.naicsCode || mappedCodes.naicsCode);
-    row(doc, 'State of Formation', b.stateOfFormation);
-    row(doc, 'EIN', fmtEin(b.ein));
-    row(doc, 'Business Start Date', fmtDate(b.businessStartDate));
-    row(doc, 'Time in Business', calculateTimeInBusiness(b.businessStartDate));
-    row(doc, 'Phone', fmtPhone(b.phone));
-    row(doc, 'Website', b.website);
-    row(doc, 'Address', b.streetAddress);
-    row(doc, 'City', b.city);
-    row(doc, 'State', b.state);
-    row(doc, 'Zip', b.zipCode);
-    doc.moveDown(0.5);
+    section(doc, 'Business Information');
+    fieldGrid(doc, [
+      { label: 'Business Name', value: b.legalName, span: 2 },
+      { label: 'DBA / Trade Name', value: b.dba },
+      { label: 'Entity Type', value: b.entityType },
+      { label: 'Industry', value: b.industry, span: 2 },
+      { label: 'SIC', value: b.sicCode || mappedCodes.sicCode },
+      { label: 'NAICS', value: b.naicsCode || mappedCodes.naicsCode },
+      { label: 'State of Formation', value: b.stateOfFormation },
+      { label: 'EIN', value: fmtEin(b.ein) },
+      { label: 'Business Start Date', value: fmtDate(b.businessStartDate) },
+      { label: 'Time in Business', value: calculateTimeInBusiness(b.businessStartDate) },
+      { label: 'Phone', value: fmtPhone(b.phone) },
+      { label: 'Website', value: b.website },
+      { label: 'Street Address', value: b.streetAddress, span: 2 },
+    ]);
+    fieldGrid(doc, [
+      { label: 'City', value: b.city },
+      { label: 'State', value: b.state },
+      { label: 'Zip', value: b.zipCode },
+    ], 3);
   }
 
   /* ── Owner ── */
   if (data.owner) {
     const o = data.owner;
-    section(doc, 'Owner');
-    row(doc, 'Name', `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || undefined);
-    row(doc, 'SSN', fmtSsn(o.ssn));
-    row(doc, 'Ownership', o.ownershipPct ? `${o.ownershipPct}%` : undefined);
-    row(doc, 'DOB', fmtDate(o.dateOfBirth));
-    doc.moveDown(0.5);
+    section(doc, 'Owner / Guarantor Information');
+    fieldGrid(doc, [
+      { label: 'Owner Name', value: `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || undefined },
+      { label: 'Ownership', value: o.ownershipPct ? `${o.ownershipPct}%` : undefined },
+      { label: 'SSN', value: fmtSsn(o.ssn) },
+      { label: 'Date of Birth', value: fmtDate(o.dateOfBirth) },
+    ]);
 
     /* ── Home Address ── */
     section(doc, 'Home Address');
-    row(doc, 'Address', o.streetAddress);
-    row(doc, 'City', o.city);
-    row(doc, 'State', o.state);
-    row(doc, 'Zip', o.zipCode);
-    doc.moveDown(0.5);
+    fieldGrid(doc, [{ label: 'Street Address', value: o.streetAddress, span: 2 }]);
+    fieldGrid(doc, [
+      { label: 'City', value: o.city },
+      { label: 'State', value: o.state },
+      { label: 'Zip', value: o.zipCode },
+    ], 3);
   }
 
   /* ── Contact Information ── */
   if (data.contact) {
     section(doc, 'Contact Information');
-    row(doc, 'Email', data.contact.email);
-    row(doc, 'Phone', fmtPhone(data.contact.phone));
-    doc.moveDown(0.5);
+    fieldGrid(doc, [
+      { label: 'Email', value: data.contact.email },
+      { label: 'Phone', value: fmtPhone(data.contact.phone) },
+    ]);
   }
 
   /* ── Electronic Signature Consent ── */
   if (data.signature) {
-    section(doc, 'Electronic Signature Consent');
-    doc.fontSize(9).font('Helvetica').fillColor('#444444')
-      .text(CONSENT_TEXT, LABEL_X, undefined, { width: RIGHT_MARGIN - LABEL_X });
-    doc.moveDown(0.8);
+    section(doc, 'Authorizations & Electronic Signature Consent');
+    textBox(doc, CONSENT_TEXT);
+    ensureSpace(doc, 86);
+    doc.fontSize(8).font('Helvetica').fillColor('#334155');
+    ACKNOWLEDGEMENTS.forEach((text) => {
+      doc.text(`[x] ${text}`, PAGE_MARGIN + 8, doc.y, { width: RIGHT_MARGIN - PAGE_MARGIN - 16 });
+      doc.moveDown(0.18);
+    });
+    doc.moveDown(0.45);
 
-    row(doc, 'Full Name (Signer)', data.signature.signerName);
-    row(doc, 'Email (Signer)', data.signature.signerEmail);
-    doc.moveDown(1);
+    fieldGrid(doc, [
+      { label: 'Full Name (Signer)', value: data.signature.signerName },
+      { label: 'Email (Signer)', value: data.signature.signerEmail },
+    ]);
 
-	    const signedDate = fmtDate(data.signature.signedAt.slice(0, 10));
+	    const signedDate = fmtEasternDate(data.signature.signedAt);
 
     /* Signature image */
-	    const sigX = LABEL_X;
-	    const sigW = 250;
-	    const sigH = 80;
+	    const sigX = PAGE_MARGIN;
+    const sigW = 286;
+    const sigH = 86;
 	    const sigY = doc.y;
+    ensureSpace(doc, sigH + 28);
+    doc.save().roundedRect(sigX, sigY, sigW, sigH, 8).fillAndStroke('#ffffff', FIELD_BORDER).restore();
+    doc.fontSize(7).font('Helvetica-Bold').fillColor('#64748b')
+      .text('SIGNATURE', sigX + 10, sigY + 8, { width: sigW - 20 });
     if (data.signature.signatureData) {
       try {
         const b64 = data.signature.signatureData.replace(/^data:image\/png;base64,/, '');
         const imgBuf = Buffer.from(b64, 'base64');
-		        doc.image(imgBuf, sigX, sigY, { width: sigW, height: sigH });
+	        doc.image(imgBuf, sigX + 10, sigY + 16, { width: sigW - 20, height: sigH - 26 });
       } catch {
         // fall back to italic name if image decode fails
         doc.fontSize(24).font('Helvetica-Oblique').fillColor('#1a1a2e')
-		          .text(data.signature.signerName, sigX, sigY, { width: sigW });
+	          .text(data.signature.signerName, sigX + 12, sigY + 32, { width: sigW - 24 });
       }
     } else {
       doc.fontSize(24).font('Helvetica-Oblique').fillColor('#1a1a2e')
-		        .text(data.signature.signerName, sigX, sigY, { width: sigW });
+	        .text(data.signature.signerName, sigX + 12, sigY + 32, { width: sigW - 24 });
     }
 
-	    // Date next to signature (lenders typically want the date adjacent to the signature mark)
-	    if (signedDate) {
-	      const dateX = sigX + sigW + 12;
-	      doc.fontSize(9).font('Helvetica').fillColor('#888888')
-	        .text('Date', dateX, sigY + 18, { width: RIGHT_MARGIN - dateX });
-	      doc.fontSize(11).font('Helvetica-Bold').fillColor('#111111')
-	        .text(signedDate, dateX, sigY + 32, { width: RIGHT_MARGIN - dateX });
-	    }
+    fieldBox(doc, sigX + sigW + FIELD_GAP, sigY, RIGHT_MARGIN - sigX - sigW - FIELD_GAP, 40, 'Date Signed', signedDate);
+    fieldBox(
+      doc,
+      sigX + sigW + FIELD_GAP,
+      sigY + 46,
+      RIGHT_MARGIN - sigX - sigW - FIELD_GAP,
+      40,
+      'Timestamp',
+      fmtEasternTimestamp(data.signature.signedAt) ?? data.signature.signedAt,
+    );
 
-	    // Continue layout below the signature image
-	    doc.y = sigY + sigH + 6;
-	    doc.moveTo(sigX, doc.y).lineTo(sigX + sigW, doc.y).stroke('#cccccc');
-    doc.moveDown(0.3);
-    doc.fontSize(8).font('Helvetica').fillColor('#999999')
+    doc.y = sigY + sigH + 8;
+    doc.fontSize(7).font('Helvetica').fillColor('#64748b')
 	      .text(`Electronically signed at ${fmtEasternTimestamp(data.signature.signedAt) ?? data.signature.signedAt}`);
   }
 
@@ -245,17 +283,71 @@ export function generateApplicationPdf(data: ApplicationData): Readable {
 
 /* ── helpers ── */
 
+type FieldDefinition = { label: string; value?: string; span?: number; height?: number };
+
 function section(doc: PDFKit.PDFDocument, title: string): void {
-  doc.fontSize(12).font('Helvetica-Bold').fillColor('#5b21b6').text(title, LABEL_X);
-  doc.moveTo(LABEL_X, doc.y).lineTo(RIGHT_MARGIN, doc.y).stroke('#ddd6fe');
-  doc.moveDown(0.3);
+  ensureSpace(doc, 26);
+  doc.moveDown(0.45);
+  doc.fontSize(12).font('Helvetica-Bold').fillColor(SECTION_COLOR).text(title, PAGE_MARGIN);
+  doc.moveTo(PAGE_MARGIN, doc.y + 2).lineTo(RIGHT_MARGIN, doc.y + 2).stroke('#c7d2fe');
+  doc.moveDown(0.55);
 }
 
-function row(doc: PDFKit.PDFDocument, label: string, value?: string): void {
-  if (!value) return;
+function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], columns = 2): void {
+  const fields = rawFields.filter((field) => field.value);
+  const contentWidth = RIGHT_MARGIN - PAGE_MARGIN;
+  const columnWidth = (contentWidth - FIELD_GAP * (columns - 1)) / columns;
+  let row: Array<FieldDefinition & { x: number; width: number }> = [];
+  let usedColumns = 0;
+  let cursorX = PAGE_MARGIN;
+
+  const flush = () => {
+    if (!row.length) return;
+    const rowHeight = Math.max(...row.map((field) => field.height ?? (field.span && field.span > 1 ? 48 : 42)));
+    ensureSpace(doc, rowHeight + FIELD_GAP);
+    const y = doc.y;
+    row.forEach((field) => fieldBox(doc, field.x, y, field.width, rowHeight, field.label, field.value));
+    doc.y = y + rowHeight + FIELD_GAP;
+    row = [];
+    usedColumns = 0;
+    cursorX = PAGE_MARGIN;
+  };
+
+  fields.forEach((field) => {
+    const span = Math.min(field.span ?? 1, columns);
+    if (usedColumns + span > columns) flush();
+    const width = columnWidth * span + FIELD_GAP * (span - 1);
+    row.push({ ...field, span, x: cursorX, width });
+    cursorX += width + FIELD_GAP;
+    usedColumns += span;
+    if (usedColumns >= columns) flush();
+  });
+
+  flush();
+}
+
+function fieldBox(doc: PDFKit.PDFDocument, x: number, y: number, width: number, height: number, label: string, value?: string): void {
+  doc.save().roundedRect(x, y, width, height, 7).fillAndStroke(FIELD_BG, FIELD_BORDER).restore();
+  doc.fontSize(6.7).font('Helvetica-Bold').fillColor('#64748b')
+    .text(label.toUpperCase(), x + 8, y + 7, { width: width - 16, lineBreak: false });
+  doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a')
+    .text(value || '—', x + 8, y + 20, { width: width - 16, height: height - 23, ellipsis: true });
+}
+
+function textBox(doc: PDFKit.PDFDocument, text: string): void {
+  const width = RIGHT_MARGIN - PAGE_MARGIN;
+  const height = Math.max(52, doc.fontSize(8.5).heightOfString(text, { width: width - 18 }) + 18);
+  ensureSpace(doc, height + 8);
   const y = doc.y;
-  doc.fontSize(10).font('Helvetica').fillColor('#888888').text(label, LABEL_X, y, { width: VALUE_X - LABEL_X - 10 });
-  doc.fontSize(10).font('Helvetica-Bold').fillColor('#111111').text(value, VALUE_X, y, { width: RIGHT_MARGIN - VALUE_X });
-  doc.moveDown(0.15);
+  doc.save().roundedRect(PAGE_MARGIN, y, width, height, 8).fillAndStroke('#eef2ff', '#c7d2fe').restore();
+  doc.fontSize(8.5).font('Helvetica').fillColor('#334155')
+    .text(text, PAGE_MARGIN + 9, y + 9, { width: width - 18 });
+  doc.y = y + height + 8;
+}
+
+function ensureSpace(doc: PDFKit.PDFDocument, height: number): void {
+  if (doc.y + height <= doc.page.height - PAGE_MARGIN) return;
+  doc.addPage();
+  doc.y = PAGE_MARGIN;
 }
 

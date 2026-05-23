@@ -62,9 +62,38 @@ function calculateTimeInBusiness(v?: string): string | undefined {
 }
 
 const CONSENT_TEXT =
-  'By signing below, I certify that all information provided is true, accurate, and complete. ' +
-  'I authorize the lender to conduct a soft credit inquiry, verify all submitted information, and share data with necessary parties. ' +
+  'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
+  'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
+
+const ACKNOWLEDGEMENTS = [
+  {
+    id: 'accuracy',
+    label: 'I reviewed all pre-filled and manually entered information and certify it is true, accurate, and complete.',
+  },
+  {
+    id: 'verification',
+    label: 'I authorize verification of my business, ownership, identity, bank, revenue, and submitted application information.',
+  },
+  {
+    id: 'credit',
+    label: 'I authorize soft credit inquiries and business credit/report checks where permitted by law.',
+  },
+  {
+    id: 'communication',
+    label: 'I consent to be contacted about this funding request by phone, text, and email, including by authorized partners.',
+  },
+  {
+    id: 'esign',
+    label: 'I consent to use electronic records and signatures and agree my electronic signature is legally binding.',
+  },
+] as const;
+
+type AcknowledgementId = (typeof ACKNOWLEDGEMENTS)[number]['id'];
+
+function initialAcknowledgements(): Record<AcknowledgementId, boolean> {
+  return ACKNOWLEDGEMENTS.reduce((acc, item) => ({ ...acc, [item.id]: false }), {} as Record<AcknowledgementId, boolean>);
+}
 
 interface Props {
   state: FormState;
@@ -73,15 +102,19 @@ interface Props {
   token: string | null;
 }
 
-function ReviewSection({ title, rows }: { title: string; rows: [string, string | undefined][] }) {
+function ReviewSection({ title, rows }: { title: string; rows: Array<[string, string | undefined, 'full'?]> }) {
+  const visibleRows = rows.filter(([, v]) => v);
   return (
-    <div className="mb-4">
-      <h3 className="mb-2 border-b border-white/10 pb-2 text-sm font-semibold text-cyan-200">{title}</h3>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-        {rows.filter(([, v]) => v).map(([k, v], i) => (
-          <div key={`${k}-${i}`} className="contents">
-            <span className="text-xs text-slate-400">{k}</span>
-            <span className="text-xs font-medium text-slate-100">{v}</span>
+    <div className="mb-5">
+      <h3 className="mb-3 border-b border-white/10 pb-2 text-sm font-semibold text-cyan-200">{title}</h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {visibleRows.map(([k, v, span], i) => (
+          <div
+            key={`${k}-${i}`}
+            className={`rounded-2xl border border-white/10 bg-slate-950/45 px-3.5 py-3 shadow-inner shadow-black/10 ${span === 'full' ? 'sm:col-span-2' : ''}`}
+          >
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{k}</span>
+            <span className="mt-1 block break-words text-sm font-semibold text-slate-100">{v}</span>
           </div>
         ))}
       </div>
@@ -95,13 +128,18 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
   const [signerName, setSignerName] = useState(`${owner?.firstName || state.contact.firstName} ${owner?.lastName || state.contact.lastName}`.trim());
   const [signerEmail, setSignerEmail] = useState(owner?.email || state.contact.email || '');
   const [dateSigned, setDateSigned] = useState(todayLocal);
-  const [consentChecked, setConsentChecked] = useState(false);
+  const [acknowledgements, setAcknowledgements] = useState<Record<AcknowledgementId, boolean>>(initialAcknowledgements);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureMode, setSignatureMode] = useState<'auto' | 'drawn' | 'cleared'>('auto');
   const drawingRef = useRef<{ isDrawing: boolean; last?: { x: number; y: number } }>({ isDrawing: false });
+  const allAcknowledged = ACKNOWLEDGEMENTS.every((item) => acknowledgements[item.id]);
+
+  const toggleAcknowledgement = (id: AcknowledgementId) => {
+    setAcknowledgements((current) => ({ ...current, [id]: !current[id] }));
+  };
 
   /** Format dateSigned (YYYY-MM-DD) to user-friendly MM/DD/YYYY for display */
   const dateSignedDisplay = useMemo(() => {
@@ -243,7 +281,7 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
     setError('');
     if (!signerName.trim()) { setError('Please enter your full name.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) { setError('Please enter a valid email.'); return; }
-    if (!consentChecked) { setError('You must acknowledge the consent statement.'); return; }
+    if (!allAcknowledged) { setError('Please review and check each authorization before signing.'); return; }
     if (!state.applicationId) { setError('Session error. Please refresh.'); return; }
     if (!hasSignature) {
       // If we're in auto mode and the name exists, generate the typed signature on-demand.
@@ -261,7 +299,18 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       const signatureData = getSignatureDataUrl();
       const res = await api.post<{ success: boolean; signedAt: string }>(
         `/api/signatures/${state.applicationId}/sign`,
-        { signatureData, signerName, signerEmail, consentAcknowledged: true, marketingConsent: true },
+        {
+          signatureData,
+          signerName,
+          signerEmail,
+          consentAcknowledged: true,
+          informationAccuracyAcknowledged: acknowledgements.accuracy,
+          verificationAuthorized: acknowledgements.verification,
+          creditAuthorized: acknowledgements.credit,
+          communicationConsent: acknowledgements.communication,
+          esignConsent: acknowledgements.esign,
+          marketingConsent: true,
+        },
         token ?? undefined
       );
       await api.post(`/api/applications/${state.applicationId}/submit`, {}, token ?? undefined);
@@ -286,14 +335,14 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
 
       <div className="mb-5 rounded-[24px] border border-white/10 bg-white/[0.04] p-5 text-sm">
         <ReviewSection title="Business" rows={[
-          ['Business Name', business.legalName], ['DBA', business.dba],
+          ['Business Name', business.legalName, 'full'], ['DBA', business.dba],
           ['Entity Type', business.entityType], ['State', business.stateOfFormation],
           ['Industry', business.industry], ['SIC', sicCode], ['NAICS', naicsCode],
           ['EIN', fmtEin(business.ein || undefined)],
           ['Business Start Date', fmtDate(business.businessStartDate)],
           ['Time in Business', timeInBusiness],
           ['Phone', fmtPhone(business.phone)], ['Website', business.website],
-          ['Address', business.streetAddress],
+          ['Address', business.streetAddress, 'full'],
           ['City', business.city],
           ['State', business.state],
           ['Zip', business.zipCode],
@@ -305,7 +354,7 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
           ['DOB', fmtDate(owner.dateOfBirth)],
         ]} />}
         {owner && <ReviewSection title="Home Address" rows={[
-          ['Address', owner.streetAddress],
+          ['Address', owner.streetAddress, 'full'],
           ['City', owner.city],
           ['State', owner.state],
           ['Zip', owner.zipCode],
@@ -316,12 +365,21 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
       </div>
 
       <div className="mb-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] p-4">
-        <h3 className="mb-2 text-sm font-semibold text-cyan-100">Electronic Signature Consent</h3>
-        <p className="mb-3 text-xs leading-relaxed text-slate-300">{CONSENT_TEXT}</p>
-        <label className="flex items-start gap-2 cursor-pointer">
-          <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} className="mt-0.5 accent-cyan-300" />
-          <span className="text-xs text-slate-300">I have read and agree to the above consent statement.</span>
-        </label>
+        <h3 className="mb-2 text-sm font-semibold text-cyan-100">Authorizations & Electronic Signature Consent</h3>
+        <p className="mb-4 text-xs leading-relaxed text-slate-300">{CONSENT_TEXT}</p>
+        <div className="space-y-3">
+          {ACKNOWLEDGEMENTS.map((item) => (
+            <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={acknowledgements[item.id]}
+                onChange={() => toggleAcknowledgement(item.id)}
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-300 accent-cyan-400 focus:ring-cyan-300"
+              />
+              <span className="text-xs leading-5 text-slate-300">{item.label}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">

@@ -20,13 +20,29 @@ const signatureSchema = z.object({
   marketingConsent: z.literal(true, {
     errorMap: () => ({ message: 'Marketing consent acknowledgment is required' }),
   }),
+  informationAccuracyAcknowledged: z.literal(true, {
+    errorMap: () => ({ message: 'Information accuracy acknowledgment is required' }),
+  }),
+  verificationAuthorized: z.literal(true, {
+    errorMap: () => ({ message: 'Verification authorization is required' }),
+  }),
+  creditAuthorized: z.literal(true, {
+    errorMap: () => ({ message: 'Credit authorization is required' }),
+  }),
+  communicationConsent: z.literal(true, {
+    errorMap: () => ({ message: 'Communication consent is required' }),
+  }),
+  esignConsent: z.literal(true, {
+    errorMap: () => ({ message: 'Electronic signature consent is required' }),
+  }),
 });
 
 const CONSENT_TEXT =
-  'By signing this application, I certify that all information provided is accurate and complete. ' +
-  'I authorize the lender to obtain credit reports and verify all information. ' +
-  'This electronic signature is legally binding under the Electronic Signatures in Global and National ' +
-  'Commerce Act (ESIGN) and the Uniform Electronic Transactions Act (UETA).';
+  'By signing this application, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
+  'I authorize verification of business, ownership, identity, bank, revenue, and submitted application information. ' +
+  'I authorize soft credit inquiries and business credit/report checks where permitted by law. ' +
+  'I consent to be contacted about this funding request by phone, text, and email, including by authorized partners. ' +
+  'This electronic signature is legally binding under the Electronic Signatures in Global and National Commerce Act (ESIGN) and the Uniform Electronic Transactions Act (UETA).';
 
 router.post(
   '/:appId/sign',
@@ -34,7 +50,16 @@ router.post(
   validate(signatureSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.appId);
-    const { signatureData, signerName, signerEmail } = req.body as z.infer<typeof signatureSchema>;
+    const {
+      signatureData,
+      signerName,
+      signerEmail,
+      informationAccuracyAcknowledged,
+      verificationAuthorized,
+      creditAuthorized,
+      communicationConsent,
+      esignConsent,
+    } = req.body as z.infer<typeof signatureSchema>;
     const marketingConsent = true; // validated as z.literal(true) above
 
     const app = await prisma.application.findFirst({
@@ -75,6 +100,13 @@ router.post(
         signedAt: now.toISOString(),
         marketingConsent,
         marketingConsentTimestamp: now.toISOString(),
+        acknowledgements: {
+          informationAccuracyAcknowledged,
+          verificationAuthorized,
+          creditAuthorized,
+          communicationConsent,
+          esignConsent,
+        },
       },
     });
 
