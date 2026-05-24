@@ -2,7 +2,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
-import { Button } from '@/components/ui/Button';
 import { BankStatementUpload } from './BankStatementUpload';
 import { CompletionOverlay } from './CompletionOverlay';
 import { Step1EINLookup } from './steps/Step1EINLookup';
@@ -13,6 +12,7 @@ import { Step8ReviewSign } from './steps/Step8ReviewSign';
 import type { FormState, ContactInfo, BusinessInfo, OwnerInfo, FinancialInfo, LoanRequest } from '@/types/application';
 import { api } from '@/lib/api';
 import { useAnalytics, AnalyticsContext } from '@/hooks/useAnalytics';
+import { useTheme } from '@/hooks/useTheme';
 
 interface TenantSettings {
   companyName: string | null;
@@ -23,8 +23,13 @@ interface TenantSettings {
   companyAddress: string | null;
   websiteUrl: string | null;
   supportEmail: string | null;
+  theme: string | null;
   accentColor: string | null;
   surfaceColor: string | null;
+  pdfShowContactEmail: boolean;
+  pdfShowContactPhone: boolean;
+  pdfShowAnnualRevenue: boolean;
+  pdfShowAmountRequested: boolean;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -58,8 +63,28 @@ export function MultiStepForm({ token }: Props) {
     lastSaved: null,
   });
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  // Overlay visibility (can be toggled off via the close button).
   const [isComplete, setIsComplete] = useState(false);
+  // Sticky finalization flag — flipped true once POST /finalize succeeds and
+  // never reset. Drives the progress bar so it stays at 100% even after the
+  // merchant dismisses the thank-you overlay.
+  const [hasFinalized, setHasFinalized] = useState(false);
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
+  const [uploadedDocumentsCount, setUploadedDocumentsCount] = useState(0);
+
+  // Stable callback so BankStatementUpload's completion effect isn't torn down
+  // on every parent render (which would cancel the 1.2s reveal timer).
+  const handleComplete = useCallback(() => {
+    // Scroll the underlying page to the top so the fixed, centered overlay
+    // appears against the top of the form rather than a half-scrolled view.
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'auto' });
+    setHasFinalized(true);
+    setIsComplete(true);
+  }, []);
+  const handleCloseComplete = useCallback(() => setIsComplete(false), []);
+  const handleDocumentsCountChange = useCallback((count: number) => {
+    setUploadedDocumentsCount(count);
+  }, []);
 
   // Fetch public tenant settings once on mount for branding / redirect URL
   useEffect(() => {
@@ -75,6 +100,9 @@ export function MultiStepForm({ token }: Props) {
     if (tenantSettings.accentColor) root.style.setProperty('--color-accent', tenantSettings.accentColor);
     if (tenantSettings.surfaceColor) root.style.setProperty('--color-surface', tenantSettings.surfaceColor);
   }, [tenantSettings]);
+
+  // Apply tenant theme (dark/light). A user override in localStorage wins.
+  useTheme(tenantSettings?.theme ?? null);
 
   // ── Analytics: keystroke tracking, field-level events, abandonment ──
   const analytics = useAnalytics(state.applicationId, token);
@@ -239,13 +267,31 @@ export function MultiStepForm({ token }: Props) {
   if (submittedAt) {
     return state.applicationId ? (
       <>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="w-full max-w-2xl">
+            {/* Bank statements is intentionally not a visible step in the bar
+                (would deter merchants from finishing). Before final submit we
+                sit on "Review & Sign" with sub-progress walking 80% → 97%.
+                Once /finalize succeeds (hasFinalized=true) we jump past the
+                last visible step so all five circles show ✓ and the bar fills
+                to 100% — and stays there even after the overlay is dismissed. */}
+            <ProgressBar
+              currentStep={hasFinalized ? 6 : 5}
+              subProgress={hasFinalized ? 0 : Math.min(uploadedDocumentsCount / 4, 1) * 0.85}
+            />
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+            <span aria-hidden="true">✓</span> {hasFinalized ? 'Application submitted' : 'Application signed'}
+          </span>
+        </div>
         <BankStatementUpload
           applicationId={state.applicationId}
           submittedAt={submittedAt}
           token={token}
           pdfDownloading={pdfDownloading}
           onDownloadPdf={handleDownloadPdf}
-          onComplete={() => setIsComplete(true)}
+          onComplete={handleComplete}
+          onDocumentsCountChange={handleDocumentsCountChange}
         />
         {isComplete && (
           <CompletionOverlay
@@ -253,6 +299,7 @@ export function MultiStepForm({ token }: Props) {
             companyName={tenantSettings?.companyName ?? null}
             websiteUrl={tenantSettings?.websiteUrl ?? null}
             supportEmail={tenantSettings?.supportEmail ?? null}
+            onClose={handleCloseComplete}
           />
         )}
       </>
@@ -268,14 +315,6 @@ export function MultiStepForm({ token }: Props) {
           </div>
           <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
         </div>
-
-        {state.currentStep > 1 && (
-          <div className="mb-5 flex justify-start">
-            <Button type="button" variant="secondary" onClick={() => void goBackOneSection()} disabled={state.isSaving}>
-              ← Back to previous section
-            </Button>
-          </div>
-        )}
 
         {state.currentStep === 1 && (
           <Step1EINLookup business={state.business} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} />
@@ -293,7 +332,18 @@ export function MultiStepForm({ token }: Props) {
             onNext={handleStep4Next} onBack={() => void goBackOneSection()} />
           )}
         {state.currentStep === 5 && (
-          <Step8ReviewSign state={state} onBack={() => void goBackOneSection()} onSubmitted={setSubmittedAt} token={token} />
+          <Step8ReviewSign
+            state={state}
+            privacy={tenantSettings ? {
+              showContactEmail: tenantSettings.pdfShowContactEmail,
+              showContactPhone: tenantSettings.pdfShowContactPhone,
+              showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
+              showAmountRequested: tenantSettings.pdfShowAmountRequested,
+            } : undefined}
+            onBack={() => void goBackOneSection()}
+            onSubmitted={setSubmittedAt}
+            token={token}
+          />
         )}
       </div>
     </AnalyticsContext.Provider>

@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useCallback, useState, useMemo, useEffect, type PointerEvent } from 'react';
-import type { FormState, ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES, URGENCY_OPTIONS, CREDIT_SCORE_RANGES } from '@/types/application';
-import { getIndustryCodes } from '@/types/application';
+import type { FormState } from '@/types/application';
+import { ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES, URGENCY_OPTIONS, getIndustryCodes } from '@/types/application';
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
@@ -41,6 +41,11 @@ function fmtDate(v?: string): string | undefined {
   if (!v) return undefined;
   const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[2]}-${m[3]}-${m[1]}` : v;
+}
+
+function optionLabel(value: string | undefined, options: readonly { value: string; label: string }[]): string | undefined {
+  if (!value) return undefined;
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 function calculateTimeInBusiness(v?: string): string | undefined {
@@ -88,6 +93,12 @@ function initialAcknowledgements(): Record<AcknowledgementId, boolean> {
 
 interface Props {
   state: FormState;
+  privacy?: {
+    showContactEmail?: boolean;
+    showContactPhone?: boolean;
+    showAnnualRevenue?: boolean;
+    showAmountRequested?: boolean;
+  };
   onBack: () => void;
   onSubmitted: (signedAt: string) => void;
   token: string | null;
@@ -95,6 +106,7 @@ interface Props {
 
 function ReviewSection({ title, rows }: { title: string; rows: Array<[string, string | undefined, 'full'?]> }) {
   const visibleRows = rows.filter(([, v]) => v);
+  if (!visibleRows.length) return null;
   return (
     <div className="mb-5">
       <h3 className="mb-3 border-b border-white/10 pb-2 text-sm font-semibold text-cyan-200">{title}</h3>
@@ -113,7 +125,7 @@ function ReviewSection({ title, rows }: { title: string; rows: Array<[string, st
   );
 }
 
-export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
+export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: Props) {
   const owner = state.owners[0];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [signerName, setSignerName] = useState(`${owner?.firstName || state.contact.firstName} ${owner?.lastName || state.contact.lastName}`.trim());
@@ -270,8 +282,9 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
 
   const handleSubmit = async () => {
     setError('');
+    const effectiveSignerEmail = signerEmail || owner?.email || state.contact.email || '';
     if (!signerName.trim()) { setError('Please enter your full name.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) { setError('Please enter a valid email.'); return; }
+    if (!/^\S+@\S+\.\S+$/.test(effectiveSignerEmail)) { setError('Please enter a valid email.'); return; }
     if (!allAcknowledged) { setError('Please review and check each authorization before signing.'); return; }
     if (!state.applicationId) { setError('Session error. Please refresh.'); return; }
     if (!hasSignature) {
@@ -293,7 +306,7 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
         {
           signatureData,
           signerName,
-          signerEmail,
+          signerEmail: effectiveSignerEmail,
           consentAcknowledged: true,
           applicationAuthorizationAcknowledged: acknowledgements.applicationAuthorization,
           esignAndCommunicationConsent: acknowledgements.esignCommunication,
@@ -315,6 +328,10 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
   const sicCode = business.sicCode || industryCodes?.sicCode;
   const naicsCode = business.naicsCode || industryCodes?.naicsCode;
   const timeInBusiness = calculateTimeInBusiness(business.businessStartDate);
+  const showContactEmail = privacy?.showContactEmail ?? true;
+  const showContactPhone = privacy?.showContactPhone ?? true;
+  const showAnnualRevenue = privacy?.showAnnualRevenue ?? true;
+  const showAmountRequested = privacy?.showAmountRequested ?? true;
 
   return (
     <div>
@@ -329,7 +346,7 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
           ['EIN', fmtEin(business.ein || undefined)],
           ['Business Start Date', fmtDate(business.businessStartDate)],
           ['Time in Business', timeInBusiness],
-          ['Phone', fmtPhone(business.phone)], ['Website', business.website],
+          ['Phone', showContactPhone ? fmtPhone(business.phone) : undefined], ['Website', business.website],
           ['Address', business.streetAddress, 'full'],
           ['City', business.city],
           ['State', business.state],
@@ -348,16 +365,21 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
           ['Zip', owner.zipCode],
         ]} />}
         <ReviewSection title="Contact Information" rows={[
-          ['Email', contact.email], ['Phone', fmtPhone(contact.phone)],
+          ['Email', showContactEmail ? contact.email : undefined], ['Phone', showContactPhone ? fmtPhone(contact.phone) : undefined],
+        ]} />
+        <ReviewSection title="Funding Request" rows={[
+          ['Annual Revenue', showAnnualRevenue ? optionLabel(state.financial.annualRevenue, ANNUAL_REVENUE_RANGES) : undefined],
+          ['Amount Requested', showAmountRequested ? optionLabel(state.loanRequest.amountRequested, FUNDING_AMOUNT_RANGES) : undefined],
+          ['Funding Urgency', optionLabel(state.loanRequest.urgency, URGENCY_OPTIONS)],
         ]} />
       </div>
 
-      <div className="mb-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] p-4">
+      <div className="consent-panel mb-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] p-4">
         <h3 className="mb-2 text-sm font-semibold text-cyan-100">Authorizations & Electronic Signature Consent</h3>
         <p className="mb-4 text-xs leading-relaxed text-slate-300">{CONSENT_TEXT}</p>
         <div className="space-y-3">
           {ACKNOWLEDGEMENTS.map((item) => (
-            <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
+            <label key={item.id} className="consent-row flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
               <input
                 type="checkbox"
                 checked={acknowledgements[item.id]}
@@ -372,14 +394,16 @@ export function Step8ReviewSign({ state, onBack, onSubmitted, token }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <Input label="Full Name (Signer)" required autoComplete="name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
-        <Input label="Email Address (Signer)" required type="email" autoComplete="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} />
+        {showContactEmail && (
+          <Input label="Email Address (Signer)" required type="email" autoComplete="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} />
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         {/* Signature — 50% width */}
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-100">Signature</label>
-          <div className="overflow-hidden rounded-xl border-2 border-white/10 bg-slate-950/70" style={{ minHeight: 100 }}>
+          <div className="signature-box overflow-hidden rounded-xl border-2 border-white/10 bg-slate-950/70" style={{ minHeight: 100 }}>
             <canvas
               ref={canvasRef}
               width={700}

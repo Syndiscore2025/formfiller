@@ -23,7 +23,7 @@ export function SearchableSelect({
   value,
   options,
   onChange,
-  placeholder = 'Start typing to search',
+  placeholder = 'Type to search',
   error,
   hint,
   required,
@@ -125,56 +125,90 @@ export function SearchableSelect({
       </label>
 
       <div className="relative">
-        <input
-          id={inputId}
-          type="text"
-          suppressHydrationWarning
-          value={inputValue}
-          placeholder={placeholder}
-          disabled={disabled}
-          autoComplete="off"
-          className={cn(
-            'w-full rounded-xl border bg-slate-950/55 px-3.5 py-3 pr-11 text-sm text-slate-100 shadow-inner shadow-black/10',
-            'placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40',
-            'disabled:cursor-not-allowed disabled:bg-white/[0.03] disabled:text-slate-400',
-            autoPopulated && 'border-cyan-400/30 bg-cyan-400/[0.07]',
-            !autoPopulated && 'border-white/10',
-            error && 'border-red-400/60 focus:ring-red-400/30'
-          )}
-          onFocus={(event) => {
-            analytics?.onFocus(inputId);
-            setIsOpen(true);
-            event.currentTarget.select();
-          }}
-          onBlur={() => analytics?.onBlur(inputId)}
-          onKeyDown={handleKeyDown}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setIsOpen(true);
-          }}
-        />
+        {isOpen ? (
+          <input
+            id={inputId}
+            type="text"
+            suppressHydrationWarning
+            value={inputValue}
+            placeholder={placeholder}
+            disabled={disabled}
+            autoComplete="off"
+            className={cn(
+              'searchable-select-input w-full rounded-xl border bg-slate-950/55 px-3.5 py-3 pr-11 text-sm text-slate-100 shadow-inner shadow-black/10',
+              'placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40',
+              'disabled:cursor-not-allowed disabled:bg-white/[0.03] disabled:text-slate-400',
+              autoPopulated && 'border-cyan-400/30 bg-cyan-400/[0.07]',
+              !autoPopulated && 'border-white/10',
+              error && 'border-red-400/60 focus:ring-red-400/30'
+            )}
+            onFocus={(event) => {
+              analytics?.onFocus(inputId);
+              event.currentTarget.select();
+            }}
+            onBlur={() => analytics?.onBlur(inputId)}
+            onKeyDown={handleKeyDown}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setIsOpen(true);
+            }}
+            title={value || undefined}
+            autoFocus
+          />
+        ) : (
+          <button
+            id={inputId}
+            type="button"
+            disabled={disabled}
+            className={cn(
+              'searchable-select-trigger flex min-h-[46px] w-full items-center justify-between gap-3 rounded-xl border bg-slate-950/55 px-3.5 py-2.5 text-left text-sm text-slate-100 shadow-inner shadow-black/10',
+              'focus:outline-none focus:ring-2 focus:ring-cyan-300/40 focus:border-cyan-300/40',
+              'disabled:cursor-not-allowed disabled:bg-white/[0.03] disabled:text-slate-400',
+              autoPopulated && 'border-cyan-400/30 bg-cyan-400/[0.07]',
+              !autoPopulated && 'border-white/10',
+              error && 'border-red-400/60 focus:ring-red-400/30'
+            )}
+            onFocus={() => analytics?.onFocus(inputId)}
+            onBlur={() => analytics?.onBlur(inputId)}
+            onClick={() => setIsOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key.length === 1 || event.key === 'Backspace') {
+                setQuery(event.key.length === 1 ? event.key : '');
+                setIsOpen(true);
+              }
+            }}
+            title={value || undefined}
+          >
+            <span className={cn('min-w-0 flex-1 whitespace-normal break-words leading-5', !value && 'text-slate-500')}>
+              {value || placeholder}
+            </span>
+            <span className="shrink-0 text-xs text-slate-400">▼</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          tabIndex={-1}
-          disabled={disabled}
-          aria-label={isOpen ? 'Close options' : 'Open options'}
-          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-slate-200"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            setIsOpen((current) => !current);
-            if (isOpen) setQuery('');
-          }}
-        >
-          <span className={cn('text-xs transition-transform', isOpen && 'rotate-180')}>▼</span>
-        </button>
+        {isOpen && (
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={disabled}
+            aria-label="Close options"
+            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-slate-200"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setIsOpen(false);
+              setQuery('');
+            }}
+          >
+            <span className="rotate-180 text-xs transition-transform">▼</span>
+          </button>
+        )}
       </div>
 
       {hint && !error && <p className="text-xs text-slate-400">{hint}</p>}
       {error && <p className="text-xs text-red-600">{error}</p>}
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-[0_18px_50px_rgba(2,8,23,0.75)] backdrop-blur-xl">
+        <div className="searchable-select-menu absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-[0_18px_50px_rgba(2,8,23,0.75)]">
           <div className="max-h-64 overflow-y-auto py-2">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option, index) => (
@@ -182,15 +216,15 @@ export function SearchableSelect({
                   key={option}
                   type="button"
                   className={cn(
-                    'flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm text-slate-200 transition',
+                    'flex w-full items-start justify-between gap-3 px-3.5 py-2.5 text-left text-sm text-slate-200 transition',
                     index === highlightedIndex && 'bg-cyan-400/10 text-white',
                     option === value && 'text-cyan-200'
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectOption(option)}
                 >
-                  <span>{option}</span>
-                  {option === value && <span className="text-xs uppercase tracking-[0.2em] text-cyan-300">Selected</span>}
+                  <span className="min-w-0 flex-1 whitespace-normal break-words leading-5">{option}</span>
+                  {option === value && <span className="shrink-0 text-xs uppercase tracking-[0.2em] text-cyan-300">Selected</span>}
                 </button>
               ))
             ) : (

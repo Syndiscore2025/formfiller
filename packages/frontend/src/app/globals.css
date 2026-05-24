@@ -2,15 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+[data-theme='dark'] {
   --bg-gradient:
     radial-gradient(circle at top left, rgba(28, 99, 255, 0.22), transparent 32%),
     radial-gradient(circle at top right, rgba(0, 196, 255, 0.14), transparent 28%),
     radial-gradient(circle at bottom center, rgba(98, 0, 234, 0.18), transparent 36%),
     linear-gradient(135deg, #030712 0%, #071225 46%, #081529 100%);
+  --html-bg: #030712;
   --surface-border: rgba(148, 163, 184, 0.16);
   --surface-copy: #d7e1f3;
   --surface-muted: #8ca0bf;
+  --panel-bg: rgba(2, 6, 23, 0.45);
+  --panel-soft-bg: rgba(255, 255, 255, 0.04);
+  --panel-border: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='light'] {
+  --bg-gradient:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.08), transparent 26%),
+    linear-gradient(180deg, #ffffff 0%, #f7fcff 48%, #eff8ff 100%);
+  --html-bg: #ffffff;
+  --surface-border: rgba(14, 116, 144, 0.12);
+  --surface-copy: #0f172a;
+  --surface-muted: #475569;
+  --panel-bg: #ffffff;
+  --panel-soft-bg: #ffffff;
+  --panel-border: rgba(14, 116, 144, 0.14);
 }
 
 @layer base {
@@ -19,11 +37,12 @@
   }
 
   html {
-    background: #030712;
+    background: var(--html-bg);
   }
 
   body {
     background: var(--bg-gradient);
+    background-attachment: fixed;
     color: var(--surface-copy);
     min-height: 100vh;
     position: relative;
@@ -70,6 +89,27 @@
     background-color: #081120;
     color: #e5eefb;
   }
+
+  [data-theme='light'] body::before,
+  [data-theme='light'] body::after {
+    display: none;
+  }
+
+  [data-theme='light'] ::selection {
+    background: rgba(34, 211, 238, 0.35);
+    color: #0f172a;
+  }
+
+  [data-theme='light'] input,
+  [data-theme='light'] select,
+  [data-theme='light'] textarea {
+    color-scheme: light;
+  }
+
+  [data-theme='light'] select option {
+    background-color: #ffffff;
+    color: #0f172a;
+  }
 }
 
 @layer components {
@@ -96,5 +136,404 @@
   .surface-stat {
     @apply rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm;
   }
+}
+
+/*
+ * ─── Light theme overrides ─────────────────────────────────────────────────
+ * Re-skins the dark glassmorphism panels for a clean white surface. Tailwind
+ * utility text/background classes used inside panels are overridden via
+ * attribute selectors so existing markup keeps working without per-component
+ * theme branches. The Button component sets `data-variant` so primary/danger
+ * CTAs keep their white-on-dark-gradient labels while every other element
+ * (Toggle rows, segmented pickers, links, etc.) gets dark text.
+ */
+[data-theme='light'] .surface-panel {
+  background: var(--panel-bg);
+  border-color: var(--panel-border);
+  color: var(--surface-copy);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+}
+[data-theme='light'] .surface-panel-soft {
+  background: var(--panel-soft-bg);
+  border-color: var(--panel-border);
+  color: var(--surface-copy);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+[data-theme='light'] .surface-stat {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: var(--panel-border);
+}
+[data-theme='light'] .surface-pill {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: var(--panel-border);
+  color: #334155;
+}
+
+/* Text overrides — primary/danger CTA buttons set data-variant so we can
+ * preserve their white-on-gradient labels while flipping every other element
+ * (Toggle rows, segmented pickers, links, plain text) to dark slate. */
+[data-theme='light'] :is(.text-white, .text-slate-50, .text-slate-100, .text-slate-200) {
+  color: #0f172a;
+}
+[data-theme='light'] :is(.text-slate-300, .text-slate-400) {
+  color: #475569;
+}
+[data-theme='light'] :is(.text-slate-500, .text-slate-600) {
+  color: #64748b;
+}
+
+/* Keep danger CTA buttons readable; primary buttons are solid cyan with dark text. */
+[data-theme='light'] button[data-variant='primary'],
+[data-theme='light'] button[data-variant='primary'] *,
+[data-theme='light'] button[data-variant='danger'],
+[data-theme='light'] button[data-variant='danger'] * {
+  color: #ffffff;
+}
+
+/* Colored info/status panels — used in IntegrationSection ("How API delivery works"),
+ * privacy reminders, success/error banners. Re-tone the washed-out dark-mode tints
+ * to readable darker shades on light backgrounds. */
+[data-theme='light'] :is(.text-cyan-50, .text-cyan-100, .text-cyan-200, .text-cyan-300) {
+  color: #0e7490;
+}
+[data-theme='light'] :is(.text-cyan-400, .text-cyan-500) {
+  color: #0891b2;
+}
+[data-theme='light'] :is(.text-emerald-50, .text-emerald-100, .text-emerald-200, .text-emerald-300) {
+  color: #047857;
+}
+[data-theme='light'] :is(.text-emerald-400, .text-emerald-500) {
+  color: #059669;
+}
+[data-theme='light'] :is(.text-red-50, .text-red-100, .text-red-200, .text-red-300) {
+  color: #b91c1c;
+}
+[data-theme='light'] :is(.text-red-400, .text-red-500) {
+  color: #dc2626;
+}
+[data-theme='light'] :is(.text-amber-50, .text-amber-100, .text-amber-200, .text-amber-300) {
+  color: #b45309;
+}
+
+/* Tinted background panels (info/success/error boxes) — lighten the dark-mode
+ * opacity fills so they read as soft pastels on a white surface. Covers both
+ * the `-500/x` and `-400/x` variants and the arbitrary-alpha forms (`/[0.06]`). */
+[data-theme='light'] :is(
+  .bg-cyan-500\/10, .bg-cyan-500\/15, .bg-cyan-500\/20,
+  .bg-cyan-400\/10, .bg-cyan-400\/15, .bg-cyan-400\/20,
+  .bg-cyan-400\/\[0\.06\], .bg-cyan-400\/\[0\.08\]
+) {
+  background-color: rgba(8, 145, 178, 0.08);
+}
+[data-theme='light'] :is(
+  .bg-emerald-500\/10, .bg-emerald-500\/15, .bg-emerald-500\/20,
+  .bg-emerald-400\/10, .bg-emerald-400\/15, .bg-emerald-400\/20
+) {
+  background-color: rgba(5, 150, 105, 0.08);
+}
+[data-theme='light'] :is(
+  .bg-red-500\/10, .bg-red-500\/15, .bg-red-500\/20,
+  .bg-red-400\/10, .bg-red-400\/15, .bg-red-400\/20
+) {
+  background-color: rgba(220, 38, 38, 0.08);
+}
+[data-theme='light'] :is(
+  .bg-amber-500\/10, .bg-amber-500\/15, .bg-amber-500\/20,
+  .bg-amber-400\/10, .bg-amber-400\/15, .bg-amber-400\/20
+) {
+  background-color: rgba(217, 119, 6, 0.08);
+}
+
+/* Tinted borders that match the panels above. */
+[data-theme='light'] :is(
+  .border-cyan-400\/20, .border-cyan-400\/25, .border-cyan-400\/30, .border-cyan-400\/40,
+  .border-cyan-300\/40, .border-cyan-300\/60,
+  .border-cyan-500\/30, .border-cyan-500\/40
+) {
+  border-color: rgba(8, 145, 178, 0.3);
+}
+[data-theme='light'] :is(
+  .border-emerald-400\/25, .border-emerald-400\/30, .border-emerald-400\/40,
+  .border-emerald-500\/30, .border-emerald-500\/40
+) {
+  border-color: rgba(5, 150, 105, 0.3);
+}
+[data-theme='light'] :is(
+  .border-red-400\/30, .border-red-400\/40,
+  .border-red-500\/30, .border-red-500\/40
+) {
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+/* Form fields — Input/Select/DateField/Textarea use bg-slate-950/55 by default. */
+[data-theme='light'] .bg-slate-950\/55,
+[data-theme='light'] .bg-slate-950\/45 {
+  background-color: rgba(255, 255, 255, 0.85);
+}
+[data-theme='light'] input,
+[data-theme='light'] select,
+[data-theme='light'] textarea {
+  color: #0f172a;
+}
+[data-theme='light'] input::placeholder,
+[data-theme='light'] textarea::placeholder {
+  color: #94a3b8;
+}
+
+/* Card/panel borders that hardcoded white tints */
+[data-theme='light'] .border-white\/10,
+[data-theme='light'] .border-white\/12,
+[data-theme='light'] .border-white\/20 {
+  border-color: var(--panel-border);
+}
+
+/* Section dividers, progress rails, soft fills, hover states that used
+ * translucent whites — flip to a low-alpha dark tint for parity on light. */
+[data-theme='light'] :is(
+  .bg-white\/\[0\.04\], .bg-white\/\[0\.05\], .bg-white\/\[0\.06\],
+  .bg-white\/\[0\.08\], .bg-white\/\[0\.1\],
+  .bg-white\/5, .bg-white\/10
+) {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+[data-theme='light'] :is(
+  .bg-white\/\[0\.03\], .bg-white\/\[0\.025\]
+) {
+  background-color: rgba(15, 23, 42, 0.025);
+}
+
+/* Hover states that bump translucent whites slightly. */
+[data-theme='light'] .hover\:bg-white\/\[0\.05\]:hover,
+[data-theme='light'] .hover\:bg-white\/\[0\.08\]:hover,
+[data-theme='light'] .hover\:bg-white\/\[0\.1\]:hover {
+  background-color: rgba(15, 23, 42, 0.06);
+}
+[data-theme='light'] :is(
+  .hover\:border-white\/20:hover, .hover\:border-cyan-300\/40:hover,
+  .hover\:border-cyan-300\/30:hover, .hover\:border-red-300\/40:hover
+) {
+  border-color: rgba(15, 23, 42, 0.18);
+}
+
+/* Toggle "off" state uses bg-slate-700/60 which stays dark — that's fine,
+ * but in light mode it can be too heavy. Lighten the off-state track. */
+[data-theme='light'] .bg-slate-700\/60 {
+  background-color: rgba(148, 163, 184, 0.5);
+}
+
+/* ─── Light mode cleanup pass ────────────────────────────────────────────────
+ * Keep light mode crisp and opaque. No glassy see-through dropdowns/calendars,
+ * no dark/gray cards, and no gradient CTAs. */
+[data-theme='light'] .surface-panel,
+[data-theme='light'] .surface-panel-soft {
+  background: #ffffff;
+  border-color: rgba(14, 116, 144, 0.14);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+  backdrop-filter: none;
+}
+
+[data-theme='light'] button[data-variant='primary'] {
+  background: #0284c7;
+  border-color: #0369a1;
+  box-shadow: 0 10px 24px rgba(2, 132, 199, 0.26);
+}
+[data-theme='light'] button[data-variant='primary'],
+[data-theme='light'] button[data-variant='primary'] * {
+  color: #ffffff;
+}
+[data-theme='light'] button[data-variant='primary']:hover {
+  background: #0369a1;
+  border-color: #075985;
+}
+[data-theme='light'] button[data-variant='secondary'] {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #0f172a;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+[data-theme='light'] button[data-variant='secondary']:hover {
+  background: #f0f9ff;
+  border-color: rgba(8, 145, 178, 0.28);
+}
+[data-theme='light'] button[data-variant='danger'],
+[data-theme='light'] button[data-variant='danger'] * {
+  color: #ffffff;
+}
+
+/* Opaque menus/popovers. */
+.searchable-select-menu {
+  background: #071120;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme='light'] .searchable-select-menu {
+  background: #ffffff;
+  border-color: rgba(2, 132, 199, 0.35);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+}
+[data-theme='light'] .searchable-select-menu button:hover,
+[data-theme='light'] .searchable-select-menu .bg-cyan-400\/10 {
+  background-color: #dff3ff;
+}
+[data-theme='light'] .searchable-select-trigger,
+[data-theme='light'] .searchable-select-input {
+  background: #f8fcff;
+  border-color: rgba(2, 132, 199, 0.24);
+  color: #0f172a;
+}
+[data-theme='light'] .searchable-select-trigger:focus,
+[data-theme='light'] .searchable-select-input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
+}
+
+.date-popover {
+  background: #071120;
+  border-color: rgba(34, 211, 238, 0.22);
+  box-shadow: 0 24px 70px rgba(2, 8, 23, 0.72);
+}
+.date-control {
+  background: rgba(2, 6, 23, 0.72);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme='light'] .date-popover {
+  background: #ffffff;
+  border-color: rgba(2, 132, 199, 0.35);
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.16);
+}
+[data-theme='light'] .date-control {
+  background: #f3faff;
+  border-color: rgba(2, 132, 199, 0.28);
+  color: #0f172a;
+}
+[data-theme='light'] .date-popover .bg-cyan-400\/15,
+[data-theme='light'] .date-popover .bg-cyan-400\/10,
+[data-theme='light'] .date-popover .bg-cyan-400\/5 {
+  background-color: #dff3ff;
+}
+[data-theme='light'] .date-popover .border-cyan-300\/50,
+[data-theme='light'] .date-popover .border-cyan-400\/30 {
+  border-color: rgba(2, 132, 199, 0.45);
+}
+
+/* Replace dark translucent fills with clean white/blue-tinted surfaces. */
+[data-theme='light'] :is(
+  .bg-slate-950\/35, .bg-slate-950\/45, .bg-slate-950\/55,
+  .bg-slate-950\/70, .bg-slate-950\/85, .bg-slate-950\/95
+) {
+  background-color: #ffffff;
+}
+[data-theme='light'] .shadow-inner {
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* Revenue/Funding option cards. */
+[data-theme='light'] .choice-card {
+  background: #f8fcff;
+  border-color: rgba(2, 132, 199, 0.24);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
+}
+[data-theme='light'] .choice-card p:first-child {
+  color: #0284c7;
+}
+[data-theme='light'] .choice-option {
+  background: #ffffff;
+  border-color: rgba(2, 132, 199, 0.18);
+  color: #1e293b;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.04);
+}
+[data-theme='light'] .choice-option:hover {
+  background: #eef8ff;
+  border-color: rgba(2, 132, 199, 0.36);
+}
+[data-theme='light'] .choice-option-selected {
+  background: #dff3ff;
+  border-color: rgba(2, 132, 199, 0.58);
+  color: #0f172a;
+}
+[data-theme='light'] .choice-option > span > span:first-child {
+  border-color: rgba(2, 132, 199, 0.28);
+  background: #f8fcff;
+}
+[data-theme='light'] .choice-option-selected > span > span:first-child {
+  border-color: #0284c7;
+  background: #0284c7;
+  box-shadow: inset 0 0 0 4px #ffffff, 0 0 0 3px rgba(2, 132, 199, 0.18);
+}
+
+/* Owner verification and authorization/signature areas. */
+[data-theme='light'] .owner-verification-card {
+  background: #ffffff;
+  border-color: rgba(14, 116, 144, 0.2);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+[data-theme='light'] .consent-panel,
+[data-theme='light'] .bank-help-result {
+  background: #ecfeff;
+  border-color: rgba(8, 145, 178, 0.24);
+}
+[data-theme='light'] .consent-row,
+[data-theme='light'] .signature-box {
+  background: #ffffff;
+  border-color: rgba(14, 116, 144, 0.16);
+}
+
+/* Bank statement page and need-help panel. */
+[data-theme='light'] .bank-submit-panel {
+  background: #e8f8ef;
+  border-color: rgba(5, 150, 105, 0.32);
+  box-shadow: 0 16px 36px rgba(5, 150, 105, 0.08);
+}
+[data-theme='light'] .need-help-panel {
+  background: #ffffff;
+  border-color: rgba(2, 132, 199, 0.2);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+[data-theme='light'] .bank-upload-page {
+  background: #fbfdff;
+  border-color: rgba(2, 132, 199, 0.18);
+}
+[data-theme='light'] .bank-upload-card {
+  background: #f8fcff;
+  border-color: rgba(2, 132, 199, 0.22);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+}
+[data-theme='light'] .bank-file-card {
+  background: #ffffff;
+  border-color: rgba(2, 132, 199, 0.18);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+[data-theme='light'] .bank-empty-card {
+  background: #f3faff;
+  border-color: rgba(2, 132, 199, 0.26);
+}
+
+/* Step 2 business confirmation card. */
+[data-theme='light'] .business-confirm-card {
+  background: #f8fcff;
+  border-color: rgba(2, 132, 199, 0.22);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+}
+[data-theme='light'] .business-confirm-row {
+  background: #ffffff;
+  border: 1px solid rgba(2, 132, 199, 0.1);
+}
+[data-theme='light'] .business-confirm-row:nth-child(even) {
+  background: #f3faff;
+}
+[data-theme='light'] .home-business-switch.is-off {
+  background: #cbd5e1;
+  border-color: #94a3b8;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+[data-theme='light'] .home-business-switch.is-on {
+  background: #0284c7;
+  border-color: #0369a1;
+  box-shadow: 0 10px 22px rgba(2, 132, 199, 0.22);
+}
+
+/* Avoid washed-out disabled/placeholder text. */
+[data-theme='light'] .disabled\:text-slate-400:disabled,
+[data-theme='light'] .text-slate-500 {
+  color: #64748b;
 }
 

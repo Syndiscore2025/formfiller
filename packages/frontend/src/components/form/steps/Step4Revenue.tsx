@@ -24,7 +24,7 @@ function ChoiceGroup({ fieldId, label, options, value, onChange, error, required
   const analytics = useAnalyticsContext();
 
   return (
-    <section className="surface-panel-soft flex h-full flex-col gap-4 p-4 sm:p-5">
+    <section className="choice-card surface-panel-soft flex h-full flex-col gap-4 p-4 sm:p-5">
       <div className="space-y-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200/80">Select one</p>
         <label className="text-sm font-semibold text-slate-100">
@@ -50,10 +50,10 @@ function ChoiceGroup({ fieldId, label, options, value, onChange, error, required
                 onChange(option.value);
               }}
               className={cn(
-                'group w-full rounded-2xl border px-3.5 py-3 text-left transition-all duration-200',
+                'choice-option group w-full rounded-2xl border px-3.5 py-3 text-left transition-all duration-200',
                 'focus:outline-none focus:ring-2 focus:ring-cyan-300/40',
                 selected
-                  ? 'border-cyan-300/60 bg-cyan-400/[0.12] text-white shadow-[0_0_0_1px_rgba(103,232,249,0.18)]'
+                  ? 'choice-option-selected border-cyan-300/60 bg-cyan-400/[0.12] text-white shadow-[0_0_0_1px_rgba(103,232,249,0.18)]'
                   : 'border-white/10 bg-slate-950/55 text-slate-200 hover:border-white/20 hover:bg-white/[0.05]'
               )}
             >

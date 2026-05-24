@@ -4,10 +4,17 @@ import { cn } from '@/lib/cn';
 
 interface ProgressBarProps {
   currentStep: number;
+  /**
+   * Progress within the current step (0–1). Used to advance the bar
+   * gradually for steps that contain meaningful internal progress
+   * (e.g. uploading 4 bank statements one at a time).
+   */
+  subProgress?: number;
 }
 
-export function ProgressBar({ currentStep }: ProgressBarProps) {
-  const pct = Math.round(((currentStep - 1) / (STEPS.length - 1)) * 100);
+export function ProgressBar({ currentStep, subProgress = 0 }: ProgressBarProps) {
+  const clampedSub = Math.max(0, Math.min(1, subProgress));
+  const pct = Math.round(((currentStep - 1 + clampedSub) / STEPS.length) * 100);
 
   return (
     <div className="w-full">

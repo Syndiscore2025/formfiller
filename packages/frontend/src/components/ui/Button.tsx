@@ -11,10 +11,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<Variant, string> = {
-  primary: 'border border-cyan-400/40 bg-[linear-gradient(135deg,rgba(34,211,238,0.28),rgba(59,130,246,0.4)_45%,rgba(15,23,42,0.88))] text-white shadow-[0_10px_30px_rgba(34,211,238,0.18)] hover:border-cyan-300/60 hover:brightness-110',
+  primary: 'border border-sky-700 bg-sky-600 text-white shadow-[0_8px_22px_rgba(2,132,199,0.26)] hover:border-sky-800 hover:bg-sky-700',
   secondary: 'border border-white/12 bg-white/[0.05] text-slate-100 hover:bg-white/[0.1] hover:border-white/20',
   ghost: 'border border-transparent bg-transparent text-slate-300 hover:bg-white/[0.05] hover:text-white',
-  danger: 'border border-red-400/40 bg-red-500/20 text-red-50 hover:bg-red-500/30 hover:border-red-300/50',
+  danger: 'border border-red-600 bg-red-600 text-white hover:bg-red-500 hover:border-red-500',
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -35,6 +35,7 @@ export function Button({
   return (
     <button
       disabled={disabled || loading}
+      data-variant={variant}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-xl font-semibold',
         'transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300/60 focus:ring-offset-0',

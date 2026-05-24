@@ -302,7 +302,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
         )}
       >
         <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-          <div className="surface-panel-soft border border-cyan-400/20 bg-slate-950/95 p-7 shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(34,211,238,0.08)]">
+          <div className="owner-verification-card surface-panel-soft border border-cyan-400/20 bg-slate-950/95 p-7 shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(34,211,238,0.08)]">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Identity check</p>

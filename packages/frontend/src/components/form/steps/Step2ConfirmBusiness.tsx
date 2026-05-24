@@ -311,61 +311,74 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
         {tollFreeModal}
 
         <div className={`transition duration-300 ${showTollFreeModal ? 'pointer-events-none select-none blur-[1px] saturate-50' : ''}`}>
-          <h2 className="mb-1 text-xl font-bold text-white">Is this information correct?</h2>
-          <p className="mb-6 text-sm text-slate-400">
-            We found the following details about your business.
-          </p>
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200">Business match found</p>
+              <h2 className="text-2xl font-bold tracking-tight text-white">Is this information correct?</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Review the details we found. Edit anything that is missing or incorrect before continuing.
+              </p>
+            </div>
+            <span className="surface-pill shrink-0">Step 2 review</span>
+          </div>
 
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <div className="business-confirm-card rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Business details</p>
+                <p className="mt-1 text-xs text-slate-400">Pulled from business lookup and merchant entry.</p>
+              </div>
+              <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                {confirmedFields.length} fields
+              </span>
+            </div>
+
+            <div className="grid gap-2">
             {confirmedFields.map(({ key, label }) => (
               <Fragment key={key}>
-                <div className="flex justify-between text-sm">
+                <div className="business-confirm-row flex flex-col gap-1 rounded-xl px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-slate-400">{label}</span>
-                  <span className="text-right font-medium text-slate-100">{displayVal(key)}</span>
+                  <span className="font-semibold text-slate-100 sm:text-right">{displayVal(key)}</span>
                 </div>
                 {key === 'industry' && displayIndustryCodes.sicCode && (
-                  <div className="flex justify-between text-sm">
+                  <div className="business-confirm-row flex flex-col gap-1 rounded-xl px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-slate-400">SIC</span>
-                    <span className="text-right font-medium text-slate-100">{displayIndustryCodes.sicCode}</span>
+                    <span className="font-semibold text-slate-100 sm:text-right">{displayIndustryCodes.sicCode}</span>
                   </div>
                 )}
                 {key === 'industry' && displayIndustryCodes.naicsCode && (
-                  <div className="flex justify-between text-sm">
+                  <div className="business-confirm-row flex flex-col gap-1 rounded-xl px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-slate-400">NAICS</span>
-                    <span className="text-right font-medium text-slate-100">{displayIndustryCodes.naicsCode}</span>
+                    <span className="font-semibold text-slate-100 sm:text-right">{displayIndustryCodes.naicsCode}</span>
                   </div>
                 )}
               </Fragment>
             ))}
-          </div>
-
-          {/* Home based business toggle */}
-          {hasBusinessAddr && (
-            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-sm font-medium text-slate-200">Home Based Business?</p>
-
+            {hasBusinessAddr && (
+              <div className="business-confirm-row flex flex-col gap-1 rounded-xl px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-slate-400">Home Based Business</span>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={homeAddrSame}
                   aria-label="Home Based Business"
                   onClick={() => setHomeAddrSame((current) => !current)}
-                  className={`relative inline-flex h-7 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/60 ${
+                  className={`home-business-switch relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/40 ${
                     homeAddrSame
-                      ? 'border-cyan-300/50 bg-cyan-400/20'
-                      : 'border-white/10 bg-slate-950/70'
+                      ? 'is-on border-sky-600 bg-sky-600'
+                      : 'is-off border-slate-600 bg-slate-800/80'
                   }`}
                 >
                   <span
-                    className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                      homeAddrSame ? 'translate-x-5' : 'translate-x-1'
+                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-md transition-transform ${
+                      homeAddrSame ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
               </div>
+            )}
             </div>
-          )}
+          </div>
 
           <div className="flex gap-3 justify-between mt-8">
             <Button variant="secondary" onClick={onBack}>← Back</Button>

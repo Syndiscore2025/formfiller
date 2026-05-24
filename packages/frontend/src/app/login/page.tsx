@@ -26,7 +26,8 @@ export default function LoginPage() {
       } else {
         await register(email, password, tenantSlug, tenantName || undefined);
       }
-      router.push('/apply');
+      const redirect = new URLSearchParams(window.location.search).get('redirect');
+      router.push(redirect || '/apply');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {

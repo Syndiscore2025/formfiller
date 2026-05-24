@@ -7,9 +7,10 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 import { bankHelpLimiter } from '../middleware/rateLimiter';
 import { writeAuditLog } from '../services/auditLog.service';
-import { pushToSwitchboxCrm, buildHeatmap, enqueueCrmDelivery } from '../services/crm.service';
-import { generateApplicationPdf, TenantBranding } from '../services/pdf.service';
+import { enqueueCrmDelivery } from '../services/crm.service';
+import { generateApplicationPdf, TenantBranding, PdfVisibility } from '../services/pdf.service';
 import { generateBankStatementHelp } from '../services/bankHelp.service';
+import { downloadTenantDocument, uploadTenantDocument } from '../services/documentStorage.service';
 import { decrypt } from '../utils/encryption';
 
 const router = Router();
@@ -151,7 +152,7 @@ router.get(
   ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.id);
-    const app = await prisma.application.findFirst({ where: { id: appId, tenantId: req.tenantId! }, select: { id: true } });
+    const app = await prisma.application.findFirst({ where: { id: appId, tenantId: req.tenantId! }, select: { id: true, tenantId: true } });
     if (!app) throw createError('Application not found', 404);
 
     let documents;
@@ -179,7 +180,7 @@ router.post(
   validate(documentUploadSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.id);
-    const app = await prisma.application.findFirst({ where: { id: appId, tenantId: req.tenantId! }, select: { id: true } });
+    const app = await prisma.application.findFirst({ where: { id: appId, tenantId: req.tenantId! }, select: { id: true, tenantId: true } });
     if (!app) throw createError('Application not found', 404);
 
     const { statementMonth, fileName, mimeType, fileData } = req.body as z.infer<typeof documentUploadSchema>;
@@ -191,6 +192,16 @@ router.post(
     const content = Buffer.from(base64, 'base64');
     if (!content.length) throw createError('The uploaded PDF was empty', 400);
     if (content.length > 10 * 1024 * 1024) throw createError('Each PDF must be 10MB or smaller', 400);
+
+    const storageRef = await uploadTenantDocument({
+      tenantId: app.tenantId,
+      applicationId: appId,
+      documentType: 'bank_statement',
+      statementMonth,
+      fileName: normalizedFileName,
+      mimeType: 'application/pdf',
+      content,
+    });
 
     let saved;
     try {
@@ -206,7 +217,12 @@ router.post(
           fileName: normalizedFileName,
           mimeType: 'application/pdf',
           sizeBytes: content.length,
-          content,
+          content: storageRef ? null : content,
+          storageProvider: storageRef?.storageProvider ?? null,
+          storageBucket: storageRef?.storageBucket ?? null,
+          storageKey: storageRef?.storageKey ?? null,
+          storageUrl: storageRef?.storageUrl ?? null,
+          storageEtag: storageRef?.storageEtag ?? null,
         },
         create: {
           applicationId: appId,
@@ -215,7 +231,12 @@ router.post(
           fileName: normalizedFileName,
           mimeType: 'application/pdf',
           sizeBytes: content.length,
-          content,
+          content: storageRef ? null : content,
+          storageProvider: storageRef?.storageProvider ?? null,
+          storageBucket: storageRef?.storageBucket ?? null,
+          storageKey: storageRef?.storageKey ?? null,
+          storageUrl: storageRef?.storageUrl ?? null,
+          storageEtag: storageRef?.storageEtag ?? null,
         },
         select: { id: true, statementMonth: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true },
       });
@@ -229,21 +250,61 @@ router.post(
     await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
     await writeAuditLog({ applicationId: appId, action: 'BANK_STATEMENT_UPLOADED', actor: req.userId, ipAddress: req.ip, details: { statementMonth, fileName: normalizedFileName, sizeBytes: content.length } });
 
-    // Trigger CRM delivery once the application has ≥ 4 bank statements and is submitted
-    const docCount = await prisma.applicationDocument.count({ where: { applicationId: appId, documentType: 'bank_statement' } });
-    if (docCount >= 4) {
-      const submitted = await prisma.application.findFirst({
-        where: { id: appId, status: 'submitted' },
-        select: { tenantId: true },
-      });
-      if (submitted) {
-        enqueueCrmDelivery(appId, submitted.tenantId).catch((err: Error) =>
-          console.error('[CRM] Enqueue error after document upload:', err.message)
-        );
-      }
-    }
+    // Note: CRM delivery is intentionally NOT auto-triggered here. The merchant
+    // explicitly clicks "Submit Application" on the bank-statements screen,
+    // which calls POST /:id/finalize below to enqueue delivery.
 
     res.status(201).json({ success: true, data: saved });
+  })
+);
+
+async function readDocumentContent(tenantId: string, document: { content: Uint8Array | null; storageKey: string | null }): Promise<Buffer> {
+  if (document.storageKey) return downloadTenantDocument(tenantId, document.storageKey);
+  if (document.content) return Buffer.from(document.content);
+  throw createError('Document content is unavailable.', 404);
+}
+
+// POST /applications/:id/finalize — merchant clicks the final "Submit Application"
+// button on the bank-statements screen to officially hand off the package.
+// Guests (the merchant) are allowed because they hold the application token.
+router.post(
+  '/:id/finalize',
+  ...guestAccess,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const appId = String(req.params.id);
+    const app = await prisma.application.findFirst({
+      where: { id: appId, tenantId: req.tenantId! },
+      select: { id: true, status: true, tenantId: true, finalizedAt: true },
+    });
+    if (!app) throw createError('Application not found', 404);
+    if (app.status !== 'submitted') {
+      throw createError('Application must be signed before it can be finalized.', 400);
+    }
+
+    const docCount = await prisma.applicationDocument.count({
+      where: { applicationId: appId, documentType: 'bank_statement' },
+    });
+
+    const now = new Date();
+    if (!app.finalizedAt) {
+      await prisma.application.update({
+        where: { id: appId },
+        data: { finalizedAt: now, lastActivityAt: now },
+      });
+      await writeAuditLog({
+        applicationId: appId,
+        action: 'APPLICATION_FINALIZED',
+        actor: req.userId,
+        ipAddress: req.ip,
+        details: { bankStatementCount: docCount },
+      });
+    }
+
+    enqueueCrmDelivery(appId, app.tenantId).catch((err: Error) =>
+      console.error('[CRM] Enqueue error after finalize:', err.message)
+    );
+
+    res.json({ success: true, data: { finalizedAt: (app.finalizedAt ?? now).toISOString(), bankStatementCount: docCount } });
   })
 );
 
@@ -301,7 +362,8 @@ router.post(
   })
 );
 
-// POST /applications/:id/submit — finalize and push to CRM (guests allowed)
+// POST /applications/:id/submit — mark the signed application submitted.
+// Lender/API handoff is intentionally deferred to POST /:id/finalize.
 router.post(
   '/:id/submit',
   ...guestAccess,
@@ -309,7 +371,7 @@ router.post(
     const submitAppId = String(req.params.id);
     const app = await prisma.application.findFirst({
       where: { id: submitAppId, tenantId: req.tenantId! },
-      include: { business: true, owners: true, financial: true, loanRequest: true, signature: true },
+      select: { id: true, tenantId: true, signature: { select: { id: true } } },
     });
     if (!app) throw createError('Application not found', 404);
     if (!app.signature) throw createError('Signature required before submission', 400);
@@ -317,20 +379,11 @@ router.post(
     await prisma.application.update({ where: { id: app.id }, data: { status: 'submitted', completionPct: 100 } });
     await writeAuditLog({ applicationId: app.id, action: 'APPLICATION_SUBMITTED', actor: req.userId, ipAddress: req.ip });
 
-    // Build analytics heatmap and push to CRM asynchronously
-    buildHeatmap(app.id).then((analyticsHeatmap) => {
-      return pushToSwitchboxCrm({
-        applicationId: app.id,
-        tenantId: app.tenantId,
-        status: 'submitted',
-        business: app.business as Record<string, unknown> ?? undefined,
-        owners: (app.owners as Record<string, unknown>[]) ?? undefined,
-        financial: app.financial as Record<string, unknown> ?? undefined,
-        loanRequest: app.loanRequest as Record<string, unknown> ?? undefined,
-        submittedAt: new Date().toISOString(),
-        analyticsHeatmap,
-      });
-    }).catch((err: Error) => console.error('CRM push error:', err.message));
+    // Do not push raw signed application data from this legacy submit step.
+    // Lender/API delivery happens only after the merchant clicks the final
+    // Submit Application button, via POST /:id/finalize -> enqueueCrmDelivery.
+    // That path builds a privacy-aware package and redacts fields based on the
+    // tenant PDF Privacy toggles before sending anything to the lender API.
 
     res.json({ success: true });
   })
@@ -345,11 +398,16 @@ router.get(
     const [app, tenantSettings] = await Promise.all([
       prisma.application.findFirst({
         where: { id: pdfAppId, tenantId: req.tenantId! },
-        include: { business: true, owners: { orderBy: { ownerIndex: 'asc' } }, signature: true },
+        include: { business: true, owners: { orderBy: { ownerIndex: 'asc' } }, signature: true, financial: true, loanRequest: true },
       }),
       prisma.tenantSettings.findUnique({
         where: { tenantId: req.tenantId! },
-        select: { companyName: true, legalBusinessName: true, logoUrl: true, companyEmail: true, companyPhone: true, companyAddress: true },
+        select: {
+          companyName: true, legalBusinessName: true, logoUrl: true,
+          companyEmail: true, companyPhone: true, companyAddress: true,
+          pdfShowContactEmail: true, pdfShowContactPhone: true,
+          pdfShowAnnualRevenue: true, pdfShowAmountRequested: true,
+        },
       }),
     ]);
     if (!app) throw createError('Application not found', 404);
@@ -374,6 +432,13 @@ router.get(
       companyEmail: tenantSettings.companyEmail ?? undefined,
       companyPhone: tenantSettings.companyPhone ?? undefined,
       companyAddress: tenantSettings.companyAddress ?? undefined,
+    } : undefined;
+
+    const visibility: PdfVisibility | undefined = tenantSettings ? {
+      showContactEmail: tenantSettings.pdfShowContactEmail,
+      showContactPhone: tenantSettings.pdfShowContactPhone,
+      showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
+      showAmountRequested: tenantSettings.pdfShowAmountRequested,
     } : undefined;
 
     const stream = generateApplicationPdf({
@@ -409,13 +474,20 @@ router.get(
         email: app.contactEmail ?? undefined,
         phone: app.contactPhone ?? undefined,
       },
+      financial: app.financial ? {
+        annualRevenue: app.financial.annualRevenue ?? undefined,
+      } : undefined,
+      loanRequest: app.loanRequest ? {
+        amountRequested: app.loanRequest.amountRequested ?? undefined,
+        urgency: app.loanRequest.urgency ?? undefined,
+      } : undefined,
       signature: {
         signerName: sig.signerName,
         signerEmail: sig.signerEmail,
         signedAt: sig.signedAt.toISOString(),
         signatureData: sig.signatureData,
       },
-    }, branding);
+    }, branding, visibility);
     stream.pipe(res);
   })
 );

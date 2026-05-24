@@ -95,9 +95,45 @@ interface ApplicationData {
     streetAddress?: string; city?: string; state?: string; zipCode?: string;
   };
   contact?: { email?: string; phone?: string };
+  financial?: { annualRevenue?: string };
+  loanRequest?: { amountRequested?: string; urgency?: string };
   signature?: {
     signerName: string; signerEmail: string; signedAt: string; signatureData?: string;
   };
+}
+
+/* ── Human-readable labels for stored range / option codes (mirror frontend) ── */
+
+const ANNUAL_REVENUE_LABELS: Record<string, string> = {
+  '0-100k':    '$0 - $100,000',
+  '100k-250k': '$100,000 - $250,000',
+  '250k-500k': '$250,000 - $500,000',
+  '500k-1m':   '$500,000 - $1,000,000',
+  '1m-2m':     '$1,000,000 - $2,000,000',
+  '2m-5m':     '$2,000,000 - $5,000,000',
+  '5m+':       '$5,000,000+',
+};
+
+const FUNDING_AMOUNT_LABELS: Record<string, string> = {
+  '5k-25k':    '$5,000 - $25,000',
+  '25k-50k':   '$25,000 - $50,000',
+  '50k-100k':  '$50,000 - $100,000',
+  '100k-250k': '$100,000 - $250,000',
+  '250k-500k': '$250,000 - $500,000',
+  '500k+':     '$500,000+',
+  '1m+':       '$1,000,000+',
+};
+
+const URGENCY_LABELS: Record<string, string> = {
+  'immediate':  'Immediately (within 1 week)',
+  '2-4weeks':   '2-4 weeks',
+  '1-2months':  '1-2 months',
+  'flexible':   'Flexible / No rush',
+};
+
+function fmtRange(value: string | undefined, map: Record<string, string>): string | undefined {
+  if (!value) return undefined;
+  return map[value] ?? value;
 }
 
 export interface TenantBranding {
@@ -107,6 +143,14 @@ export interface TenantBranding {
   companyEmail?: string;
   companyPhone?: string;
   companyAddress?: string;
+}
+
+/** Per-tenant PDF privacy toggles. All default true when omitted. */
+export interface PdfVisibility {
+  showContactEmail?: boolean;
+  showContactPhone?: boolean;
+  showAnnualRevenue?: boolean;
+  showAmountRequested?: boolean;
 }
 
 /* ── PDF generation ── */
@@ -122,30 +166,40 @@ const ACKNOWLEDGEMENTS = [
   'I consent to use electronic records and signatures, agree my electronic signature is legally binding, and consent to be contacted by phone, text, and email about this request. Reply STOP to opt out of text messages or HELP for help.',
 ];
 
-const PAGE_MARGIN = 42;
-const RIGHT_MARGIN = 570;
-const FIELD_GAP = 8;
+const PAGE_MARGIN = 30;
+const RIGHT_MARGIN = 582;
+const FIELD_GAP = 5;
 const SECTION_COLOR = '#4f46e5';
 const FIELD_BORDER = '#d7dce8';
 const FIELD_BG = '#f8fafc';
 
-export function generateApplicationPdf(data: ApplicationData, tenant?: TenantBranding): Readable {
-  const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'LETTER' });
+export function generateApplicationPdf(
+  data: ApplicationData,
+  tenant?: TenantBranding,
+  visibility?: PdfVisibility,
+): Readable {
+  // Privacy toggles default to true (show) when not provided.
+  const showContactEmail = visibility?.showContactEmail ?? true;
+  const showContactPhone = visibility?.showContactPhone ?? true;
+  const showAnnualRevenue = visibility?.showAnnualRevenue ?? true;
+  const showAmountRequested = visibility?.showAmountRequested ?? true;
+
+  const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'LETTER', bufferPages: true });
 
   const headerTitle = tenant?.companyName ? `${tenant.companyName} — Business Funding Application` : 'Business Funding Application';
   const headerSub = tenant?.legalBusinessName ?? 'Signed merchant application packet';
 
   /* ── Header ── */
-  doc.save().rect(0, 0, doc.page.width, 82).fill('#111827').restore();
+  doc.save().rect(0, 0, doc.page.width, 64).fill('#111827').restore();
 
   // Try to embed the tenant logo (URL → fetch is async, so we embed synchronously only if pre-fetched)
   // Logo pre-fetching is handled by the caller when available; here we just reserve the text layout.
   const textStartX = PAGE_MARGIN;
-  doc.fontSize(20).font('Helvetica-Bold').fillColor('#ffffff')
-    .text(headerTitle, textStartX, 24, { width: RIGHT_MARGIN - textStartX });
-  doc.fontSize(9).font('Helvetica').fillColor('#cbd5e1')
-    .text(headerSub, textStartX, 51, { width: RIGHT_MARGIN - textStartX });
-  doc.y = 104;
+  doc.fontSize(16).font('Helvetica-Bold').fillColor('#ffffff')
+    .text(headerTitle, textStartX, 18, { width: RIGHT_MARGIN - textStartX, lineBreak: false, ellipsis: true });
+  doc.fontSize(8).font('Helvetica').fillColor('#cbd5e1')
+    .text(headerSub, textStartX, 42, { width: RIGHT_MARGIN - textStartX, lineBreak: false, ellipsis: true });
+  doc.y = 78;
 
   /* ── Tenant footer info on every page ── */
   const footerLines: string[] = [];
@@ -156,40 +210,29 @@ export function generateApplicationPdf(data: ApplicationData, tenant?: TenantBra
   if (tenant?.companyEmail) contactParts.push(tenant.companyEmail);
   if (contactParts.length) footerLines.push(contactParts.join(' · '));
 
-  doc.on('pageAdded', () => {
-    if (!footerLines.length) return;
-    const footerY = doc.page.height - 28;
-    doc.save()
-      .fontSize(7).font('Helvetica').fillColor('#94a3b8')
-      .text(footerLines.join('  |  '), PAGE_MARGIN, footerY, { width: RIGHT_MARGIN - PAGE_MARGIN, align: 'center' })
-      .restore();
-  });
-
   /* ── Business ── */
   if (data.business) {
     const b = data.business;
     const mappedCodes: { sicCode?: string; naicsCode?: string } = getIndustryCodes(b.industry) || {};
     section(doc, 'Business Information');
     fieldGrid(doc, [
-      { label: 'Business Name', value: b.legalName, span: 2 },
+      { label: 'Business Name', value: b.legalName, span: 3 },
       { label: 'DBA / Trade Name', value: b.dba },
       { label: 'Entity Type', value: b.entityType },
-      { label: 'Industry', value: b.industry, span: 2 },
+      { label: 'State of Formation', value: b.stateOfFormation },
+      { label: 'Industry', value: b.industry, span: 3 },
       { label: 'SIC', value: b.sicCode || mappedCodes.sicCode },
       { label: 'NAICS', value: b.naicsCode || mappedCodes.naicsCode },
-      { label: 'State of Formation', value: b.stateOfFormation },
       { label: 'EIN', value: fmtEin(b.ein) },
       { label: 'Business Start Date', value: fmtDate(b.businessStartDate) },
       { label: 'Time in Business', value: calculateTimeInBusiness(b.businessStartDate) },
-      { label: 'Phone', value: fmtPhone(b.phone) },
+      { label: 'Phone', value: showContactPhone ? fmtPhone(b.phone) : undefined },
       { label: 'Website', value: b.website },
       { label: 'Street Address', value: b.streetAddress, span: 2 },
-    ]);
-    fieldGrid(doc, [
       { label: 'City', value: b.city },
       { label: 'State', value: b.state },
       { label: 'Zip', value: b.zipCode },
-    ], 3);
+    ]);
   }
 
   /* ── Owner ── */
@@ -197,54 +240,58 @@ export function generateApplicationPdf(data: ApplicationData, tenant?: TenantBra
     const o = data.owner;
     section(doc, 'Owner / Guarantor Information');
     fieldGrid(doc, [
-      { label: 'Owner Name', value: `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || undefined },
+      { label: 'Owner Name', value: `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || undefined, span: 2 },
       { label: 'Ownership', value: o.ownershipPct ? `${o.ownershipPct}%` : undefined },
       { label: 'SSN', value: fmtSsn(o.ssn) },
       { label: 'Date of Birth', value: fmtDate(o.dateOfBirth) },
-    ]);
-
-    /* ── Home Address ── */
-    section(doc, 'Home Address');
-    fieldGrid(doc, [{ label: 'Street Address', value: o.streetAddress, span: 2 }]);
-    fieldGrid(doc, [
+      { label: 'Home Street Address', value: o.streetAddress, span: 2 },
       { label: 'City', value: o.city },
       { label: 'State', value: o.state },
       { label: 'Zip', value: o.zipCode },
-    ], 3);
+    ]);
   }
 
-  /* ── Contact Information ── */
-  if (data.contact) {
-    section(doc, 'Contact Information');
-    fieldGrid(doc, [
-      { label: 'Email', value: data.contact.email },
-      { label: 'Phone', value: fmtPhone(data.contact.phone) },
-    ]);
+  /* ── Contact & Funding ── */
+  if (data.contact || data.financial || data.loanRequest) {
+    const contactFundingFields: FieldDefinition[] = [];
+    if (showContactEmail) contactFundingFields.push({ label: 'Contact Email', value: data.contact?.email });
+    if (showContactPhone) contactFundingFields.push({ label: 'Contact Phone', value: fmtPhone(data.contact?.phone) });
+    if (showAnnualRevenue) {
+      contactFundingFields.push({ label: 'Annual Revenue', value: fmtRange(data.financial?.annualRevenue, ANNUAL_REVENUE_LABELS) });
+    }
+    if (showAmountRequested) {
+      contactFundingFields.push({ label: 'Amount Requested', value: fmtRange(data.loanRequest?.amountRequested, FUNDING_AMOUNT_LABELS) });
+    }
+    if (data.loanRequest?.urgency) contactFundingFields.push({ label: 'Funding Urgency', value: fmtRange(data.loanRequest.urgency, URGENCY_LABELS) });
+    if (contactFundingFields.length) {
+      section(doc, 'Contact & Funding');
+      fieldGrid(doc, contactFundingFields);
+    }
   }
 
   /* ── Electronic Signature Consent ── */
   if (data.signature) {
     section(doc, 'Authorizations & Electronic Signature Consent');
     textBox(doc, CONSENT_TEXT);
-    ensureSpace(doc, 86);
-    doc.fontSize(8).font('Helvetica').fillColor('#334155');
+    ensureSpace(doc, 56);
+    doc.fontSize(6.6).font('Helvetica').fillColor('#334155');
     ACKNOWLEDGEMENTS.forEach((text) => {
       doc.text(`[x] ${text}`, PAGE_MARGIN + 8, doc.y, { width: RIGHT_MARGIN - PAGE_MARGIN - 16 });
-      doc.moveDown(0.18);
+      doc.moveDown(0.08);
     });
-    doc.moveDown(0.45);
+    doc.moveDown(0.2);
 
     fieldGrid(doc, [
       { label: 'Full Name (Signer)', value: data.signature.signerName },
-      { label: 'Email (Signer)', value: data.signature.signerEmail },
+      { label: 'Email (Signer)', value: showContactEmail ? data.signature.signerEmail : undefined },
     ]);
 
 	    const signedDate = fmtEasternDate(data.signature.signedAt);
 
     /* Signature image */
 	    const sigX = PAGE_MARGIN;
-    const sigW = 286;
-    const sigH = 86;
+    const sigW = 270;
+    const sigH = 60;
 	    const sigY = doc.y;
     ensureSpace(doc, sigH + 28);
     doc.save().roundedRect(sigX, sigY, sigW, sigH, 8).fillAndStroke('#ffffff', FIELD_BORDER).restore();
@@ -254,33 +301,32 @@ export function generateApplicationPdf(data: ApplicationData, tenant?: TenantBra
       try {
         const b64 = data.signature.signatureData.replace(/^data:image\/png;base64,/, '');
         const imgBuf = Buffer.from(b64, 'base64');
-	        doc.image(imgBuf, sigX + 10, sigY + 16, { width: sigW - 20, height: sigH - 26 });
+        doc.image(imgBuf, sigX + 10, sigY + 15, { width: sigW - 20, height: sigH - 23 });
       } catch {
         // fall back to italic name if image decode fails
-        doc.fontSize(24).font('Helvetica-Oblique').fillColor('#1a1a2e')
-	          .text(data.signature.signerName, sigX + 12, sigY + 32, { width: sigW - 24 });
+        doc.fontSize(20).font('Helvetica-Oblique').fillColor('#1a1a2e')
+          .text(data.signature.signerName, sigX + 12, sigY + 26, { width: sigW - 24 });
       }
     } else {
-      doc.fontSize(24).font('Helvetica-Oblique').fillColor('#1a1a2e')
-	        .text(data.signature.signerName, sigX + 12, sigY + 32, { width: sigW - 24 });
+      doc.fontSize(20).font('Helvetica-Oblique').fillColor('#1a1a2e')
+        .text(data.signature.signerName, sigX + 12, sigY + 26, { width: sigW - 24 });
     }
 
-    fieldBox(doc, sigX + sigW + FIELD_GAP, sigY, RIGHT_MARGIN - sigX - sigW - FIELD_GAP, 40, 'Date Signed', signedDate);
+    fieldBox(doc, sigX + sigW + FIELD_GAP, sigY, RIGHT_MARGIN - sigX - sigW - FIELD_GAP, 27, 'Date Signed', signedDate);
     fieldBox(
       doc,
       sigX + sigW + FIELD_GAP,
-      sigY + 46,
+      sigY + 33,
       RIGHT_MARGIN - sigX - sigW - FIELD_GAP,
-      40,
+      27,
       'Timestamp',
       fmtEasternTimestamp(data.signature.signedAt) ?? data.signature.signedAt,
     );
 
-    doc.y = sigY + sigH + 8;
-    doc.fontSize(7).font('Helvetica').fillColor('#64748b')
-	      .text(`Electronically signed at ${fmtEasternTimestamp(data.signature.signedAt) ?? data.signature.signedAt}`);
+    doc.y = sigY + sigH + 4;
   }
 
+  addFooterToBufferedPages(doc, footerLines);
   doc.end();
   return doc as unknown as Readable;
 }
@@ -290,14 +336,14 @@ export function generateApplicationPdf(data: ApplicationData, tenant?: TenantBra
 type FieldDefinition = { label: string; value?: string; span?: number; height?: number };
 
 function section(doc: PDFKit.PDFDocument, title: string): void {
-  ensureSpace(doc, 26);
-  doc.moveDown(0.45);
-  doc.fontSize(12).font('Helvetica-Bold').fillColor(SECTION_COLOR).text(title, PAGE_MARGIN);
+  ensureSpace(doc, 18);
+  doc.moveDown(0.18);
+  doc.fontSize(9.5).font('Helvetica-Bold').fillColor(SECTION_COLOR).text(title, PAGE_MARGIN);
   doc.moveTo(PAGE_MARGIN, doc.y + 2).lineTo(RIGHT_MARGIN, doc.y + 2).stroke('#c7d2fe');
-  doc.moveDown(0.55);
+  doc.moveDown(0.28);
 }
 
-function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], columns = 2): void {
+function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], columns = 3): void {
   const fields = rawFields.filter((field) => field.value);
   const contentWidth = RIGHT_MARGIN - PAGE_MARGIN;
   const columnWidth = (contentWidth - FIELD_GAP * (columns - 1)) / columns;
@@ -307,7 +353,7 @@ function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], column
 
   const flush = () => {
     if (!row.length) return;
-    const rowHeight = Math.max(...row.map((field) => field.height ?? (field.span && field.span > 1 ? 48 : 42)));
+    const rowHeight = Math.max(...row.map((field) => field.height ?? (field.span && field.span > 1 ? 32 : 28)));
     ensureSpace(doc, rowHeight + FIELD_GAP);
     const y = doc.y;
     row.forEach((field) => fieldBox(doc, field.x, y, field.width, rowHeight, field.label, field.value));
@@ -331,27 +377,45 @@ function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], column
 }
 
 function fieldBox(doc: PDFKit.PDFDocument, x: number, y: number, width: number, height: number, label: string, value?: string): void {
-  doc.save().roundedRect(x, y, width, height, 7).fillAndStroke(FIELD_BG, FIELD_BORDER).restore();
-  doc.fontSize(6.7).font('Helvetica-Bold').fillColor('#64748b')
-    .text(label.toUpperCase(), x + 8, y + 7, { width: width - 16, lineBreak: false });
-  doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a')
-    .text(value || '—', x + 8, y + 20, { width: width - 16, height: height - 23, ellipsis: true });
+  doc.save().roundedRect(x, y, width, height, 5).fillAndStroke(FIELD_BG, FIELD_BORDER).restore();
+  doc.fontSize(5.7).font('Helvetica-Bold').fillColor('#64748b')
+    .text(label.toUpperCase(), x + 6, y + 5, { width: width - 12, lineBreak: false });
+  doc.fontSize(8).font('Helvetica-Bold').fillColor('#0f172a')
+    .text(value || '—', x + 6, y + 16, { width: width - 12, height: height - 18, ellipsis: true });
 }
 
 function textBox(doc: PDFKit.PDFDocument, text: string): void {
   const width = RIGHT_MARGIN - PAGE_MARGIN;
-  const height = Math.max(52, doc.fontSize(8.5).heightOfString(text, { width: width - 18 }) + 18);
-  ensureSpace(doc, height + 8);
+  const height = Math.max(34, doc.fontSize(6.8).heightOfString(text, { width: width - 14 }) + 12);
+  ensureSpace(doc, height + 5);
   const y = doc.y;
-  doc.save().roundedRect(PAGE_MARGIN, y, width, height, 8).fillAndStroke('#eef2ff', '#c7d2fe').restore();
-  doc.fontSize(8.5).font('Helvetica').fillColor('#334155')
-    .text(text, PAGE_MARGIN + 9, y + 9, { width: width - 18 });
-  doc.y = y + height + 8;
+  doc.save().roundedRect(PAGE_MARGIN, y, width, height, 6).fillAndStroke('#eef2ff', '#c7d2fe').restore();
+  doc.fontSize(6.8).font('Helvetica').fillColor('#334155')
+    .text(text, PAGE_MARGIN + 7, y + 6, { width: width - 14 });
+  doc.y = y + height + 5;
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, height: number): void {
   if (doc.y + height <= doc.page.height - PAGE_MARGIN) return;
   doc.addPage();
   doc.y = PAGE_MARGIN;
+}
+
+function addFooterToBufferedPages(doc: PDFKit.PDFDocument, footerLines: string[]): void {
+  if (!footerLines.length) return;
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i += 1) {
+    doc.switchToPage(i);
+    const footerY = doc.page.height - PAGE_MARGIN - 20;
+    doc.save()
+      .fontSize(7).font('Helvetica').fillColor('#94a3b8')
+      .text(footerLines.join('  |  '), PAGE_MARGIN, footerY, {
+        width: RIGHT_MARGIN - PAGE_MARGIN,
+        height: 10,
+        align: 'center',
+        lineBreak: false,
+      })
+      .restore();
+  }
 }
 

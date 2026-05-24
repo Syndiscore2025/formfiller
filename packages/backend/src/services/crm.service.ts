@@ -2,6 +2,7 @@ import { config } from '../config';
 import { prisma } from '../lib/prisma';
 import { decrypt } from '../utils/encryption';
 import { generateApplicationPdf } from './pdf.service';
+import { downloadTenantDocument, uploadTenantDocument } from './documentStorage.service';
 
 const MAX_ATTEMPTS = 4;
 const RETRY_DELAYS_MS = [0, 60_000, 300_000, 900_000]; // 0s, 1m, 5m, 15m
@@ -16,18 +17,6 @@ export interface FieldHeatmapEntry {
 }
 
 export type AnalyticsHeatmap = FieldHeatmapEntry[];
-
-export interface CrmPayload {
-  applicationId: string;
-  tenantId: string;
-  status: string;
-  business?: Record<string, unknown>;
-  owners?: Record<string, unknown>[];
-  financial?: Record<string, unknown>;
-  loanRequest?: Record<string, unknown>;
-  submittedAt: string;
-  analyticsHeatmap?: AnalyticsHeatmap;
-}
 
 export interface WarmLeadPayload {
   applicationId: string;
@@ -105,15 +94,23 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
     },
   });
 
+  const tenantSettings = app.tenant.settings;
+
   // Generate signed PDF as base64
   let signedApplicationBase64: string | undefined;
+  let signedApplicationStorage: {
+    storageProvider: string;
+    storageBucket: string;
+    storageKey: string;
+    storageUrl?: string;
+    storageEtag?: string;
+  } | undefined;
   if (app.signature) {
     const owner = app.owners[0] ?? null;
     let ownerSsn: string | undefined;
     if (owner?.ssnEncrypted) {
       try { ownerSsn = decrypt(owner.ssnEncrypted); } catch { /* leave undefined */ }
     }
-    const tenantSettings = app.tenant.settings;
     try {
       const pdfStream = generateApplicationPdf(
         {
@@ -146,6 +143,11 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
             zipCode: owner.zipCode ?? undefined,
           } : undefined,
           contact: { email: app.contactEmail ?? undefined, phone: app.contactPhone ?? undefined },
+          financial: app.financial ? { annualRevenue: app.financial.annualRevenue ?? undefined } : undefined,
+          loanRequest: app.loanRequest ? {
+            amountRequested: app.loanRequest.amountRequested ?? undefined,
+            urgency: app.loanRequest.urgency ?? undefined,
+          } : undefined,
           signature: {
             signerName: app.signature.signerName,
             signerEmail: app.signature.signerEmail,
@@ -161,6 +163,12 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
           companyPhone: tenantSettings.companyPhone ?? undefined,
           companyAddress: tenantSettings.companyAddress ?? undefined,
         } : undefined,
+        tenantSettings ? {
+          showContactEmail: tenantSettings.pdfShowContactEmail,
+          showContactPhone: tenantSettings.pdfShowContactPhone,
+          showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
+          showAmountRequested: tenantSettings.pdfShowAmountRequested,
+        } : undefined,
       );
       const chunks: Buffer[] = [];
       await new Promise<void>((resolve, reject) => {
@@ -168,11 +176,86 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
         pdfStream.on('end', resolve);
         pdfStream.on('error', reject);
       });
-      signedApplicationBase64 = Buffer.concat(chunks).toString('base64');
+      const signedPdfBuffer = Buffer.concat(chunks);
+      signedApplicationBase64 = signedPdfBuffer.toString('base64');
+
+      const signedRef = await uploadTenantDocument({
+        tenantId: app.tenantId,
+        applicationId: app.id,
+        documentType: 'signed_application',
+        statementMonth: 'final',
+        fileName: `application-${app.id}.pdf`,
+        mimeType: 'application/pdf',
+        content: signedPdfBuffer,
+      });
+
+      if (signedRef) {
+        await prisma.applicationDocument.upsert({
+          where: {
+            applicationId_documentType_statementMonth: {
+              applicationId: app.id,
+              documentType: 'signed_application',
+              statementMonth: 'final',
+            },
+          },
+          update: {
+            fileName: `application-${app.id}.pdf`,
+            mimeType: 'application/pdf',
+            sizeBytes: signedPdfBuffer.length,
+            content: null,
+            storageProvider: signedRef.storageProvider,
+            storageBucket: signedRef.storageBucket,
+            storageKey: signedRef.storageKey,
+            storageUrl: signedRef.storageUrl ?? null,
+            storageEtag: signedRef.storageEtag ?? null,
+          },
+          create: {
+            applicationId: app.id,
+            documentType: 'signed_application',
+            statementMonth: 'final',
+            fileName: `application-${app.id}.pdf`,
+            mimeType: 'application/pdf',
+            sizeBytes: signedPdfBuffer.length,
+            content: null,
+            storageProvider: signedRef.storageProvider,
+            storageBucket: signedRef.storageBucket,
+            storageKey: signedRef.storageKey,
+            storageUrl: signedRef.storageUrl ?? null,
+            storageEtag: signedRef.storageEtag ?? null,
+          },
+        });
+        signedApplicationStorage = signedRef;
+      }
     } catch (err) {
       console.error('[CRM] PDF generation failed, continuing without PDF:', err);
     }
   }
+
+  const bankStatements = await Promise.all(app.documents.map(async (doc) => {
+    const content = doc.storageKey
+      ? await downloadTenantDocument(app.tenantId, doc.storageKey)
+      : doc.content
+        ? Buffer.from(doc.content)
+        : null;
+
+    return {
+      statementMonth: doc.statementMonth,
+      fileName: doc.fileName,
+      mimeType: doc.mimeType,
+      storageProvider: doc.storageProvider,
+      storageBucket: doc.storageBucket,
+      storageKey: doc.storageKey,
+      storageUrl: doc.storageUrl,
+      content: content ? content.toString('base64') : null,
+    };
+  }));
+
+  // Apply tenant privacy toggles to the JSON payload as well as the PDF, so
+  // brokers can redact fields end-to-end before forwarding to lenders.
+  const showContactEmail = tenantSettings?.pdfShowContactEmail ?? true;
+  const showContactPhone = tenantSettings?.pdfShowContactPhone ?? true;
+  const showAnnualRevenue = tenantSettings?.pdfShowAnnualRevenue ?? true;
+  const showAmountRequested = tenantSettings?.pdfShowAmountRequested ?? true;
 
   return {
     event: 'application.complete',
@@ -183,8 +266,8 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
     contact: {
       firstName: app.contactFirstName,
       lastName: app.contactLastName,
-      email: app.contactEmail,
-      phone: app.contactPhone,
+      email: showContactEmail ? app.contactEmail : null,
+      phone: showContactPhone ? app.contactPhone : null,
     },
     business: app.business ? {
       legalName: app.business.legalName,
@@ -196,7 +279,7 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
       stateOfFormation: app.business.stateOfFormation,
       ein: app.business.ein,
       businessStartDate: app.business.businessStartDate?.toISOString().slice(0, 10),
-      phone: app.business.phone,
+      phone: showContactPhone ? app.business.phone : null,
       website: app.business.website,
       address: {
         street: app.business.streetAddress,
@@ -213,14 +296,16 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
       dateOfBirth: o.dateOfBirth,
       address: { street: o.streetAddress, city: o.city, state: o.state, zip: o.zipCode },
     })),
-    financial: app.financial ? { annualRevenue: app.financial.annualRevenue } : null,
+    financial: app.financial
+      ? { annualRevenue: showAnnualRevenue ? app.financial.annualRevenue : null }
+      : null,
     loanRequest: app.loanRequest ? {
-      amountRequested: app.loanRequest.amountRequested,
+      amountRequested: showAmountRequested ? app.loanRequest.amountRequested : null,
       urgency: app.loanRequest.urgency,
     } : null,
     signature: app.signature ? {
       signerName: app.signature.signerName,
-      signerEmail: app.signature.signerEmail,
+      signerEmail: showContactEmail ? app.signature.signerEmail : null,
       signedAt: app.signature.signedAt.toISOString(),
       consentText: app.signature.consentText,
     } : null,
@@ -228,13 +313,9 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
       mimeType: 'application/pdf',
       fileName: `application-${app.id}.pdf`,
       content: signedApplicationBase64,
+      storage: signedApplicationStorage ?? null,
     } : null,
-    bankStatements: app.documents.map((doc) => ({
-      statementMonth: doc.statementMonth,
-      fileName: doc.fileName,
-      mimeType: doc.mimeType,
-      content: Buffer.from(doc.content).toString('base64'),
-    })),
+    bankStatements,
   };
 }
 
@@ -320,6 +401,15 @@ export async function enqueueCrmDelivery(applicationId: string, tenantId: string
     (config.crmWebhookUrl && config.crmApiKey)
   );
 
+  // Even if CRM delivery is not configured yet, build the package once so a
+  // tenant with document storage enabled still gets a signed PDF copy written
+  // to their bucket on final submission.
+  if (!hasConfig) {
+    buildSwitchboxPayload(applicationId).catch((err: Error) =>
+      console.error(`[CRM] Unable to prepare signed document package for ${applicationId}:`, err.message)
+    );
+  }
+
   if (!existing) {
     await prisma.crmDelivery.create({
       data: {
@@ -339,12 +429,6 @@ export async function enqueueCrmDelivery(applicationId: string, tenantId: string
   runDeliveryWithRetry(applicationId, tenantId).catch((err: Error) =>
     console.error('[CRM] Unexpected delivery error:', err.message)
   );
-}
-
-export async function pushToSwitchboxCrm(payload: CrmPayload): Promise<void> {
-  // Legacy path kept for compatibility — prefer enqueueCrmDelivery
-  if (!config.crmWebhookUrl || !config.crmApiKey) return;
-  await pushWebhook(config.crmWebhookUrl, config.crmApiKey, payload);
 }
 
 export async function pushWarmLeadToSwitchbox(payload: WarmLeadPayload): Promise<void> {

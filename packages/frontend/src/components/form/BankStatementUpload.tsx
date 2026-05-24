@@ -22,8 +22,10 @@ interface Props {
   token: string | null;
   pdfDownloading: boolean;
   onDownloadPdf: () => Promise<void>;
-  /** Called once when the merchant has uploaded all 4 required statements */
+  /** Called once the merchant has explicitly submitted (POST /finalize succeeded). */
   onComplete?: () => void;
+  /** Called whenever the uploaded statement count changes (used to drive the parent progress bar). */
+  onDocumentsCountChange?: (count: number) => void;
 }
 
 interface StatementUploadPlan {
@@ -59,6 +61,7 @@ export function BankStatementUpload({
   pdfDownloading,
   onDownloadPdf,
   onComplete,
+  onDocumentsCountChange,
 }: Props) {
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
@@ -71,20 +74,29 @@ export function BankStatementUpload({
   const [bankHelpLoading, setBankHelpLoading] = useState(false);
   const [bankHelpError, setBankHelpError] = useState('');
   const [bankHelpResult, setBankHelpResult] = useState<BankHelpResult | null>(null);
-  const completeFiredRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const onCompleteRef = useRef(onComplete);
+  const onDocumentsCountChangeRef = useRef(onDocumentsCountChange);
+
+  // Keep the latest callbacks in refs so the effects below are not
+  // re-run (and their timers/work cancelled) whenever the parent re-renders
+  // and passes new function identities.
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+  useEffect(() => {
+    onDocumentsCountChangeRef.current = onDocumentsCountChange;
+  }, [onDocumentsCountChange]);
 
   const requiredMonths = useMemo(() => getRequiredStatementMonths(), []);
   const uploadedCount = documents.length;
 
-  // Fire onComplete once when the required count is reached
+  // Push the latest uploaded count up to the parent so it can drive the
+  // top-level progress bar without React Context.
   useEffect(() => {
-    if (!completeFiredRef.current && uploadedCount >= REQUIRED_STATEMENTS && onComplete) {
-      completeFiredRef.current = true;
-      // Small delay so the merchant sees the final "Received" badge before the overlay appears
-      const id = setTimeout(onComplete, 1200);
-      return () => clearTimeout(id);
-    }
-  }, [uploadedCount, onComplete]);
+    onDocumentsCountChangeRef.current?.(uploadedCount);
+  }, [uploadedCount]);
 
   useEffect(() => {
     const loadDocuments = async () => {
@@ -216,6 +228,9 @@ export function BankStatementUpload({
 
     if (failures.length > 0) {
       setError(failures.join(' • '));
+      setUploadActivity((current) => current.filter((entry) => entry.status === 'error'));
+    } else {
+      setUploadActivity([]);
     }
 
     setUploadingQueue(false);
@@ -245,16 +260,49 @@ export function BankStatementUpload({
     }
   };
 
+  const handleFinalSubmit = async () => {
+    if (submitting || submitted) return;
+    if (uploadedCount === 0) {
+      setError('Please upload at least one bank statement PDF before submitting.');
+      return;
+    }
+    if (uploadedCount < REQUIRED_STATEMENTS) {
+      const confirmed = window.confirm(
+        `We typically need ${REQUIRED_STATEMENTS} bank statements but only see ${uploadedCount}. Submit anyway?`
+      );
+      if (!confirmed) return;
+    }
+
+    setError('');
+    setSubmitting(true);
+    try {
+      await api.post<{ success: boolean }>(
+        `/api/applications/${applicationId}/finalize`,
+        {},
+        token ?? undefined
+      );
+      setSubmitted(true);
+      // Short delay so the merchant sees the "Submitted" state flip before the overlay appears.
+      setTimeout(() => onCompleteRef.current?.(), 600);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to submit your application. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <div className="surface-panel-soft space-y-6 p-6 sm:p-8">
+    <div className="bank-upload-page surface-panel-soft space-y-6 p-6 sm:p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="mb-2 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-200">
-            Documents Required
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-emerald-200">
+            <span aria-hidden="true">✨</span> Final Step
           </div>
-          <h2 className="mb-2 text-2xl font-bold text-white">Upload your 4 most recent bank statements</h2>
+          <h2 className="mb-2 text-2xl font-bold text-white">
+            You&apos;re almost done — just upload your 4 most recent bank statements
+          </h2>
           <p className="max-w-3xl text-sm leading-6 text-slate-300">
-            We cannot proceed until they are received. Please upload the last 4 completed monthly bank statement PDFs for your primary business account.
+            This is the last thing we need. Please upload the last 4 completed monthly bank statement PDFs for your primary business account and we&apos;ll take it from there.
           </p>
           <p className="mt-3 text-sm text-slate-400">
             As of today, we need: <span className="font-medium text-slate-200">{requiredMonths.map((month) => month.label).join(', ')}</span>.
@@ -266,98 +314,82 @@ export function BankStatementUpload({
         </Button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Upload bank statement PDFs</h3>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <input
-                  ref={filePickerRef}
-                  type="file"
-                  accept="application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    const input = event.currentTarget;
-                    void handleSelectedFiles(input.files);
-                    input.value = '';
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => filePickerRef.current?.click()}
-                  disabled={uploadingQueue}
-                >
-                  {uploadingQueue ? 'Uploading…' : 'Select PDFs'}
-                </Button>
-              </div>
-            </div>
-
-            {uploadActivity.length > 0 ? (
-              <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
-                {uploadActivity.map((item) => {
-                  const statusClasses = getUploadStatusClasses(item.status);
-                  const statusLabel = getUploadStatusLabel(item.status);
-
-                  return (
-                    <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="break-all font-medium text-slate-100">{item.fileName}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {formatBytes(item.sizeBytes)} • PDF file
-                        </p>
-                        <p className="mt-2 break-words text-xs text-slate-300">{item.message}</p>
-                      </div>
-                      <span className={cn('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]', statusClasses)}>
-                        {statusLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/35 px-4 py-10 text-center text-sm text-slate-400">
-                No upload in progress. Select any statement PDFs the merchant wants to send and we will upload them automatically.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="bank-upload-card rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-white">Files received</h3>
-              <p className="mt-1 text-sm text-slate-400">This is the raw list of PDFs the merchant has sent so far.</p>
+              <h3 className="text-lg font-semibold text-white">Bank statement PDFs</h3>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+                Upload statements here. Once a file is uploaded, it appears in this same list — no duplicate received section.
+              </p>
             </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-              {uploadedCount} total
-            </span>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                {uploadedCount} uploaded
+              </span>
+              <input
+                ref={filePickerRef}
+                type="file"
+                accept="application/pdf"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const input = event.currentTarget;
+                  void handleSelectedFiles(input.files);
+                  input.value = '';
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => filePickerRef.current?.click()}
+                disabled={uploadingQueue}
+              >
+                {uploadingQueue ? 'Uploading…' : 'Select PDFs'}
+              </Button>
+            </div>
           </div>
 
-          {documents.length > 0 ? (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          {uploadActivity.length > 0 || documents.length > 0 ? (
+            <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
+              {uploadActivity.map((item) => {
+                const statusClasses = getUploadStatusClasses(item.status);
+                const statusLabel = getUploadStatusLabel(item.status);
+
+                return (
+                  <div key={item.id} className="bank-file-card flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-all font-medium text-slate-100">{item.fileName}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {formatBytes(item.sizeBytes)} • PDF file
+                      </p>
+                      <p className="mt-2 break-words text-xs text-slate-300">{item.message}</p>
+                    </div>
+                    <span className={cn('rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]', statusClasses)}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                );
+              })}
+
               {documents.map((document) => (
-                <div key={document.id} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div key={document.id} className="bank-file-card flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="break-all font-medium text-slate-100">{document.fileName}</p>
                     <p className="mt-1 break-all text-sm text-slate-400">
-                      {formatBytes(document.sizeBytes)} • Received {formatTimestamp(document.updatedAt)}
+                      {formatBytes(document.sizeBytes)} • Uploaded {formatTimestamp(document.updatedAt)}
                     </p>
                   </div>
                   <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
-                    Received
+                    Uploaded
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/35 px-4 py-10 text-center text-sm text-slate-400">
-              No statement PDFs have been received yet.
+            <div className="bank-empty-card rounded-2xl border border-dashed border-white/10 bg-slate-950/35 px-4 py-10 text-center text-sm text-slate-400">
+              No bank statements uploaded yet. Select any statement PDFs the merchant wants to send and we will upload them automatically.
             </div>
           )}
         </div>
@@ -366,7 +398,35 @@ export function BankStatementUpload({
       {error && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
       {notice && <p className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{notice}</p>}
 
-      <details className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div className="bank-submit-panel rounded-[24px] border border-emerald-400/20 bg-emerald-500/10 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-semibold text-white">
+              {submitted ? 'Application submitted ✓' : 'Ready to submit?'}
+            </h3>
+            <p className="mt-1 text-sm text-slate-300">
+              {submitted
+                ? 'Your application and bank statements were handed off to our underwriting team.'
+                : uploadedCount === 0
+                  ? `Upload at least one bank statement above, then click submit. We typically need ${REQUIRED_STATEMENTS}.`
+                  : uploadedCount < REQUIRED_STATEMENTS
+                    ? `You\u2019ve uploaded ${uploadedCount} of ${REQUIRED_STATEMENTS} recommended statements. You can submit now or add more first.`
+                    : `${uploadedCount} statements uploaded. Click submit to officially send your application to underwriting.`}
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={() => void handleFinalSubmit()}
+            disabled={submitting || submitted || uploadedCount === 0 || uploadingQueue}
+            loading={submitting}
+            className="shrink-0"
+          >
+            {submitted ? 'Submitted' : 'Submit Application'}
+          </Button>
+        </div>
+      </div>
+
+      <details className="need-help-panel rounded-[24px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-white">Having a hard time uploading?</h3>
@@ -404,10 +464,11 @@ export function BankStatementUpload({
           {bankHelpError && <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{bankHelpError}</p>}
 
           {bankHelpResult && (
-            <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 pr-3 sm:p-5 sm:pr-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="bank-help-result rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 sm:p-5">
+              {/* Header row */}
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-300">
                     How to download your statements
                   </p>
                   <p className="mt-1 text-base font-semibold text-white">{bankHelpResult.bankName}</p>
@@ -417,14 +478,15 @@ export function BankStatementUpload({
                     href={bankHelpResult.bankUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/15"
+                    className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/15"
                   >
-                    Open official site
+                    Open official site ↗
                   </a>
                 )}
               </div>
-              <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-200">{bankHelpResult.instructions}</p>
 
+              {/* Structured instructions */}
+              <BankInstructions text={bankHelpResult.instructions} />
             </div>
           )}
         </div>
@@ -537,4 +599,88 @@ function formatTimestamp(value: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+
+interface ParsedInstructions {
+  intro: string;
+  steps: string[];
+  tip: string;
+}
+
+function parseBankInstructions(raw: string): ParsedInstructions {
+  const normalized = raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/\*\*/g, '')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .trim();
+
+  // Pull a trailing "Tip: ..." (case-insensitive) out first so it doesn't get
+  // pulled into the last step when everything is jumbled onto a single line.
+  let body = normalized;
+  let tip = '';
+  const tipMatch = body.match(/(^|\s)tip\s*:\s*([^\n]+?)\s*$/i);
+  if (tipMatch && tipMatch.index !== undefined) {
+    tip = tipMatch[2].trim();
+    body = body.slice(0, tipMatch.index).trim();
+  }
+
+  // Split on "N." markers regardless of whether they are at the start of a
+  // line or inline ("...account. 2. Open..."). The split keeps the marker so
+  // we can detect the first piece (intro, before "1.").
+  const segments = body.split(/(?=(?:^|\s)\d+\.\s)/);
+  let intro = '';
+  const steps: string[] = [];
+
+  for (const segment of segments) {
+    const trimmed = segment.trim();
+    if (!trimmed) continue;
+    const stepMatch = trimmed.match(/^(\d+)\.\s+([\s\S]+)$/);
+    if (stepMatch) {
+      steps.push(stepMatch[2].replace(/\s+/g, ' ').trim());
+    } else if (!intro) {
+      intro = trimmed.replace(/\s+/g, ' ').trim();
+    } else {
+      // Stray text before steps were detected — append to intro.
+      intro = `${intro} ${trimmed.replace(/\s+/g, ' ').trim()}`.trim();
+    }
+  }
+
+  return { intro, steps, tip };
+}
+
+function BankInstructions({ text }: { text: string }) {
+  const { intro, steps, tip } = parseBankInstructions(text);
+
+  if (steps.length === 0) {
+    // Fallback: render as preserved-whitespace paragraph so the user still
+    // sees something readable even if parsing fails.
+    return (
+      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-200">{text.trim()}</p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {intro && <p className="text-sm leading-6 text-slate-200">{intro}</p>}
+
+      <ol className="space-y-2.5">
+        {steps.map((step, index) => (
+          <li key={index} className="flex gap-3 text-sm leading-6 text-slate-200">
+            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-[11px] font-semibold text-cyan-200">
+              {index + 1}
+            </span>
+            <span className="flex-1">{step}</span>
+          </li>
+        ))}
+      </ol>
+
+      {tip && (
+        <div className="flex gap-2 rounded-xl border border-amber-400/20 bg-amber-400/[0.05] px-3 py-2.5 text-xs leading-5 text-amber-100">
+          <span className="font-semibold uppercase tracking-[0.15em] text-amber-300">Tip</span>
+          <span className="flex-1">{tip}</span>
+        </div>
+      )}
+    </div>
+  );
 }
