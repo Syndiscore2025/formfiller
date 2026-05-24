@@ -11,6 +11,7 @@ import formSectionRoutes from './routes/formSections.routes';
 import signatureRoutes from './routes/signature.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import einLookupRoutes from './routes/einLookup.routes';
+import tenantRoutes from './routes/tenant.routes';
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api/forms', formSectionRoutes);
 app.use('/api/signatures', signatureRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/business', einLookupRoutes);
+app.use('/api/tenant', tenantRoutes);
 
 // 404
 app.use((_req, res) => {

@@ -22,6 +22,8 @@ interface Props {
   token: string | null;
   pdfDownloading: boolean;
   onDownloadPdf: () => Promise<void>;
+  /** Called once when the merchant has uploaded all 4 required statements */
+  onComplete?: () => void;
 }
 
 interface StatementUploadPlan {
@@ -49,11 +51,14 @@ interface BankHelpResult {
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
+const REQUIRED_STATEMENTS = 4;
+
 export function BankStatementUpload({
   applicationId,
   token,
   pdfDownloading,
   onDownloadPdf,
+  onComplete,
 }: Props) {
   const filePickerRef = useRef<HTMLInputElement | null>(null);
   const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
@@ -66,9 +71,20 @@ export function BankStatementUpload({
   const [bankHelpLoading, setBankHelpLoading] = useState(false);
   const [bankHelpError, setBankHelpError] = useState('');
   const [bankHelpResult, setBankHelpResult] = useState<BankHelpResult | null>(null);
+  const completeFiredRef = useRef(false);
 
   const requiredMonths = useMemo(() => getRequiredStatementMonths(), []);
   const uploadedCount = documents.length;
+
+  // Fire onComplete once when the required count is reached
+  useEffect(() => {
+    if (!completeFiredRef.current && uploadedCount >= REQUIRED_STATEMENTS && onComplete) {
+      completeFiredRef.current = true;
+      // Small delay so the merchant sees the final "Received" badge before the overlay appears
+      const id = setTimeout(onComplete, 1200);
+      return () => clearTimeout(id);
+    }
+  }, [uploadedCount, onComplete]);
 
   useEffect(() => {
     const loadDocuments = async () => {
@@ -391,10 +407,10 @@ export function BankStatementUpload({
             <div className="max-h-[420px] overflow-y-auto rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4 pr-3 sm:p-5 sm:pr-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-base font-semibold text-white">{bankHelpResult.bankName}</p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-200">
-                    {bankHelpResult.cached ? 'Saved help result' : 'Fresh bank help result'}
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                    How to download your statements
                   </p>
+                  <p className="mt-1 text-base font-semibold text-white">{bankHelpResult.bankName}</p>
                 </div>
                 {bankHelpResult.bankUrl && (
                   <a
@@ -408,24 +424,7 @@ export function BankStatementUpload({
                 )}
               </div>
               <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-200">{bankHelpResult.instructions}</p>
-              {bankHelpResult.sourcePages.length > 0 && (
-                <div className="mt-4 border-t border-white/10 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Checked pages</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {bankHelpResult.sourcePages.map((sourcePage) => (
-                      <a
-                        key={sourcePage}
-                        href={sourcePage}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200"
-                      >
-                        {sourcePage}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
+
             </div>
           )}
         </div>

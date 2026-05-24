@@ -15,6 +15,8 @@ interface DateFieldProps {
   min?: string;
   max?: string;
   id?: string;
+  /** Year dropdown ordering. 'desc' (default) lists newest year first. */
+  yearOrder?: 'asc' | 'desc';
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -134,6 +136,7 @@ export function DateField({
   min,
   max,
   id,
+  yearOrder = 'desc',
 }: DateFieldProps) {
   const inputId = id || label.toLowerCase().replace(/\s+/g, '_');
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -176,8 +179,11 @@ export function DateField({
   const yearOptions = useMemo(() => {
     const minYear = minDate?.getFullYear() || 1900;
     const maxYear = maxDate?.getFullYear() || currentYear;
-    return Array.from({ length: Math.max(maxYear - minYear + 1, 0) }, (_, index) => String(maxYear - index));
-  }, [currentYear, maxDate, minDate]);
+    const count = Math.max(maxYear - minYear + 1, 0);
+    return Array.from({ length: count }, (_, index) =>
+      String(yearOrder === 'asc' ? minYear + index : maxYear - index)
+    );
+  }, [currentYear, maxDate, minDate, yearOrder]);
 
   const selectedYear = displayedMonth.getFullYear();
   const selectedMonthIndex = displayedMonth.getMonth();

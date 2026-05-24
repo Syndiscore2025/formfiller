@@ -7,8 +7,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 import { bankHelpLimiter } from '../middleware/rateLimiter';
 import { writeAuditLog } from '../services/auditLog.service';
-import { pushToSwitchboxCrm, buildHeatmap } from '../services/crm.service';
-import { generateApplicationPdf } from '../services/pdf.service';
+import { pushToSwitchboxCrm, buildHeatmap, enqueueCrmDelivery } from '../services/crm.service';
+import { generateApplicationPdf, TenantBranding } from '../services/pdf.service';
 import { generateBankStatementHelp } from '../services/bankHelp.service';
 import { decrypt } from '../utils/encryption';
 
@@ -229,6 +229,20 @@ router.post(
     await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
     await writeAuditLog({ applicationId: appId, action: 'BANK_STATEMENT_UPLOADED', actor: req.userId, ipAddress: req.ip, details: { statementMonth, fileName: normalizedFileName, sizeBytes: content.length } });
 
+    // Trigger CRM delivery once the application has ≥ 4 bank statements and is submitted
+    const docCount = await prisma.applicationDocument.count({ where: { applicationId: appId, documentType: 'bank_statement' } });
+    if (docCount >= 4) {
+      const submitted = await prisma.application.findFirst({
+        where: { id: appId, status: 'submitted' },
+        select: { tenantId: true },
+      });
+      if (submitted) {
+        enqueueCrmDelivery(appId, submitted.tenantId).catch((err: Error) =>
+          console.error('[CRM] Enqueue error after document upload:', err.message)
+        );
+      }
+    }
+
     res.status(201).json({ success: true, data: saved });
   })
 );
@@ -328,10 +342,16 @@ router.get(
   ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const pdfAppId = String(req.params.id);
-    const app = await prisma.application.findFirst({
-      where: { id: pdfAppId, tenantId: req.tenantId! },
-      include: { business: true, owners: { orderBy: { ownerIndex: 'asc' } }, signature: true },
-    });
+    const [app, tenantSettings] = await Promise.all([
+      prisma.application.findFirst({
+        where: { id: pdfAppId, tenantId: req.tenantId! },
+        include: { business: true, owners: { orderBy: { ownerIndex: 'asc' } }, signature: true },
+      }),
+      prisma.tenantSettings.findUnique({
+        where: { tenantId: req.tenantId! },
+        select: { companyName: true, legalBusinessName: true, logoUrl: true, companyEmail: true, companyPhone: true, companyAddress: true },
+      }),
+    ]);
     if (!app) throw createError('Application not found', 404);
     if (!app.signature) throw createError('Application not yet signed', 400);
 
@@ -346,6 +366,15 @@ router.get(
     if (owner?.ssnEncrypted) {
       try { ownerSsn = decrypt(owner.ssnEncrypted); } catch { /* leave undefined */ }
     }
+
+    const branding: TenantBranding | undefined = tenantSettings ? {
+      companyName: tenantSettings.companyName ?? undefined,
+      legalBusinessName: tenantSettings.legalBusinessName ?? undefined,
+      logoUrl: tenantSettings.logoUrl ?? undefined,
+      companyEmail: tenantSettings.companyEmail ?? undefined,
+      companyPhone: tenantSettings.companyPhone ?? undefined,
+      companyAddress: tenantSettings.companyAddress ?? undefined,
+    } : undefined;
 
     const stream = generateApplicationPdf({
       business: app.business ? {
@@ -386,7 +415,7 @@ router.get(
         signedAt: sig.signedAt.toISOString(),
         signatureData: sig.signatureData,
       },
-    });
+    }, branding);
     stream.pipe(res);
   })
 );

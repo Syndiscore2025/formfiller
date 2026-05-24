@@ -18,9 +18,61 @@ model Tenant {
 
   users        User[]
   applications Application[]
+  settings     TenantSettings?
 
   @@index([slug])
   @@index([apiKey])
+}
+
+/// Per-tenant configuration: branding, CRM integration, and completion behaviour.
+model TenantSettings {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+
+  // ── Branding (UI + PDF) ──────────────────────────────────────────────────
+  companyName         String?  /// Display name shown in PDF header and form UI
+  legalBusinessName   String?  /// Legal entity name shown in PDF footer
+  logoUrl             String?  /// Public URL of the tenant logo (embedded in PDF + form header)
+  companyEmail        String?  /// Contact email shown in PDF footer
+  companyPhone        String?  /// Contact phone shown in PDF footer
+  companyAddress      String?  /// Mailing address shown in PDF footer
+
+  // ── UI Theme (white-label embed) ─────────────────────────────────────────
+  accentColor         String?  /// Hex color replacing the default cyan accent (#22d3ee)
+  surfaceColor        String?  /// Hex color for panel/card backgrounds (default: #0f172a)
+
+  // ── Post-completion ──────────────────────────────────────────────────────
+  websiteUrl          String?  /// Where the merchant is redirected after completing the application
+  supportEmail        String?  /// Shown on the completion screen as a contact fallback
+
+  // ── Switchbox CRM integration ────────────────────────────────────────────
+  switchboxApiUrl     String?  /// POST endpoint Switchbox provides for receiving applications
+  switchboxApiKey     String?  /// Bearer token / API key (stored encrypted in application)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Tracks each outbound CRM delivery attempt for an application.
+model CrmDelivery {
+  id                String   @id @default(uuid())
+  applicationId     String   @unique   /// One delivery record per application
+  status            String   @default("pending")  /// pending | sent | failed | skipped
+  attempts          Int      @default(0)
+  lastAttemptAt     DateTime?
+  nextRetryAt       DateTime?
+  sentAt            DateTime?
+  externalAccountId String?  /// Account ID returned by the CRM on success
+  lastError         String?
+  payload           Json?    /// Snapshot of the payload we sent (for debugging)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
 }
 
 model User {
@@ -71,6 +123,7 @@ model Application {
   documents       ApplicationDocument[]
   analyticsEvents AnalyticsEvent[]
   auditLogs       AuditLog[]
+  crmDelivery     CrmDelivery?
 
   @@index([tenantId])
   @@index([tenantId, status])

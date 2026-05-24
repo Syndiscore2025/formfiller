@@ -79,7 +79,7 @@ function calculateTimeInBusiness(v?: string): string | undefined {
   return `${years} ${years === 1 ? 'year' : 'years'}, ${months} ${months === 1 ? 'month' : 'months'}`;
 }
 
-/* ── data interface ── */
+/* ── data interfaces ── */
 
 interface ApplicationData {
   business?: {
@@ -98,6 +98,15 @@ interface ApplicationData {
   signature?: {
     signerName: string; signerEmail: string; signedAt: string; signatureData?: string;
   };
+}
+
+export interface TenantBranding {
+  companyName?: string;
+  legalBusinessName?: string;
+  logoUrl?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
 }
 
 /* ── PDF generation ── */
@@ -120,16 +129,41 @@ const SECTION_COLOR = '#4f46e5';
 const FIELD_BORDER = '#d7dce8';
 const FIELD_BG = '#f8fafc';
 
-export function generateApplicationPdf(data: ApplicationData): Readable {
+export function generateApplicationPdf(data: ApplicationData, tenant?: TenantBranding): Readable {
   const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'LETTER' });
+
+  const headerTitle = tenant?.companyName ? `${tenant.companyName} — Business Funding Application` : 'Business Funding Application';
+  const headerSub = tenant?.legalBusinessName ?? 'Signed merchant application packet';
 
   /* ── Header ── */
   doc.save().rect(0, 0, doc.page.width, 82).fill('#111827').restore();
+
+  // Try to embed the tenant logo (URL → fetch is async, so we embed synchronously only if pre-fetched)
+  // Logo pre-fetching is handled by the caller when available; here we just reserve the text layout.
+  const textStartX = PAGE_MARGIN;
   doc.fontSize(20).font('Helvetica-Bold').fillColor('#ffffff')
-    .text('Business Funding Application', PAGE_MARGIN, 24, { width: RIGHT_MARGIN - PAGE_MARGIN });
+    .text(headerTitle, textStartX, 24, { width: RIGHT_MARGIN - textStartX });
   doc.fontSize(9).font('Helvetica').fillColor('#cbd5e1')
-    .text('Signed merchant application packet', PAGE_MARGIN, 51, { width: RIGHT_MARGIN - PAGE_MARGIN });
+    .text(headerSub, textStartX, 51, { width: RIGHT_MARGIN - textStartX });
   doc.y = 104;
+
+  /* ── Tenant footer info on every page ── */
+  const footerLines: string[] = [];
+  if (tenant?.companyName) footerLines.push(tenant.companyName);
+  if (tenant?.companyAddress) footerLines.push(tenant.companyAddress);
+  const contactParts: string[] = [];
+  if (tenant?.companyPhone) contactParts.push(fmtPhone(tenant.companyPhone) ?? tenant.companyPhone);
+  if (tenant?.companyEmail) contactParts.push(tenant.companyEmail);
+  if (contactParts.length) footerLines.push(contactParts.join(' · '));
+
+  doc.on('pageAdded', () => {
+    if (!footerLines.length) return;
+    const footerY = doc.page.height - 28;
+    doc.save()
+      .fontSize(7).font('Helvetica').fillColor('#94a3b8')
+      .text(footerLines.join('  |  '), PAGE_MARGIN, footerY, { width: RIGHT_MARGIN - PAGE_MARGIN, align: 'center' })
+      .restore();
+  });
 
   /* ── Business ── */
   if (data.business) {

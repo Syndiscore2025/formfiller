@@ -4,6 +4,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { Button } from '@/components/ui/Button';
 import { BankStatementUpload } from './BankStatementUpload';
+import { CompletionOverlay } from './CompletionOverlay';
 import { Step1EINLookup } from './steps/Step1EINLookup';
 import { Step2ConfirmBusiness } from './steps/Step2ConfirmBusiness';
 import { Step4Revenue } from './steps/Step4Revenue';
@@ -12,6 +13,19 @@ import { Step8ReviewSign } from './steps/Step8ReviewSign';
 import type { FormState, ContactInfo, BusinessInfo, OwnerInfo, FinancialInfo, LoanRequest } from '@/types/application';
 import { api } from '@/lib/api';
 import { useAnalytics, AnalyticsContext } from '@/hooks/useAnalytics';
+
+interface TenantSettings {
+  companyName: string | null;
+  legalBusinessName: string | null;
+  logoUrl: string | null;
+  companyEmail: string | null;
+  companyPhone: string | null;
+  companyAddress: string | null;
+  websiteUrl: string | null;
+  supportEmail: string | null;
+  accentColor: string | null;
+  surfaceColor: string | null;
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG || 'default';
@@ -44,6 +58,23 @@ export function MultiStepForm({ token }: Props) {
     lastSaved: null,
   });
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [isComplete, setIsComplete] = useState(false);
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
+
+  // Fetch public tenant settings once on mount for branding / redirect URL
+  useEffect(() => {
+    api.get<{ success: boolean; data: TenantSettings }>('/api/tenant/settings', token ?? undefined)
+      .then((res) => setTenantSettings(res.data))
+      .catch(() => { /* non-fatal — overlay works without settings */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Inject CSS custom properties for tenant theming
+  useEffect(() => {
+    if (!tenantSettings) return;
+    const root = document.documentElement;
+    if (tenantSettings.accentColor) root.style.setProperty('--color-accent', tenantSettings.accentColor);
+    if (tenantSettings.surfaceColor) root.style.setProperty('--color-surface', tenantSettings.surfaceColor);
+  }, [tenantSettings]);
 
   // ── Analytics: keystroke tracking, field-level events, abandonment ──
   const analytics = useAnalytics(state.applicationId, token);
@@ -206,17 +237,26 @@ export function MultiStepForm({ token }: Props) {
   }, [state.applicationId, token]);
 
   if (submittedAt) {
-    return (
-      state.applicationId ? (
+    return state.applicationId ? (
+      <>
         <BankStatementUpload
           applicationId={state.applicationId}
           submittedAt={submittedAt}
           token={token}
           pdfDownloading={pdfDownloading}
           onDownloadPdf={handleDownloadPdf}
+          onComplete={() => setIsComplete(true)}
         />
-      ) : null
-    );
+        {isComplete && (
+          <CompletionOverlay
+            ownerFirstName={state.contact.firstName || undefined}
+            companyName={tenantSettings?.companyName ?? null}
+            websiteUrl={tenantSettings?.websiteUrl ?? null}
+            supportEmail={tenantSettings?.supportEmail ?? null}
+          />
+        )}
+      </>
+    ) : null;
   }
 
   return (

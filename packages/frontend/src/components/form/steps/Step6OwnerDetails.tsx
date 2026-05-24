@@ -328,7 +328,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
               <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
                 onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
               <DateField label="Date of Birth" required value={dateOfBirth}
-                onChange={setDateOfBirth} error={errors.dateOfBirth} />
+                onChange={setDateOfBirth} error={errors.dateOfBirth} yearOrder="asc" />
             </div>
 
             <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">

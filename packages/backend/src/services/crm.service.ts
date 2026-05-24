@@ -1,5 +1,10 @@
 import { config } from '../config';
 import { prisma } from '../lib/prisma';
+import { decrypt } from '../utils/encryption';
+import { generateApplicationPdf } from './pdf.service';
+
+const MAX_ATTEMPTS = 4;
+const RETRY_DELAYS_MS = [0, 60_000, 300_000, 900_000]; // 0s, 1m, 5m, 15m
 
 // Per-field friction entry
 export interface FieldHeatmapEntry {
@@ -62,26 +67,288 @@ export async function buildHeatmap(applicationId: string): Promise<AnalyticsHeat
   return Array.from(map.values()).sort((a, b) => b.totalDurationMs - a.totalDurationMs);
 }
 
-async function pushWebhook(url: string, apiKey: string, payload: unknown): Promise<void> {
+async function pushWebhook(url: string, apiKey: string, payload: unknown): Promise<{ accountId?: string }> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'X-Api-Key': apiKey,
+    },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
-    throw new Error(`Switchbox webhook failed: ${res.status} ${res.statusText}`);
+    const text = await res.text().catch(() => '');
+    throw new Error(`Switchbox webhook failed: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`);
+  }
+  try {
+    const json = await res.json() as Record<string, unknown>;
+    return { accountId: json.accountId as string | undefined };
+  } catch {
+    return {};
   }
 }
 
+/** Build the complete payload Switchbox (or any CRM) needs to create an account and attach documents. */
+async function buildSwitchboxPayload(applicationId: string): Promise<Record<string, unknown>> {
+  const app = await prisma.application.findUniqueOrThrow({
+    where: { id: applicationId },
+    include: {
+      business: true,
+      owners: { orderBy: { ownerIndex: 'asc' } },
+      financial: true,
+      loanRequest: true,
+      signature: true,
+      documents: { where: { documentType: 'bank_statement' }, orderBy: { statementMonth: 'asc' } },
+      tenant: { include: { settings: true } },
+    },
+  });
+
+  // Generate signed PDF as base64
+  let signedApplicationBase64: string | undefined;
+  if (app.signature) {
+    const owner = app.owners[0] ?? null;
+    let ownerSsn: string | undefined;
+    if (owner?.ssnEncrypted) {
+      try { ownerSsn = decrypt(owner.ssnEncrypted); } catch { /* leave undefined */ }
+    }
+    const tenantSettings = app.tenant.settings;
+    try {
+      const pdfStream = generateApplicationPdf(
+        {
+          business: app.business ? {
+            legalName: app.business.legalName ?? undefined,
+            dba: app.business.dba ?? undefined,
+            entityType: app.business.entityType ?? undefined,
+            industry: app.business.industry ?? undefined,
+            stateOfFormation: app.business.stateOfFormation ?? undefined,
+            ein: app.business.ein ?? undefined,
+            businessStartDate: app.business.businessStartDate?.toISOString().slice(0, 10) ?? undefined,
+            phone: app.business.phone ?? undefined,
+            website: app.business.website ?? undefined,
+            streetAddress: app.business.streetAddress ?? undefined,
+            city: app.business.city ?? undefined,
+            state: app.business.state ?? undefined,
+            zipCode: app.business.zipCode ?? undefined,
+            sicCode: app.business.sicCode ?? undefined,
+            naicsCode: app.business.naicsCode ?? undefined,
+          } : undefined,
+          owner: owner ? {
+            firstName: owner.firstName ?? undefined,
+            lastName: owner.lastName ?? undefined,
+            ssn: ownerSsn,
+            ownershipPct: owner.ownershipPct ?? undefined,
+            dateOfBirth: owner.dateOfBirth ?? undefined,
+            streetAddress: owner.streetAddress ?? undefined,
+            city: owner.city ?? undefined,
+            state: owner.state ?? undefined,
+            zipCode: owner.zipCode ?? undefined,
+          } : undefined,
+          contact: { email: app.contactEmail ?? undefined, phone: app.contactPhone ?? undefined },
+          signature: {
+            signerName: app.signature.signerName,
+            signerEmail: app.signature.signerEmail,
+            signedAt: app.signature.signedAt.toISOString(),
+            signatureData: app.signature.signatureData,
+          },
+        },
+        tenantSettings ? {
+          companyName: tenantSettings.companyName ?? undefined,
+          legalBusinessName: tenantSettings.legalBusinessName ?? undefined,
+          logoUrl: tenantSettings.logoUrl ?? undefined,
+          companyEmail: tenantSettings.companyEmail ?? undefined,
+          companyPhone: tenantSettings.companyPhone ?? undefined,
+          companyAddress: tenantSettings.companyAddress ?? undefined,
+        } : undefined,
+      );
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        pdfStream.on('data', (c: Buffer) => chunks.push(c));
+        pdfStream.on('end', resolve);
+        pdfStream.on('error', reject);
+      });
+      signedApplicationBase64 = Buffer.concat(chunks).toString('base64');
+    } catch (err) {
+      console.error('[CRM] PDF generation failed, continuing without PDF:', err);
+    }
+  }
+
+  return {
+    event: 'application.complete',
+    schemaVersion: '1.0',
+    applicationId: app.id,
+    tenantSlug: app.tenant.slug,
+    submittedAt: app.signature?.signedAt.toISOString() ?? new Date().toISOString(),
+    contact: {
+      firstName: app.contactFirstName,
+      lastName: app.contactLastName,
+      email: app.contactEmail,
+      phone: app.contactPhone,
+    },
+    business: app.business ? {
+      legalName: app.business.legalName,
+      dba: app.business.dba,
+      entityType: app.business.entityType,
+      industry: app.business.industry,
+      sicCode: app.business.sicCode,
+      naicsCode: app.business.naicsCode,
+      stateOfFormation: app.business.stateOfFormation,
+      ein: app.business.ein,
+      businessStartDate: app.business.businessStartDate?.toISOString().slice(0, 10),
+      phone: app.business.phone,
+      website: app.business.website,
+      address: {
+        street: app.business.streetAddress,
+        city: app.business.city,
+        state: app.business.state,
+        zip: app.business.zipCode,
+      },
+    } : null,
+    owners: app.owners.map((o) => ({
+      ownerIndex: o.ownerIndex,
+      firstName: o.firstName,
+      lastName: o.lastName,
+      ownershipPct: o.ownershipPct,
+      dateOfBirth: o.dateOfBirth,
+      address: { street: o.streetAddress, city: o.city, state: o.state, zip: o.zipCode },
+    })),
+    financial: app.financial ? { annualRevenue: app.financial.annualRevenue } : null,
+    loanRequest: app.loanRequest ? {
+      amountRequested: app.loanRequest.amountRequested,
+      urgency: app.loanRequest.urgency,
+    } : null,
+    signature: app.signature ? {
+      signerName: app.signature.signerName,
+      signerEmail: app.signature.signerEmail,
+      signedAt: app.signature.signedAt.toISOString(),
+      consentText: app.signature.consentText,
+    } : null,
+    signedApplication: signedApplicationBase64 ? {
+      mimeType: 'application/pdf',
+      fileName: `application-${app.id}.pdf`,
+      content: signedApplicationBase64,
+    } : null,
+    bankStatements: app.documents.map((doc) => ({
+      statementMonth: doc.statementMonth,
+      fileName: doc.fileName,
+      mimeType: doc.mimeType,
+      content: Buffer.from(doc.content).toString('base64'),
+    })),
+  };
+}
+
+/** Attempt one CRM delivery. Returns the external account ID on success. */
+async function attemptDelivery(applicationId: string, tenantId: string): Promise<string | undefined> {
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    include: { settings: true },
+  });
+
+  const apiUrl = tenant.settings?.switchboxApiUrl ?? config.crmWebhookUrl;
+  const apiKey = tenant.settings?.switchboxApiKey ?? config.crmApiKey;
+
+  if (!apiUrl || !apiKey) {
+    throw new Error('CRM not configured for this tenant (no API URL or key).');
+  }
+
+  const payload = await buildSwitchboxPayload(applicationId);
+  const result = await pushWebhook(apiUrl, apiKey, payload);
+  return result.accountId;
+}
+
+/** Execute the delivery with retry logic. Must be called from a detached async context. */
+async function runDeliveryWithRetry(applicationId: string, tenantId: string): Promise<void> {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const delay = RETRY_DELAYS_MS[attempt] ?? 0;
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+
+    await prisma.crmDelivery.update({
+      where: { applicationId },
+      data: {
+        attempts: { increment: 1 },
+        lastAttemptAt: new Date(),
+        status: 'pending',
+        lastError: null,
+      },
+    });
+
+    try {
+      const externalAccountId = await attemptDelivery(applicationId, tenantId);
+      await prisma.crmDelivery.update({
+        where: { applicationId },
+        data: {
+          status: 'sent',
+          sentAt: new Date(),
+          externalAccountId: externalAccountId ?? null,
+          lastError: null,
+          nextRetryAt: null,
+        },
+      });
+      console.log(`[CRM] Delivery success for application ${applicationId}${externalAccountId ? ` → account ${externalAccountId}` : ''}`);
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isLastAttempt = attempt === MAX_ATTEMPTS - 1;
+      const nextRetry = isLastAttempt ? null : new Date(Date.now() + (RETRY_DELAYS_MS[attempt + 1] ?? 0));
+      await prisma.crmDelivery.update({
+        where: { applicationId },
+        data: {
+          status: isLastAttempt ? 'failed' : 'pending',
+          lastError: message,
+          nextRetryAt: nextRetry,
+        },
+      });
+      console.error(`[CRM] Delivery attempt ${attempt + 1}/${MAX_ATTEMPTS} failed for ${applicationId}: ${message}`);
+      if (isLastAttempt) return;
+    }
+  }
+}
+
+/**
+ * Create a pending CrmDelivery record and fire the delivery asynchronously.
+ * Safe to call multiple times — skips if already sent.
+ */
+export async function enqueueCrmDelivery(applicationId: string, tenantId: string): Promise<void> {
+  const existing = await prisma.crmDelivery.findUnique({ where: { applicationId } });
+  if (existing?.status === 'sent') return; // already delivered
+
+  // Check if CRM is configured at all
+  const settings = await prisma.tenantSettings.findUnique({ where: { tenantId } });
+  const hasConfig = Boolean(
+    (settings?.switchboxApiUrl && settings.switchboxApiKey) ||
+    (config.crmWebhookUrl && config.crmApiKey)
+  );
+
+  if (!existing) {
+    await prisma.crmDelivery.create({
+      data: {
+        applicationId,
+        status: hasConfig ? 'pending' : 'skipped',
+        lastError: hasConfig ? null : 'CRM not configured for this tenant',
+      },
+    });
+  }
+
+  if (!hasConfig) {
+    console.log(`[CRM] Skipping delivery for ${applicationId} — CRM not configured for tenant ${tenantId}`);
+    return;
+  }
+
+  // Fire async — do NOT await so it doesn't block the HTTP response
+  runDeliveryWithRetry(applicationId, tenantId).catch((err: Error) =>
+    console.error('[CRM] Unexpected delivery error:', err.message)
+  );
+}
+
 export async function pushToSwitchboxCrm(payload: CrmPayload): Promise<void> {
+  // Legacy path kept for compatibility — prefer enqueueCrmDelivery
   if (!config.crmWebhookUrl || !config.crmApiKey) return;
   await pushWebhook(config.crmWebhookUrl, config.crmApiKey, payload);
 }
 
 export async function pushWarmLeadToSwitchbox(payload: WarmLeadPayload): Promise<void> {
   if (!config.crmWebhookUrl || !config.crmApiKey) return;
-  // Use the same CRM endpoint with a warm_lead wrapper, or a dedicated warm-lead URL if configured
   const url = (config as Record<string, unknown>).crmWarmLeadUrl as string | undefined ?? config.crmWebhookUrl;
   await pushWebhook(url, config.crmApiKey, { type: 'warm_lead', ...payload });
 }

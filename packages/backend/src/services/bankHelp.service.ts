@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { prisma } from '../lib/prisma';
+import { findBankInDirectory } from '../data/bankDirectory';
 
 interface SourcePage {
   url: string;
@@ -45,7 +46,9 @@ export async function generateBankStatementHelp(input: { bankName: string; bankU
   const bankName = input.bankName.trim();
   if (!bankName) throw new Error('Bank name is required.');
 
-  const normalizedBankName = normalizeBankName(bankName);
+  const directoryMatch = findBankInDirectory(bankName);
+  const canonicalBankName = directoryMatch?.displayName ?? bankName;
+  const normalizedBankName = normalizeBankName(canonicalBankName);
   const providedBankUrl = normalizePublicUrl(input.bankUrl);
   const cached = await loadPersistedBankHelp(normalizedBankName);
   if (cached) {
@@ -56,12 +59,13 @@ export async function generateBankStatementHelp(input: { bankName: string; bankU
     throw new Error('Bank help is not configured yet. Please try again later.');
   }
 
-  const discoveredBankUrl = providedBankUrl ?? await discoverBankWebsite(bankName);
+  const directoryBankUrl = directoryMatch ? normalizePublicUrl(directoryMatch.url) : undefined;
+  const discoveredBankUrl = providedBankUrl ?? directoryBankUrl ?? await discoverBankWebsite(canonicalBankName);
   const sourcePages = await collectSourcePages(discoveredBankUrl);
-  const aiResult = await requestOpenAiInstructions(bankName, discoveredBankUrl, sourcePages);
+  const aiResult = await requestOpenAiInstructions(canonicalBankName, discoveredBankUrl, sourcePages);
 
   const result: CachedBankHelpResult = {
-    bankName,
+    bankName: canonicalBankName,
     bankUrl: aiResult.bankUrl ?? discoveredBankUrl,
     instructions: aiResult.instructions,
     sourcePages: sourcePages.map((page) => page.url),
@@ -394,12 +398,25 @@ async function requestOpenAiInstructions(bankName: string, bankUrl: string | und
     body: JSON.stringify({
       model: config.openAiModel,
       temperature: 0.2,
-      max_tokens: 350,
+      max_tokens: 900,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: 'You help business loan applicants find how to download bank statements. Return only JSON with keys "instructions" and optional "bankUrl". Keep instructions concise: 1 short paragraph plus up to 4 bullet-style steps in plain text. Never mention crawling, AI, or internal errors. If the source text is weak, say likely navigation labels such as Statements, Documents, eStatements, or Online Banking in a cautious way.',
+          content:
+            'You help US small-business owners download the last 4 months of business bank statements as PDF for a loan application. ' +
+            'Return ONLY JSON with keys "instructions" (string) and optional "bankUrl" (string). ' +
+            'Write "instructions" as plain text, no markdown, no asterisks, no headings. ' +
+            'Start with one short sentence that names the bank and confirms statements are downloadable as PDF. ' +
+            'Then list 5 to 8 numbered steps (1. 2. 3. ...), each on its own line. ' +
+            'Cover: signing in to online banking (desktop is usually easiest), opening the correct business checking account, ' +
+            'navigating to the Statements / Documents / eStatements area (use the bank\'s real label when known), ' +
+            'choosing the last 4 completed months, downloading each month as a PDF, ' +
+            'and where to find the mobile-app equivalent if web is unavailable. ' +
+            'End with a one-line "Tip:" about common pitfalls (e.g. enrolling in paperless statements first, requesting paper-only accounts to switch on eStatements, blocked pop-ups, or contacting the bank\'s small-business support line). ' +
+            'Never invent menu names you are not reasonably confident about; when unsure, say "look for a section labeled Statements, Documents, or eStatements". ' +
+            'Never mention AI, crawling, source pages, or internal errors. ' +
+            'If a more specific official statements URL appears in the source material, return it in "bankUrl".',
         },
         {
           role: 'user',
