@@ -33,6 +33,7 @@ export const config = {
   openAiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   crmWebhookUrl: process.env.CRM_WEBHOOK_URL || '',
   crmApiKey: process.env.CRM_API_KEY || '',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3002',
   isProduction: process.env.NODE_ENV === 'production',
 };
 

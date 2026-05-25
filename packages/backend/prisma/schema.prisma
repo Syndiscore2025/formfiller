@@ -161,6 +161,7 @@ model Application {
   hasAdditionalOwners   Boolean?
   lastActivityAt        DateTime  @default(now())
   warmLeadSentAt        DateTime?
+  abandonedEmailSentAt  DateTime?
   finalizedAt           DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
