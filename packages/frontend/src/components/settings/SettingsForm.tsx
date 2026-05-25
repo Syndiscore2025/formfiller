@@ -47,7 +47,7 @@ export interface AdminSettings {
   smtpPassConfigured: boolean;
   // Email: Abandoned
   emailAbandonedEnabled: boolean;
-  emailAbandonedDelayHours: number;
+  emailAbandonedDelayMinutes: number;
   emailAbandonedSubject: string | null;
   emailAbandonedBody: string | null;
   emailAbandonedIncludeLogo: boolean;

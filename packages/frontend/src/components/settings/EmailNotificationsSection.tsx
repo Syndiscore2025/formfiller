@@ -175,11 +175,11 @@ export function EmailNotificationsSection({ form, update, smtpPass, setSmtpPass 
           update={update}
           extraFields={
             <Input
-              label="Delay (hours)"
+              label="Delay (minutes)"
               type="number"
-              value={String(form.emailAbandonedDelayHours ?? 24)}
-              onChange={(e) => update('emailAbandonedDelayHours', Number(e.target.value))}
-              hint="Hours of inactivity before sending."
+              value={String(form.emailAbandonedDelayMinutes ?? 1440)}
+              onChange={(e) => update('emailAbandonedDelayMinutes', Number(e.target.value))}
+              hint="Minutes of inactivity before sending. e.g. 15 = 15 min · 60 = 1 h · 1440 = 24 h"
             />
           }
         />

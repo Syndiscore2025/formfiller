@@ -89,7 +89,7 @@ const ADMIN_SELECT = {
   smtpFromName: true,
   // Email templates
   emailAbandonedEnabled: true,
-  emailAbandonedDelayHours: true,
+  emailAbandonedDelayMinutes: true,
   emailAbandonedSubject: true,
   emailAbandonedBody: true,
   emailAbandonedIncludeLogo: true,
@@ -128,7 +128,7 @@ const ADMIN_DEFAULTS = {
   smtpFrom: null,
   smtpFromName: null,
   emailAbandonedEnabled: false,
-  emailAbandonedDelayHours: 24,
+  emailAbandonedDelayMinutes: 1440,
   emailAbandonedSubject: 'Complete your funding application',
   emailAbandonedBody: null,
   emailAbandonedIncludeLogo: true,
@@ -232,7 +232,7 @@ const updateSchema = z.object({
   smtpFromName: optionalNullable(z.string().trim().max(120)),
   // Email: Abandoned application
   emailAbandonedEnabled: z.boolean().optional(),
-  emailAbandonedDelayHours: z.number().int().min(1).max(8760).optional(),
+  emailAbandonedDelayMinutes: z.number().int().min(1).max(525600).optional(),
   emailAbandonedSubject: optionalNullable(z.string().trim().max(300)),
   emailAbandonedBody: optionalNullable(z.string().trim().max(5000)),
   emailAbandonedIncludeLogo: z.boolean().optional(),

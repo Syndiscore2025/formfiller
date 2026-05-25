@@ -79,7 +79,7 @@ model TenantSettings {
 
   // ── Email: Abandoned application ──────────────────────────────────────────
   emailAbandonedEnabled       Boolean  @default(false) /// Send follow-up when merchant abandons the form
-  emailAbandonedDelayHours    Int      @default(24)    /// Hours of inactivity before triggering
+  emailAbandonedDelayMinutes  Int      @default(1440)  /// Minutes of inactivity before triggering (default 1440 = 24 h)
   emailAbandonedSubject       String?  @default("Complete your funding application")
   emailAbandonedBody          String?  /// Supports {firstName}, {companyName} placeholders
   emailAbandonedIncludeLogo   Boolean  @default(true)

@@ -82,7 +82,7 @@ async function detectAndSendAbandonmentEmails(): Promise<void> {
   if (tenantSettingsList.length === 0) return;
 
   for (const settings of tenantSettingsList) {
-    const delayMs = (settings.emailAbandonedDelayHours ?? 24) * 60 * 60 * 1000;
+    const delayMs = (settings.emailAbandonedDelayMinutes ?? 1440) * 60 * 1000;
     const cutoff = new Date(Date.now() - delayMs);
 
     let apps;
