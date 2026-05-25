@@ -69,7 +69,6 @@ export interface AdminSettings {
 
 interface Props {
   initial: AdminSettings;
-  token: string;
   onSaved: (updated: AdminSettings) => void;
 }
 
@@ -81,7 +80,7 @@ function blankIfPlaceholderUrl(value: string | null): string | null {
   return trimmed;
 }
 
-export function SettingsForm({ initial, token, onSaved }: Props) {
+export function SettingsForm({ initial, onSaved }: Props) {
   const [form, setForm] = useState<AdminSettings>(initial);
   const [apiKey, setApiKey] = useState(''); // write-only; only sent if non-empty
   const [storageSecret, setStorageSecret] = useState(''); // write-only; only sent if non-empty
@@ -142,7 +141,6 @@ export function SettingsForm({ initial, token, onSaved }: Props) {
       const res = await api.patch<{ success: boolean; data: AdminSettings }>(
         '/api/tenant/settings/admin',
         payload,
-        token,
       );
       setForm(res.data);
       onSaved(res.data);

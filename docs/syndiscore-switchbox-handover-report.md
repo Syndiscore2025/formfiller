@@ -334,4 +334,4 @@ Do not export real current values back into the repository.
 4. Verify Switchbox receives JSON payload, signed PDF, and bank statements.
 5. Verify privacy toggles redaction with all toggles off.
 6. Confirm `CrmDelivery.status = sent` and external account ID mapping.
-7. Update this report with actual production URLs, resource names, and credential owner references after deployment.
+7. Update this report with actual production URLs, resource names, and credential owner references after deployment.op  

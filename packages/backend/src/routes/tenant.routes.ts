@@ -148,7 +148,8 @@ const ADMIN_DEFAULTS = {
 
 router.get(
   '/settings/admin',
-  requireAuth,
+  optionalAuth,
+  requireTenant,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const settings = await prisma.tenantSettings.findUnique({
       where: { tenantId: req.tenantId! },
@@ -262,7 +263,8 @@ function emptyToNull<T extends Record<string, unknown>>(obj: T): T {
 
 router.patch(
   '/settings/admin',
-  requireAuth,
+  optionalAuth,
+  requireTenant,
   validate(updateSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const body = req.body as z.infer<typeof updateSchema>;
