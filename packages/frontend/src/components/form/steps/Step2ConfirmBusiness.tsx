@@ -1,6 +1,7 @@
 'use client';
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES, getIndustryCodes } from '@/types/application';
+import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES, getIndustryCodes, type FieldMemory } from '@/types/application';
+import { useAnalyticsContext } from '@/hooks/useAnalytics';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
@@ -59,6 +60,7 @@ const FIELD_META: { key: string; label: string; required?: boolean }[] = [
 ];
 
 export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: initialHomeAddr, onNext, onBack }: Props) {
+  const analytics = useAnalyticsContext();
   const src = business.fieldSources || {};
   const partialBusinessStartYear = getPartialBusinessStartYear(business.businessStartDate);
   const normalizedBusinessStartDate = normalizeBusinessStartDateInput(business.businessStartDate);
@@ -123,6 +125,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
   // Home based business toggle — off means we'll ask for a separate home address later
   const [homeAddrSame, setHomeAddrSame] = useState<boolean>(initialHomeAddr ?? false);
+  const [googlePlaceAutofill, setGooglePlaceAutofill] = useState<Record<string, string>>({});
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -160,6 +163,26 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     setCity(address.city || '');
     setAddrState(address.state || '');
     setZipCode(address.zipCode || '');
+    setGooglePlaceAutofill({
+      streetAddress: address.streetAddress || '',
+      city: address.city || '',
+      state: address.state || '',
+      zipCode: address.zipCode || '',
+    });
+    analytics?.track({
+      eventType: 'field_autofill',
+      fieldName: 'business.address',
+      metadata: { source: 'google_places', fields: ['streetAddress', 'city', 'state', 'zipCode'] },
+    });
+  };
+
+  const setHomeBasedBusiness = (nextValue: boolean) => {
+    setHomeAddrSame(nextValue);
+    analytics?.track({
+      eventType: 'toggle_selected',
+      fieldName: 'application.homeBasedBusiness',
+      metadata: { value: nextValue, label: 'Home Based Business' },
+    });
   };
 
   const isSoleProp = entityType === 'SOLE_PROPRIETORSHIP';
@@ -188,25 +211,28 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     return errs;
   };
 
-  const buildPayload = (): BusinessInfo => ({
-    ...business,
-    legalName: legalName.trim(),
-    dba: dba.trim(),
-    entityType: entityType as BusinessInfo['entityType'],
-    industry: industry.trim(),
-    stateOfFormation,
-    ein: ein.replace(/\D/g, ''),
-    businessStartDate,
-    phone: normalizeUsPhoneDigits(businessPhone),
-    website: website.trim(),
-    streetAddress: streetAddress.trim(),
-    streetAddress2: streetAddress2.trim(),
-    city: city.trim(),
-    state: addrState,
-    zipCode: zipCode.trim(),
-    sicCode: selectedIndustryCodes?.sicCode || '',
-    naicsCode: selectedIndustryCodes?.naicsCode || '',
-  });
+  const buildPayload = (): BusinessInfo => {
+    const values: Record<string, string> = {
+      legalName: legalName.trim(),
+      dba: dba.trim(),
+      entityType: entityType as string,
+      industry: industry.trim(),
+      stateOfFormation,
+      ein: ein.replace(/\D/g, ''),
+      businessStartDate,
+      phone: normalizeUsPhoneDigits(businessPhone),
+      website: website.trim(),
+      streetAddress: streetAddress.trim(),
+      streetAddress2: streetAddress2.trim(),
+      city: city.trim(),
+      state: addrState,
+      zipCode: zipCode.trim(),
+      sicCode: selectedIndustryCodes?.sicCode || '',
+      naicsCode: selectedIndustryCodes?.naicsCode || '',
+    };
+    const autoPopulated = buildFieldMemory(business, values, googlePlaceAutofill);
+    return { ...business, ...values, entityType: values.entityType as BusinessInfo['entityType'], autoPopulated };
+  };
 
   const openTollFreeModal = () => {
     setErrors((prev) => {
@@ -231,7 +257,11 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     if (isTollFreePhone(businessPhone)) { openTollFreeModal(); return; }
     setSubmitting(true);
-    try { await onNext(buildPayload(), homeAddrSame ?? false); } finally { setSubmitting(false); }
+    try {
+      const payload = buildPayload();
+      trackFieldMemory(payload.autoPopulated, analytics);
+      await onNext(payload, homeAddrSame ?? false);
+    } finally { setSubmitting(false); }
   };
 
   const tollFreeModal = (
@@ -362,7 +392,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
                   role="switch"
                   aria-checked={homeAddrSame}
                   aria-label="Home Based Business"
-                  onClick={() => setHomeAddrSame((current) => !current)}
+                  onClick={() => setHomeBasedBusiness(!homeAddrSame)}
                   className={`home-business-switch relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/40 ${
                     homeAddrSame
                       ? 'is-on border-sky-600 bg-sky-600'
@@ -391,7 +421,9 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
                 if (isTollFreePhone(businessPhone)) { openTollFreeModal(); return; }
                 setSubmitting(true);
                 try {
-                  await onNext(buildPayload(), homeAddrSame);
+	                  const payload = buildPayload();
+	                  trackFieldMemory(payload.autoPopulated, analytics);
+	                  await onNext(payload, homeAddrSame);
                 } finally {
                   setSubmitting(false);
                 }
@@ -552,6 +584,68 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
       </div>
     </div>
   );
+}
+
+function buildFieldMemory(
+  initialBusiness: BusinessInfo,
+  values: Record<string, string>,
+  googlePlaceAutofill: Record<string, string>,
+): Record<string, boolean | FieldMemory> {
+  const now = new Date().toISOString();
+  const memory: Record<string, boolean | FieldMemory> = { ...(initialBusiness.autoPopulated || {}) };
+  const initial = initialBusiness as unknown as Record<string, unknown>;
+
+  for (const [key, existing] of Object.entries(memory)) {
+    if (!isFieldMemory(existing) || !existing.autoFilled) continue;
+    const before = String(initial[key] ?? '').trim();
+    const after = String(values[key] ?? '').trim();
+    if (before && after && before !== after) {
+      memory[key] = { ...existing, editedByMerchant: true, updatedAt: now };
+    }
+  }
+
+  for (const [key, selectedValue] of Object.entries(googlePlaceAutofill)) {
+    if (!selectedValue) continue;
+    const currentValue = String(values[key] ?? '').trim();
+    memory[key] = {
+      autoFilled: true,
+      source: 'google_places',
+      editedByMerchant: currentValue !== selectedValue.trim(),
+      skipped: false,
+      updatedAt: now,
+    };
+  }
+
+  for (const key of ['dba', 'entityType', 'businessStartDate', 'phone', 'website', 'streetAddress2']) {
+    if (!String(values[key] ?? '').trim()) {
+      const existing = memory[key];
+      memory[key] = isFieldMemory(existing)
+        ? { ...existing, skipped: true, updatedAt: now }
+        : { skipped: true, source: 'merchant', updatedAt: now };
+    }
+  }
+
+  return memory;
+}
+
+function trackFieldMemory(
+  memory: Record<string, boolean | FieldMemory> | undefined,
+  analytics: ReturnType<typeof useAnalyticsContext>,
+) {
+  if (!memory || !analytics) return;
+  for (const [fieldName, value] of Object.entries(memory)) {
+    if (!isFieldMemory(value)) continue;
+    if (value.editedByMerchant) {
+      analytics.track({ eventType: 'field_autofill_edited', fieldName: `business.${fieldName}`, metadata: { source: value.source } });
+    }
+    if (value.skipped) {
+      analytics.track({ eventType: 'field_skipped', fieldName: `business.${fieldName}`, metadata: { source: value.source } });
+    }
+  }
+}
+
+function isFieldMemory(value: unknown): value is FieldMemory {
+  return typeof value === 'object' && value !== null;
 }
 
 function formatEinDisplay(ein: string): string {

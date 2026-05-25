@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
@@ -28,7 +29,7 @@ const businessSchema = z.object({
   zipCode: z.string().optional(),
   sicCode: z.string().optional(),
   naicsCode: z.string().optional(),
-  autoPopulated: z.record(z.boolean()).optional(),
+  autoPopulated: z.record(z.unknown()).optional(),
 });
 
 function parseIsoDateOnly(value?: string): Date | null {
@@ -86,7 +87,7 @@ async function assertAppOwnership(appId: string, tenantId: string): Promise<void
 router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHandler(async (req: AuthRequest, res: Response) => {
   const appId = String(req.params.appId);
   await assertAppOwnership(appId, req.tenantId!);
-  const { ein, website, businessStartDate, ...rest } = req.body as z.infer<typeof businessSchema>;
+  const { ein, website, businessStartDate, autoPopulated, ...rest } = req.body as z.infer<typeof businessSchema>;
 
   // Normalize website: prepend https:// if a value was given but has no protocol
   const normalizedWebsite =
@@ -100,10 +101,18 @@ router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHa
 		return Number.isNaN(d.getTime()) ? undefined : d;
 	})();
 
+  const data = {
+    ...rest,
+    ein,
+    website: normalizedWebsite,
+    businessStartDate: normalizedDate,
+    ...(autoPopulated !== undefined ? { autoPopulated: autoPopulated as Prisma.InputJsonValue } : {}),
+  };
+
   await prisma.businessInfo.upsert({
     where: { applicationId: appId },
-    update: { ...rest, ein, website: normalizedWebsite, businessStartDate: normalizedDate },
-    create: { applicationId: appId, ...rest, ein, website: normalizedWebsite, businessStartDate: normalizedDate },
+    update: data,
+    create: { applicationId: appId, ...data },
   });
   await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'BUSINESS_INFO_SAVED', actor: req.userId, ipAddress: req.ip });

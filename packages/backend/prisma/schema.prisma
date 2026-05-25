@@ -19,6 +19,7 @@ model Tenant {
   users        User[]
   applications Application[]
   settings     TenantSettings?
+  chatMessages ChatMessage[]
 
   @@index([slug])
   @@index([apiKey])
@@ -100,6 +101,13 @@ model TenantSettings {
   emailInsufficientBanksIncludeLogo Boolean @default(true)
   emailInsufficientBanksIncludeSig  Boolean @default(true)
 
+  // ── AI chat agent ───────────────────────────────────────────────────────────
+  aiChatEnabled          Boolean @default(true)
+  aiPersonaName          String? @default("Funding Assistant")
+  aiSystemPromptOverride String?
+  aiEligibilityRules     Json?
+  aiModel                String?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -138,9 +146,26 @@ model User {
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   applications Application[]
+  reportExports ReportExportAudit[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+model ReportExportAudit {
+  id               String   @id @default(uuid())
+  userId           String?
+  reportType       String
+  includeSensitive Boolean  @default(false)
+  startDate        DateTime?
+  endDate          DateTime?
+  rowCount         Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
 }
 
 model Application {
@@ -159,10 +184,14 @@ model Application {
   tcpaConsentStep1      Boolean   @default(false)
   tcpaConsentStep1At    DateTime?
   hasAdditionalOwners   Boolean?
+  homeBasedBusiness     Boolean?
+  ownerHomeSameAsBusiness Boolean?
   lastActivityAt        DateTime  @default(now())
   warmLeadSentAt        DateTime?
   abandonedEmailSentAt  DateTime?
   finalizedAt           DateTime?
+  disqualifiedAt        DateTime?
+  disqualificationReason String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -177,6 +206,7 @@ model Application {
   analyticsEvents AnalyticsEvent[]
   auditLogs       AuditLog[]
   crmDelivery     CrmDelivery?
+  chatMessages    ChatMessage[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -316,6 +346,22 @@ model BankHelpCache {
   updatedAt          DateTime @updatedAt
 
   @@index([bankName])
+}
+
+model ChatMessage {
+  id            String   @id @default(uuid())
+  tenantId      String
+  applicationId String
+  role          String   /// user | assistant | system
+  content       String
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, applicationId, createdAt])
+  @@index([applicationId, createdAt])
 }
 
 model AnalyticsEvent {

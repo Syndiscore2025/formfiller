@@ -1,81 +1,466 @@
 {
   "info": {
     "name": "Form Filler API - Switchbox Handoff",
-    "description": "Complete endpoint collection. Uses placeholders only; set real secrets in local/current Postman values or Switchbox password manager, never in source control.",
+    "description": "Complete endpoint collection matching all real API routes. Uses placeholders only; set real secrets in local/current Postman values or Switchbox password manager, never in source control.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": { "type": "noauth" },
   "variable": [
     { "key": "backend_base_url", "value": "http://localhost:4000" },
     { "key": "tenant_slug", "value": "default" },
+    { "key": "admin_email", "value": "admin@example.com" },
+    { "key": "admin_password", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
     { "key": "application_id", "value": "PASTE_CREATED_APPLICATION_ID" },
+    { "key": "place_id", "value": "PASTE_GOOGLE_PLACE_ID" },
     { "key": "auth_token", "value": "PASTE_JWT_LOCALLY_DO_NOT_COMMIT" },
     { "key": "switchbox_api_url", "value": "https://switchbox.example.com/webhook" },
-    { "key": "switchbox_api_key", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" }
+    { "key": "switchbox_api_key", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
+    { "key": "document_storage_provider", "value": "database" },
+    { "key": "document_storage_endpoint", "value": "" },
+    { "key": "document_storage_region", "value": "" },
+    { "key": "document_storage_bucket", "value": "" },
+    { "key": "document_storage_prefix", "value": "" },
+    { "key": "document_storage_access_key_id", "value": "" },
+    { "key": "document_storage_secret_access_key", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
+    { "key": "document_storage_public_base_url", "value": "" },
+    { "key": "smtp_host", "value": "" },
+    { "key": "smtp_user", "value": "" },
+    { "key": "smtp_pass", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
+    { "key": "smtp_from", "value": "support@example.com" },
+    { "key": "smtp_from_name", "value": "Switchbox Funding" },
+    { "key": "sample_base64_pdf", "value": "data:application/pdf;base64,REPLACE_WITH_BASE64_PDF" },
+    { "key": "sample_signature_png", "value": "data:image/png;base64,REPLACE_WITH_BASE64_SIGNATURE" }
   ],
   "item": [
     {
       "name": "Health",
       "item": [
-        { "name": "GET /health", "request": { "method": "GET", "url": "{{backend_base_url}}/health" } }
+        {
+          "name": "GET /health",
+          "request": { "method": "GET", "url": "{{backend_base_url}}/health" }
+        }
       ]
     },
     {
       "name": "Auth",
       "item": [
-        { "name": "POST /api/auth/register", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"tenantSlug\": \"{{tenant_slug}}\",\n  \"tenantName\": \"Switchbox Demo Tenant\"\n}" }, "url": "{{backend_base_url}}/api/auth/register" } },
-        { "name": "POST /api/auth/login", "event": [{ "listen": "test", "script": { "exec": ["const json = pm.response.json();", "if (json.token) pm.environment.set('auth_token', json.token);", "if (json.data && json.data.token) pm.environment.set('auth_token', json.data.token);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"tenantSlug\": \"{{tenant_slug}}\"\n}" }, "url": "{{backend_base_url}}/api/auth/login" } }
+        {
+          "name": "POST /api/auth/register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"tenantSlug\": \"{{tenant_slug}}\",\n  \"tenantName\": \"Switchbox Demo Tenant\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/auth/register"
+          }
+        },
+        {
+          "name": "POST /api/auth/login",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.token) pm.environment.set('auth_token', json.token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"tenantSlug\": \"{{tenant_slug}}\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/auth/login"
+          }
+        }
       ]
     },
     {
       "name": "Tenant Settings",
       "item": [
-        { "name": "GET /api/tenant/settings", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/tenant/settings" } },
-        { "name": "GET /api/tenant/settings/admin", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{auth_token}}" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/tenant/settings/admin" } },
-        { "name": "PATCH /api/tenant/settings/admin", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{auth_token}}" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"companyName\": \"Switchbox Funding\",\n  \"legalBusinessName\": \"Switchbox LLC\",\n  \"logoUrl\": null,\n  \"companyEmail\": \"support@example.com\",\n  \"companyPhone\": \"8602026706\",\n  \"companyAddress\": \"123 Main St, Hartford, CT 06103\",\n  \"websiteUrl\": \"https://example.com\",\n  \"supportEmail\": \"support@example.com\",\n  \"theme\": \"light\",\n  \"accentColor\": \"#0284c7\",\n  \"surfaceColor\": \"#ffffff\",\n  \"pdfShowContactEmail\": true,\n  \"pdfShowContactPhone\": true,\n  \"pdfShowAnnualRevenue\": true,\n  \"pdfShowAmountRequested\": true,\n  \"switchboxApiUrl\": \"{{switchbox_api_url}}\",\n  \"switchboxApiKey\": \"{{switchbox_api_key}}\",\n  \"documentStorageProvider\": \"{{document_storage_provider}}\",\n  \"documentStorageEndpoint\": \"{{document_storage_endpoint}}\",\n  \"documentStorageRegion\": \"{{document_storage_region}}\",\n  \"documentStorageBucket\": \"{{document_storage_bucket}}\",\n  \"documentStoragePrefix\": \"{{document_storage_prefix}}\",\n  \"documentStorageAccessKeyId\": \"{{document_storage_access_key_id}}\",\n  \"documentStorageSecretAccessKey\": \"{{document_storage_secret_access_key}}\",\n  \"documentStoragePublicBaseUrl\": \"{{document_storage_public_base_url}}\",\n  \"smtpHost\": \"{{smtp_host}}\",\n  \"smtpPort\": 587,\n  \"smtpSecure\": false,\n  \"smtpUser\": \"{{smtp_user}}\",\n  \"smtpPass\": \"{{smtp_pass}}\",\n  \"smtpFrom\": \"{{smtp_from}}\",\n  \"smtpFromName\": \"{{smtp_from_name}}\",\n  \"emailAbandonedEnabled\": true,\n  \"emailAbandonedDelayHours\": 24,\n  \"emailAbandonedSubject\": \"Complete your funding application\",\n  \"emailAbandonedBody\": \"Hi {firstName},\\n\\nYou started a funding application but haven't finished it yet. We'd love to help you get funded.\\n\\nClick here to complete your application: {applicationUrl}\\n\\nIf you have any questions, reply to this email.\",\n  \"emailAbandonedIncludeLogo\": true,\n  \"emailAbandonedIncludeSig\": true,\n  \"emailNoBanksEnabled\": true,\n  \"emailNoBanksSubject\": \"Don't forget to upload your bank statements\",\n  \"emailNoBanksBody\": \"Hi {firstName},\\n\\nYour application has been received but we still need your last 3 months of bank statements to proceed.\\n\\nPlease upload them here: {applicationUrl}\",\n  \"emailNoBanksIncludeLogo\": true,\n  \"emailNoBanksIncludeSig\": true,\n  \"emailInsufficientBanksEnabled\": true,\n  \"emailMinBankStatements\": 3,\n  \"emailInsufficientBanksSubject\": \"We need more bank statements to process your application\",\n  \"emailInsufficientBanksBody\": \"Hi {firstName},\\n\\nWe received your application but only have {uploadedCount} of the {requiredCount} required bank statements. Please upload the remaining statements here: {applicationUrl}\",\n  \"emailInsufficientBanksIncludeLogo\": true,\n  \"emailInsufficientBanksIncludeSig\": true\n}" }, "url": "{{backend_base_url}}/api/tenant/settings/admin" } }
+        {
+          "name": "GET /api/tenant/settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/tenant/settings"
+          }
+        },
+        {
+          "name": "GET /api/tenant/settings/admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "url": "{{backend_base_url}}/api/tenant/settings/admin"
+          }
+        },
+        {
+          "name": "PATCH /api/tenant/settings/admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Switchbox Funding\",\n  \"legalBusinessName\": \"Switchbox LLC\",\n  \"logoUrl\": null,\n  \"companyEmail\": \"support@example.com\",\n  \"companyPhone\": \"8602026706\",\n  \"companyAddress\": \"123 Main St, Hartford, CT 06103\",\n  \"websiteUrl\": \"https://example.com\",\n  \"supportEmail\": \"support@example.com\",\n  \"theme\": \"dark\",\n  \"accentColor\": \"#0284c7\",\n  \"surfaceColor\": \"#ffffff\",\n  \"pdfShowContactEmail\": true,\n  \"pdfShowContactPhone\": true,\n  \"pdfShowAnnualRevenue\": true,\n  \"pdfShowAmountRequested\": true,\n  \"switchboxApiUrl\": \"{{switchbox_api_url}}\",\n  \"switchboxApiKey\": \"{{switchbox_api_key}}\",\n  \"documentStorageProvider\": \"{{document_storage_provider}}\",\n  \"documentStorageEndpoint\": \"{{document_storage_endpoint}}\",\n  \"documentStorageRegion\": \"{{document_storage_region}}\",\n  \"documentStorageBucket\": \"{{document_storage_bucket}}\",\n  \"documentStoragePrefix\": \"{{document_storage_prefix}}\",\n  \"documentStorageAccessKeyId\": \"{{document_storage_access_key_id}}\",\n  \"documentStorageSecretAccessKey\": \"{{document_storage_secret_access_key}}\",\n  \"documentStoragePublicBaseUrl\": \"{{document_storage_public_base_url}}\",\n  \"smtpHost\": \"{{smtp_host}}\",\n  \"smtpPort\": 587,\n  \"smtpSecure\": false,\n  \"smtpUser\": \"{{smtp_user}}\",\n  \"smtpPass\": \"{{smtp_pass}}\",\n  \"smtpFrom\": \"{{smtp_from}}\",\n  \"smtpFromName\": \"{{smtp_from_name}}\",\n  \"emailAbandonedEnabled\": true,\n  \"emailAbandonedDelayMinutes\": 1440,\n  \"emailAbandonedSubject\": \"Complete your funding application\",\n  \"emailAbandonedBody\": \"Hi {firstName},\\n\\nYou started a funding application but haven't finished it yet. We'd love to help you get funded.\\n\\nClick here to complete your application: {applicationUrl}\\n\\nIf you have any questions, reply to this email.\",\n  \"emailAbandonedIncludeLogo\": true,\n  \"emailAbandonedIncludeSig\": true,\n  \"emailNoBanksEnabled\": true,\n  \"emailNoBanksSubject\": \"Don't forget to upload your bank statements\",\n  \"emailNoBanksBody\": \"Hi {firstName},\\n\\nYour application has been received but we still need your bank statements to proceed.\\n\\nPlease upload them here: {applicationUrl}\",\n  \"emailNoBanksIncludeLogo\": true,\n  \"emailNoBanksIncludeSig\": true,\n  \"emailInsufficientBanksEnabled\": true,\n  \"emailMinBankStatements\": 3,\n  \"emailInsufficientBanksSubject\": \"We need more bank statements to process your application\",\n  \"emailInsufficientBanksBody\": \"Hi {firstName},\\n\\nWe received your application but only have {uploadedCount} of the {requiredCount} required bank statements. Please upload the remaining statements here: {applicationUrl}\",\n  \"emailInsufficientBanksIncludeLogo\": true,\n  \"emailInsufficientBanksIncludeSig\": true,\n  \"aiChatEnabled\": true,\n  \"aiPersonaName\": \"Funding Assistant\",\n  \"aiSystemPromptOverride\": null,\n  \"aiModel\": \"claude-3-5-sonnet-latest\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/tenant/settings/admin"
+          }
+        }
       ]
     },
     {
       "name": "Applications",
       "item": [
-        { "name": "GET /api/applications", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{auth_token}}" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/applications" } },
-        { "name": "POST /api/applications", "event": [{ "listen": "test", "script": { "exec": ["const json = pm.response.json();", "if (json.data && json.data.id) pm.environment.set('application_id', json.data.id);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"contactFirstName\": \"Test\",\n  \"contactLastName\": \"Merchant\",\n  \"contactEmail\": \"merchant@example.com\",\n  \"contactPhone\": \"8602026706\",\n  \"tcpaConsent\": true\n}" }, "url": "{{backend_base_url}}/api/applications" } },
-        { "name": "GET /api/applications/:id", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/applications/{{application_id}}" } },
-        { "name": "PATCH /api/applications/:id/step", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{ \"currentStep\": 2 }" }, "url": "{{backend_base_url}}/api/applications/{{application_id}}/step" } },
-        { "name": "PATCH /api/applications/:id", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{ \"hasAdditionalOwners\": false }" }, "url": "{{backend_base_url}}/api/applications/{{application_id}}" } },
-        { "name": "GET /api/applications/:id/documents", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/applications/{{application_id}}/documents" } },
-        { "name": "POST /api/applications/:id/documents", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"statementMonth\": \"2026-04\",\n  \"fileName\": \"april-bank-statement.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"fileData\": \"{{sample_base64_pdf}}\"\n}" }, "url": "{{backend_base_url}}/api/applications/{{application_id}}/documents" } },
-        { "name": "POST /api/applications/:id/bank-help", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{ \"bankName\": \"Chase\", \"bankUrl\": \"https://www.chase.com\" }" }, "url": "{{backend_base_url}}/api/applications/{{application_id}}/bank-help" } },
-        { "name": "POST /api/applications/:id/submit", "request": { "method": "POST", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/applications/{{application_id}}/submit" } },
-        { "name": "POST /api/applications/:id/finalize", "request": { "method": "POST", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/applications/{{application_id}}/finalize" } },
-        { "name": "GET /api/applications/:id/pdf", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/applications/{{application_id}}/pdf" } }
+        {
+          "name": "GET /api/applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "url": "{{backend_base_url}}/api/applications"
+          }
+        },
+        {
+          "name": "POST /api/applications",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.data && json.data.id) pm.environment.set('application_id', json.data.id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contactFirstName\": \"Test\",\n  \"contactLastName\": \"Merchant\",\n  \"contactEmail\": \"merchant@example.com\",\n  \"contactPhone\": \"8602026706\",\n  \"tcpaConsent\": true\n}"
+            },
+            "url": "{{backend_base_url}}/api/applications"
+          }
+        },
+        {
+          "name": "GET /api/applications/:id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}"
+          }
+        },
+        {
+          "name": "PATCH /api/applications/:id/step",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"currentStep\": 2 }" },
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/step"
+          }
+        },
+        {
+          "name": "PATCH /api/applications/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"hasAdditionalOwners\": false,\n  \"homeBasedBusiness\": false,\n  \"ownerHomeSameAsBusiness\": false\n}" },
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}"
+          }
+        },
+        {
+          "name": "GET /api/applications/:id/documents",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/documents"
+          }
+        },
+        {
+          "name": "POST /api/applications/:id/documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"statementMonth\": \"2026-04\",\n  \"fileName\": \"april-bank-statement.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"fileData\": \"{{sample_base64_pdf}}\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/documents"
+          }
+        },
+        {
+          "name": "POST /api/applications/:id/bank-help",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bankName\": \"Chase\",\n  \"bankUrl\": \"https://www.chase.com\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/bank-help"
+          }
+        },
+        {
+          "name": "POST /api/applications/:id/submit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/submit"
+          }
+        },
+        {
+          "name": "POST /api/applications/:id/finalize",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/finalize"
+          }
+        },
+        {
+          "name": "GET /api/applications/:id/pdf",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Chat Agent",
+      "item": [
+        {
+          "name": "GET /api/chat/:appId/history",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/chat/{{application_id}}/history"
+          }
+        },
+        {
+          "name": "POST /api/chat/:appId/message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What should I do next?\",\n  \"clientState\": {\n    \"currentStep\": 2\n  }\n}"
+            },
+            "url": "{{backend_base_url}}/api/chat/{{application_id}}/message"
+          }
+        }
       ]
     },
     {
       "name": "Form Sections",
       "item": [
-        { "name": "PUT /api/forms/:appId/business", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"legalName\": \"Demo Business LLC\",\n  \"dba\": \"Demo DBA\",\n  \"entityType\": \"LLC\",\n  \"industry\": \"Accounting & Bookkeeping\",\n  \"stateOfFormation\": \"CT\",\n  \"ein\": \"123456789\",\n  \"businessStartDate\": \"2018-03-08\",\n  \"phone\": \"8602026706\",\n  \"website\": \"example.com\",\n  \"streetAddress\": \"123 Main St\",\n  \"city\": \"Hartford\",\n  \"state\": \"CT\",\n  \"zipCode\": \"06103\"\n}" }, "url": "{{backend_base_url}}/api/forms/{{application_id}}/business" } },
-        { "name": "PUT /api/forms/:appId/owners", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"ownerIndex\": 0,\n  \"firstName\": \"Test\",\n  \"lastName\": \"Owner\",\n  \"email\": \"owner@example.com\",\n  \"phone\": \"8602026706\",\n  \"ownershipPct\": \"100\",\n  \"ssn\": \"123456789\",\n  \"dateOfBirth\": \"1985-01-01\",\n  \"streetAddress\": \"123 Main St\",\n  \"city\": \"Hartford\",\n  \"state\": \"CT\",\n  \"zipCode\": \"06103\"\n}" }, "url": "{{backend_base_url}}/api/forms/{{application_id}}/owners" } },
-        { "name": "PUT /api/forms/:appId/financial", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{ \"annualRevenue\": \"500k-1m\" }" }, "url": "{{backend_base_url}}/api/forms/{{application_id}}/financial" } },
-        { "name": "PUT /api/forms/:appId/loan", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{ \"amountRequested\": \"100k-250k\", \"urgency\": \"immediate\" }" }, "url": "{{backend_base_url}}/api/forms/{{application_id}}/loan" } }
+        {
+          "name": "PUT /api/forms/:appId/business",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"legalName\": \"Demo Business LLC\",\n  \"dba\": \"Demo DBA\",\n  \"entityType\": \"LLC\",\n  \"industry\": \"Accounting & Bookkeeping\",\n  \"stateOfFormation\": \"CT\",\n  \"ein\": \"123456789\",\n  \"businessStartDate\": \"2018-03-08\",\n  \"phone\": \"8602026706\",\n  \"website\": \"example.com\",\n  \"streetAddress\": \"123 Main St\",\n  \"streetAddress2\": \"\",\n  \"city\": \"Hartford\",\n  \"state\": \"CT\",\n  \"zipCode\": \"06103\",\n  \"sicCode\": \"\",\n  \"naicsCode\": \"\",\n  \"autoPopulated\": {\n    \"streetAddress\": { \"autoFilled\": true, \"source\": \"google_places\", \"editedByMerchant\": false }\n  }\n}"
+            },
+            "url": "{{backend_base_url}}/api/forms/{{application_id}}/business"
+          }
+        },
+        {
+          "name": "PUT /api/forms/:appId/owners",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerIndex\": 0,\n  \"firstName\": \"Test\",\n  \"lastName\": \"Owner\",\n  \"email\": \"owner@example.com\",\n  \"phone\": \"8602026706\",\n  \"ownershipPct\": \"100\",\n  \"ssn\": \"123456789\",\n  \"dateOfBirth\": \"1985-01-01\",\n  \"creditScore\": \"\",\n  \"streetAddress\": \"123 Main St\",\n  \"streetAddress2\": \"\",\n  \"city\": \"Hartford\",\n  \"state\": \"CT\",\n  \"zipCode\": \"06103\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/forms/{{application_id}}/owners"
+          }
+        },
+        {
+          "name": "PUT /api/forms/:appId/financial",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"annualRevenue\": \"500k-1m\" }" },
+            "url": "{{backend_base_url}}/api/forms/{{application_id}}/financial"
+          }
+        },
+        {
+          "name": "PUT /api/forms/:appId/loan",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"amountRequested\": \"100k-250k\", \"urgency\": \"immediate\" }" },
+            "url": "{{backend_base_url}}/api/forms/{{application_id}}/loan"
+          }
+        }
       ]
     },
     {
       "name": "Signature",
       "item": [
-        { "name": "POST /api/signatures/:appId/sign", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"signatureData\": \"{{sample_signature_png}}\",\n  \"signerName\": \"Test Owner\",\n  \"signerEmail\": \"owner@example.com\",\n  \"consentAcknowledged\": true,\n  \"marketingConsent\": true,\n  \"applicationAuthorizationAcknowledged\": true,\n  \"esignAndCommunicationConsent\": true\n}" }, "url": "{{backend_base_url}}/api/signatures/{{application_id}}/sign" } },
-        { "name": "GET /api/signatures/:appId/signature", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/signatures/{{application_id}}/signature" } }
+        {
+          "name": "POST /api/signatures/:appId/sign",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signatureData\": \"{{sample_signature_png}}\",\n  \"signerName\": \"Test Owner\",\n  \"signerEmail\": \"owner@example.com\",\n  \"consentAcknowledged\": true,\n  \"marketingConsent\": true,\n  \"applicationAuthorizationAcknowledged\": true,\n  \"esignAndCommunicationConsent\": true\n}"
+            },
+            "url": "{{backend_base_url}}/api/signatures/{{application_id}}/sign"
+          }
+        },
+        {
+          "name": "GET /api/signatures/:appId/signature",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/signatures/{{application_id}}/signature"
+          }
+        }
       ]
     },
     {
-      "name": "Business Lookup and Analytics",
+      "name": "Business Lookup",
       "item": [
-        { "name": "GET /api/business/lookup", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/business/lookup?businessName=Demo%20Business&state=CT" } },
-        { "name": "GET /api/business/autocomplete", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/business/autocomplete?input=123%20Main" } },
-        { "name": "GET /api/business/place", "request": { "method": "GET", "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/business/place?placeId={{place_id}}" } },
-        { "name": "POST /api/analytics/:appId/events", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "body": { "mode": "raw", "raw": "{\n  \"events\": [\n    { \"fieldName\": \"contactEmail\", \"eventType\": \"field_focus\", \"durationMs\": 1000 }\n  ]\n}" }, "url": "{{backend_base_url}}/api/analytics/{{application_id}}/events" } },
-        { "name": "GET /api/analytics/:appId/summary", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{auth_token}}" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/analytics/{{application_id}}/summary" } },
-        { "name": "GET /api/analytics/tenant/friction", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{auth_token}}" }, { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }], "url": "{{backend_base_url}}/api/analytics/tenant/friction" } }
+        {
+          "name": "GET /api/business/lookup",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": {
+              "raw": "{{backend_base_url}}/api/business/lookup?businessName=Demo%20Business&state=CT",
+              "host": ["{{backend_base_url}}"],
+              "path": ["api", "business", "lookup"],
+              "query": [
+                { "key": "businessName", "value": "Demo Business" },
+                { "key": "state", "value": "CT" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/business/autocomplete",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": {
+              "raw": "{{backend_base_url}}/api/business/autocomplete?input=123%20Main",
+              "host": ["{{backend_base_url}}"],
+              "path": ["api", "business", "autocomplete"],
+              "query": [
+                { "key": "input", "value": "123 Main" },
+                { "key": "lat", "value": "41.76", "disabled": true },
+                { "key": "lng", "value": "-72.68", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/business/place",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": {
+              "raw": "{{backend_base_url}}/api/business/place?placeId={{place_id}}",
+              "host": ["{{backend_base_url}}"],
+              "path": ["api", "business", "place"],
+              "query": [
+                { "key": "placeId", "value": "{{place_id}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "POST /api/analytics/:appId/events",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    { \"fieldName\": \"contactEmail\", \"eventType\": \"field_focus\", \"durationMs\": 1000 },\n    { \"fieldName\": \"contactEmail\", \"eventType\": \"field_blur\", \"durationMs\": 4200 },\n    { \"fieldName\": \"contactPhone\", \"eventType\": \"typing_pause\", \"durationMs\": 3100 },\n    { \"eventType\": \"step_view\", \"metadata\": { \"step\": 1 } }\n  ]\n}"
+            },
+            "url": "{{backend_base_url}}/api/analytics/{{application_id}}/events"
+          }
+        },
+        {
+          "name": "GET /api/analytics/:appId/summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "url": "{{backend_base_url}}/api/analytics/{{application_id}}/summary"
+          }
+        },
+        {
+          "name": "GET /api/analytics/tenant/friction",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "url": "{{backend_base_url}}/api/analytics/tenant/friction"
+          }
+        }
       ]
     }
   ]

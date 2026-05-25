@@ -105,3 +105,14 @@ export async function requireTenantApiKey(
   }
 }
 
+export function requireSuperAdmin(
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): void {
+  if (req.role !== 'super_admin') {
+    return next(createError('Super admin access required', 403));
+  }
+  next();
+}
+

@@ -5,7 +5,8 @@ import { api } from '@/lib/api';
 type EventType =
   | 'field_focus' | 'field_blur' | 'field_change'
   | 'typing_pause' | 'field_revisit'
-  | 'step_view' | 'step_complete' | 'step_abandon' | 'form_submit';
+  | 'step_view' | 'step_complete' | 'step_abandon' | 'form_submit'
+  | 'field_autofill' | 'field_autofill_edited' | 'field_skipped' | 'toggle_selected';
 
 interface AnalyticsEvent {
   fieldName?: string;
@@ -67,7 +68,7 @@ export function useAnalytics(applicationId: string | null, token: string | null)
     if (eventType === 'step_complete' || eventType === 'step_abandon') flush();
   }, [track, flush]);
 
-  return { onFocus, onBlur, onKeyDown, trackStep, flush };
+  return { onFocus, onBlur, onKeyDown, trackStep, track, flush };
 }
 
 /* ── React Context so Input/Select auto-fire analytics without prop drilling ── */
@@ -76,6 +77,7 @@ export interface AnalyticsHandlers {
   onBlur: (fieldName: string) => void;
   onKeyDown: (fieldName: string) => void;
   trackStep: (stepId: number, eventType: 'step_view' | 'step_complete' | 'step_abandon') => void;
+  track: (event: AnalyticsEvent) => void;
   flush: () => Promise<void>;
 }
 

@@ -105,6 +105,11 @@ const ADMIN_SELECT = {
   emailInsufficientBanksBody: true,
   emailInsufficientBanksIncludeLogo: true,
   emailInsufficientBanksIncludeSig: true,
+  aiChatEnabled: true,
+  aiPersonaName: true,
+  aiSystemPromptOverride: true,
+  aiEligibilityRules: true,
+  aiModel: true,
 } as const;
 
 const ADMIN_DEFAULTS = {
@@ -144,6 +149,11 @@ const ADMIN_DEFAULTS = {
   emailInsufficientBanksBody: null,
   emailInsufficientBanksIncludeLogo: true,
   emailInsufficientBanksIncludeSig: true,
+  aiChatEnabled: true,
+  aiPersonaName: 'Funding Assistant',
+  aiSystemPromptOverride: null,
+  aiEligibilityRules: null,
+  aiModel: 'claude-3-5-sonnet-latest',
 };
 
 router.get(
@@ -250,6 +260,11 @@ const updateSchema = z.object({
   emailInsufficientBanksBody: optionalNullable(z.string().trim().max(5000)),
   emailInsufficientBanksIncludeLogo: z.boolean().optional(),
   emailInsufficientBanksIncludeSig: z.boolean().optional(),
+  // AI chat agent
+  aiChatEnabled: z.boolean().optional(),
+  aiPersonaName: optionalNullable(z.string().trim().max(80)),
+  aiSystemPromptOverride: optionalNullable(z.string().trim().max(5000)),
+  aiModel: optionalNullable(z.string().trim().max(120)),
 });
 
 // Normalize empty strings to null so the DB stores a real absence of value.

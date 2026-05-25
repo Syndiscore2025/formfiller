@@ -29,7 +29,11 @@ function isApplicationDocumentTableMissing(error: unknown): boolean {
 const guestAccess = [optionalAuth, requireTenant];
 
 const stepSchema = z.object({ currentStep: z.number().int().min(1).max(8) });
-const updateAppSchema = z.object({ hasAdditionalOwners: z.boolean().optional() });
+const updateAppSchema = z.object({
+  hasAdditionalOwners: z.boolean().nullable().optional(),
+  homeBasedBusiness: z.boolean().nullable().optional(),
+  ownerHomeSameAsBusiness: z.boolean().nullable().optional(),
+});
 const documentUploadSchema = z.object({
   statementMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Statement month must be YYYY-MM'),
   fileName: z.string().trim().min(1, 'File name is required'),
@@ -137,10 +141,14 @@ router.patch(
   validate(updateAppSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const appId = String(req.params.id);
-    const { hasAdditionalOwners } = req.body as z.infer<typeof updateAppSchema>;
+    const { hasAdditionalOwners, homeBasedBusiness, ownerHomeSameAsBusiness } = req.body as z.infer<typeof updateAppSchema>;
+    const data: Record<string, unknown> = { lastActivityAt: new Date() };
+    if (hasAdditionalOwners !== undefined) data.hasAdditionalOwners = hasAdditionalOwners;
+    if (homeBasedBusiness !== undefined) data.homeBasedBusiness = homeBasedBusiness;
+    if (ownerHomeSameAsBusiness !== undefined) data.ownerHomeSameAsBusiness = ownerHomeSameAsBusiness;
     await prisma.application.updateMany({
       where: { id: appId, tenantId: req.tenantId! },
-      data: { hasAdditionalOwners, lastActivityAt: new Date() },
+      data,
     });
     await writeAuditLog({ applicationId: appId, action: 'APPLICATION_UPDATED', actor: req.userId, ipAddress: req.ip });
     res.json({ success: true });

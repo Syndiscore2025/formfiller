@@ -11,6 +11,14 @@ export type ApplicationStatus = 'draft' | 'submitted' | 'under_review' | 'approv
 
 export type DataSource = 'opencorporates' | 'google_places';
 
+export interface FieldMemory {
+  autoFilled?: boolean;
+  source?: DataSource | 'form' | 'merchant';
+  editedByMerchant?: boolean;
+  skipped?: boolean;
+  updatedAt?: string;
+}
+
 export interface BusinessInfo {
   legalName: string;
   dba: string;
@@ -28,7 +36,7 @@ export interface BusinessInfo {
   zipCode: string;
   sicCode: string;
   naicsCode: string;
-  autoPopulated?: Record<string, boolean>;
+  autoPopulated?: Record<string, boolean | FieldMemory>;
   fieldSources?: Record<string, DataSource>;
 }
 
@@ -76,6 +84,7 @@ export interface FormState {
   loanRequest: LoanRequest;
   hasAdditionalOwners: boolean | null;
   homeAddressSameAsBusiness: boolean | null;
+  ownerHomeSameAsBusiness: boolean | null;
   isSaving: boolean;
   lastSaved: string | null;
 }

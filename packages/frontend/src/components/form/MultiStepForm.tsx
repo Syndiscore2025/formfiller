@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { BankStatementUpload } from './BankStatementUpload';
+import { ChatWidget } from './ChatWidget';
 import { CompletionOverlay } from './CompletionOverlay';
 import { Step1EINLookup } from './steps/Step1EINLookup';
 import { Step2ConfirmBusiness } from './steps/Step2ConfirmBusiness';
@@ -59,6 +60,7 @@ export function MultiStepForm({ token }: Props) {
     loanRequest: EMPTY_LOAN,
     hasAdditionalOwners: null,
     homeAddressSameAsBusiness: null,
+    ownerHomeSameAsBusiness: null,
     isSaving: false,
     lastSaved: null,
   });
@@ -71,6 +73,7 @@ export function MultiStepForm({ token }: Props) {
   const [hasFinalized, setHasFinalized] = useState(false);
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
   const [uploadedDocumentsCount, setUploadedDocumentsCount] = useState(0);
+  const [aiFocusField, setAiFocusField] = useState<string | null>(null);
 
   // Stable callback so BankStatementUpload's completion effect isn't torn down
   // on every parent render (which would cancel the 1.2s reveal timer).
@@ -178,6 +181,19 @@ export function MultiStepForm({ token }: Props) {
     }
   }, [state.applicationId, state.currentStep, token]);
 
+  const handleChatNavigateToField = useCallback(async (field: { step: number; fieldKey: string }) => {
+    const targetStep = Math.min(Math.max(field.step, 1), 5);
+    setAiFocusField(field.fieldKey);
+    setState((prev) => ({ ...prev, currentStep: targetStep }));
+
+    if (!state.applicationId) return;
+    try {
+      await api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: targetStep }, token ?? undefined);
+    } catch (err) {
+      console.warn('Unable to sync AI navigation step:', err);
+    }
+  }, [state.applicationId, token]);
+
   // Step 1: Contact + Business Identity + EIN + Lookup → Step 2
   const handleStep1Next = useCallback(async (contact: ContactInfo) => {
     const appId = await ensureApplication(contact);
@@ -201,8 +217,9 @@ export function MultiStepForm({ token }: Props) {
       alert('We could not save your business information. Please double-check the form and try again.');
       return;
     }
+    await api.patch(`/api/applications/${appId}`, { homeBasedBusiness: homeAddrSame }, token ?? undefined);
     await advanceStep(3);
-  }, [state.applicationId, saveSection, advanceStep]);
+  }, [state.applicationId, saveSection, advanceStep, token]);
 
   // Step 3: Revenue + Funding → Step 4
   const handleStep3Next = useCallback(async (financial: FinancialInfo, loanRequest: LoanRequest) => {
@@ -219,22 +236,42 @@ export function MultiStepForm({ token }: Props) {
   }, [state.applicationId, saveSection, advanceStep]);
 
   // Step 4: Owner Details + Additional Owners → Step 5
-  const handleStep4Next = useCallback(async (owner: OwnerInfo, hasAdditional: boolean | null) => {
+  const handleStep4Next = useCallback(async (owner: OwnerInfo, hasAdditional: boolean | null, ownerHomeSameAsBusiness: boolean) => {
     const appId = state.applicationId;
     if (!appId) return;
-    setState((prev) => ({ ...prev, owners: [owner], hasAdditionalOwners: hasAdditional }));
+    setState((prev) => ({ ...prev, owners: [owner], hasAdditionalOwners: hasAdditional, ownerHomeSameAsBusiness }));
     const ok = await saveSection('owners', owner, appId);
     if (!ok) {
       alert('We could not save the owner details. Please try again.');
       return;
     }
-    await api.patch(`/api/applications/${appId}`, { hasAdditionalOwners: hasAdditional }, token ?? undefined);
+    await api.patch(`/api/applications/${appId}`, { hasAdditionalOwners: hasAdditional, ownerHomeSameAsBusiness }, token ?? undefined);
     await advanceStep(5);
   }, [state.applicationId, saveSection, advanceStep, token]);
 
   // Auto-populate handler from business lookup
   const handleAutoPopulate = useCallback((data: Partial<BusinessInfo>) => {
-    setState((prev) => ({ ...prev, business: { ...prev.business, ...data } }));
+    const now = new Date().toISOString();
+    const fieldSources = data.fieldSources || {};
+    const memory = Object.fromEntries(
+      Object.keys(data)
+        .filter((key) => !['fieldSources', 'autoPopulated'].includes(key))
+        .map((key) => [key, {
+          autoFilled: true,
+          source: fieldSources[key] || 'form',
+          editedByMerchant: false,
+          skipped: false,
+          updatedAt: now,
+        }])
+    );
+    setState((prev) => ({
+      ...prev,
+      business: {
+        ...prev.business,
+        ...data,
+        autoPopulated: { ...(prev.business.autoPopulated || {}), ...memory },
+      },
+    }));
   }, []);
 
   const [pdfDownloading, setPdfDownloading] = useState(false);
@@ -302,6 +339,7 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
+	        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} />
       </>
     ) : null;
   }
@@ -329,6 +367,7 @@ export function MultiStepForm({ token }: Props) {
         {state.currentStep === 4 && (
           <Step6OwnerDetails owner={state.owners[0] || {} as OwnerInfo} contact={state.contact} business={state.business}
             hasAdditionalOwners={state.hasAdditionalOwners} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
+            aiFocusField={aiFocusField} onAiFocusHandled={() => setAiFocusField(null)}
             onNext={handleStep4Next} onBack={() => void goBackOneSection()} />
           )}
         {state.currentStep === 5 && (
@@ -345,6 +384,7 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} />
       </div>
     </AnalyticsContext.Provider>
   );

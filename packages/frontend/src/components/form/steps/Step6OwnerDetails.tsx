@@ -7,6 +7,7 @@ import { DateField } from '@/components/ui/DateField';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { cn } from '@/lib/cn';
+import { useAnalyticsContext } from '@/hooks/useAnalytics';
 
 interface Props {
   owner: OwnerInfo;
@@ -14,11 +15,14 @@ interface Props {
   business: BusinessInfo;
   hasAdditionalOwners: boolean | null;
   homeAddressSameAsBusiness: boolean | null;
-  onNext: (owner: OwnerInfo, hasAdditionalOwners: boolean | null) => void;
+  aiFocusField?: string | null;
+  onAiFocusHandled?: () => void;
+  onNext: (owner: OwnerInfo, hasAdditionalOwners: boolean | null, ownerHomeSameAsBusiness: boolean) => void;
   onBack: () => void;
 }
 
-export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, onNext, onBack }: Props) {
+export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, aiFocusField, onAiFocusHandled, onNext, onBack }: Props) {
+  const analytics = useAnalyticsContext();
   const [firstName, setFirstName] = useState(owner.firstName || contact.firstName || '');
   const [lastName, setLastName] = useState(owner.lastName || contact.lastName || '');
   const email = owner.email || contact.email || '';
@@ -50,12 +54,24 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   useEffect(() => {
     if (showVerification) {
       document.body.style.overflow = 'hidden';
-      requestAnimationFrame(() => ssnInputRef.current?.focus());
+      requestAnimationFrame(() => {
+        const fieldToFocus = aiFocusField === 'owner.dateOfBirth'
+          ? document.getElementById('owner_date_of_birth')
+          : ssnInputRef.current;
+        fieldToFocus?.focus();
+        fieldToFocus?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (aiFocusField === 'owner.ssn' || aiFocusField === 'owner.dateOfBirth') onAiFocusHandled?.();
+      });
       return () => {
         document.body.style.overflow = '';
       };
     }
-  }, [showVerification]);
+  }, [showVerification, aiFocusField, onAiFocusHandled]);
+
+  useEffect(() => {
+    if (aiFocusField !== 'owner.ssn' && aiFocusField !== 'owner.dateOfBirth') return;
+    setShowVerification(true);
+  }, [aiFocusField]);
 
   useEffect(() => {
     if (!showVerification) return;
@@ -68,6 +84,11 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
   const handleSameAsBusinessChange = (checked: boolean) => {
     setSameAsBusiness(checked);
+    analytics?.track({
+      eventType: 'toggle_selected',
+      fieldName: 'application.ownerHomeSameAsBusiness',
+      metadata: { value: checked, label: 'Same as business address' },
+    });
     if (checked) {
       setStreetAddress(business.streetAddress || '');
       setStreetAddress2(business.streetAddress2 || '');
@@ -191,9 +212,12 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
         streetAddress: streetAddress.trim(), streetAddress2: streetAddress2.trim(),
         city: city.trim(), state, zipCode: zipCode.trim(),
       };
+      if (!streetAddress2.trim()) {
+        analytics?.track({ eventType: 'field_skipped', fieldName: 'owner.streetAddress2', metadata: { optional: true } });
+      }
       // If ownership >= 81%, force no additional owners
       const additionalFlag = showAdditionalQuestion ? hasAdditional : false;
-      onNext(ownerData, additionalFlag);
+      onNext(ownerData, additionalFlag, sameAsBusiness);
     } finally { setSubmitting(false); }
   };
 
@@ -324,10 +348,14 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
               </button>
             </div>
 
+            <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-50">
+              For your protection, enter SSN and Date of Birth only in these secure form fields — not in chat.
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input ref={ssnInputRef} label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
+              <Input ref={ssnInputRef} id="owner_ssn" label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
                 onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
-              <DateField label="Date of Birth" required value={dateOfBirth}
+              <DateField id="owner_date_of_birth" label="Date of Birth" required value={dateOfBirth}
                 onChange={setDateOfBirth} error={errors.dateOfBirth} yearOrder="asc" />
             </div>
 

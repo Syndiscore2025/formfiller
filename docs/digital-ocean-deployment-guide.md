@@ -71,6 +71,8 @@ Do **not** commit real credential values to this repository or to exported Postm
 | `GOOGLE_PLACES_API_KEY` | optional | yes | Address autocomplete/place details | Google Cloud project |
 | `OPENAI_API_KEY` | optional | yes | Bank help instructions | OpenAI project |
 | `OPENAI_MODEL` | optional | no | Bank help model, default `gpt-4o-mini` | App Platform env |
+| `ANTHROPIC_API_KEY` | optional | yes | Claude-powered live AI chat | Anthropic console |
+| `ANTHROPIC_MODEL` | optional | no | AI chat model, default `claude-3-5-sonnet-latest` | App Platform env |
 | `CRM_WEBHOOK_URL` | optional | maybe | Global fallback Switchbox webhook URL | Switchbox API owner |
 | `CRM_API_KEY` | optional | yes | Global fallback Switchbox API key | Switchbox API owner |
 
@@ -138,7 +140,22 @@ The seed creates the `default` tenant used by the default merchant flow.
 9. Deploy frontend.
 10. Register/login admin user.
 11. Configure `/settings`: branding, theme, PDF privacy, Switchbox API, document storage.
-12. Run full smoke test: create app, sign, upload bank statements, final submit.
+12. Promote the platform owner account to `super_admin` if private cross-tenant reporting is needed.
+13. Run full smoke test: create app, sign, upload bank statements, final submit.
+
+### Super-admin report console setup
+
+The private report console is not tenant-facing and is not included in Postman exports. It uses the normal admin login token but requires the user's `role` to be `super_admin`.
+
+After creating/signing in the owner account, promote only that account in Postgres:
+
+```sql
+UPDATE "User"
+SET "role" = 'super_admin'
+WHERE "email" = '<owner-email>';
+```
+
+Then sign out/in again so the JWT contains the new role. Keep the exact private console URL only in the private owner-only report-console document. Do not add the private route to public API collections, tenant documentation, or shared handover docs.
 
 ## API smoke tests
 
@@ -178,7 +195,9 @@ The earlier `/submit` route marks a signed app as submitted and moves the mercha
 - Restrict database access to App Platform and required admin IPs.
 - Back up Postgres and object storage.
 - Preserve audit logs for signed applications and settings changes.
+- Preserve `ReportExportAudit` rows for private report downloads. Audit rows store export metadata only, not exported merchant values.
 - Do not email raw secrets or store them in Markdown/Postman exports.
+- Treat any CSV containing full SSN/DOB as highly sensitive. Download only from a trusted machine, do not store in shared folders, and delete local copies when no longer needed.
 
 ## Production follow-ups after DO deployment
 

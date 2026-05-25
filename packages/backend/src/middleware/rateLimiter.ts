@@ -48,3 +48,19 @@ export const bankHelpLimiter = rateLimit({
   message: { success: false, error: 'Bank help lookup limit reached. Please try again tomorrow.' },
 });
 
+export const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const tenant = req.get('x-tenant-slug') || 'default';
+    const applicationId = req.params.appId || 'unknown';
+    const identity = ('userId' in req && typeof req.userId === 'string' && req.userId)
+      ? req.userId
+      : (req.ip || 'unknown');
+    return `${tenant}:${applicationId}:${identity}`;
+  },
+  message: { success: false, error: 'AI chat rate limit reached. Please wait a moment and try again.' },
+});
+

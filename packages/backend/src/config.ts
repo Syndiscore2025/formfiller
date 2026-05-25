@@ -31,6 +31,8 @@ export const config = {
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || '',
   openAiApiKey: process.env.OPENAI_API_KEY || '',
   openAiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest',
   crmWebhookUrl: process.env.CRM_WEBHOOK_URL || '',
   crmApiKey: process.env.CRM_API_KEY || '',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3002',
