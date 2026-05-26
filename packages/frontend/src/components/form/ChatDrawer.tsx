@@ -85,7 +85,7 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
     try {
       const res = await api.post<{ success: boolean; data: ChatReply }>(
         applicationId ? `/api/chat/${applicationId}/message` : '/api/chat/message',
-        { message, clientState: buildSafeClientState(formState, appliedField) },
+        { message, clientState: buildSafeClientState(formState, appliedField, messages) },
         token ?? undefined,
       );
       if (!res.data.suggestedActions.length && !res.data.nextField && isOptOutMessage(res.data.message)) {
@@ -231,12 +231,13 @@ function loadPreApplicationMessages(introMessage: ChatMessage): ChatMessage[] {
   }
 }
 
-function buildSafeClientState(state: FormState, appliedField?: { fieldKey: string; value: string } | null) {
+function buildSafeClientState(state: FormState, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {
   const owner = state.owners[0];
   return {
     applicationId: state.applicationId,
     currentStep: state.currentStep,
     appliedField: appliedField || undefined,
+    recentAssistantMessages: messages.filter((message) => message.role === 'assistant').slice(-8).map((message) => message.content),
     contact: { hasEmail: Boolean(state.contact.email), hasPhone: Boolean(state.contact.phone) },
     business: state.business,
     financial: state.financial,

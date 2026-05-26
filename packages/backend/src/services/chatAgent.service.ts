@@ -10,7 +10,6 @@ import {
 } from './chatGuardrails.service';
 import {
   buildFreshLocalContext,
-  buildLocalContextReply,
   getCurrentDateContext,
   type LocalContext,
 } from './localContext.service';
@@ -46,9 +45,6 @@ interface NextField {
 
 const SAFE_FUNDING_LANGUAGE =
   "I don't want to guess at pricing, terms, payment structure, approval status, or funding amounts in chat. The funding team needs a complete signed application and supporting documents before reviewing options.";
-
-const OFF_TOPIC_MESSAGE =
-  "I can help with this small-business funding application, business financing questions, bank statement uploads, and the information needed to submit your file. I can't help with unrelated topics, but I'm happy to keep moving through the application with you.";
 
 const FALLBACK_PERSONA = 'Funding Assistant';
 const DEFAULT_CHAT_MODEL = 'gpt-4o';
@@ -97,39 +93,20 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
   const guardrailEvaluation = evaluateChatGuardrails({
     message: safeMessage,
     nextField,
-    usedAssistantMessages: history.filter((item) => item.role === 'assistant').map((item) => item.content),
   });
-  const localContextReply = buildLocalContextReply(safeMessage, localContext, nextField);
 
   let reply: ChatReply;
   if (isOptOutRequest(safeMessage)) {
     reply = buildOptOutReply();
   } else if (redactedSensitiveInput) {
     reply = buildSensitiveInfoReply(nextField);
-  } else if (localContextReply) {
-    reply = {
-      message: localContextReply,
-      nextField,
-      suggestedActions: nextField ? [nextField.label, 'Continue application'] : ['Review and sign'],
-    };
-  } else if (guardrailEvaluation.reply) {
-    reply = {
-      message: guardrailEvaluation.reply,
-      nextField,
-      suggestedActions: guardrailEvaluation.suggestedActions,
-    };
-  } else if (isClearlyOffTopic(safeMessage)) {
-    reply = {
-      message: nextField ? `${OFF_TOPIC_MESSAGE}\n\nNext up: ${nextField.question}` : OFF_TOPIC_MESSAGE,
-      nextField,
-      suggestedActions: nextField ? ['Continue application'] : [],
-    };
   } else if (!config.openAiApiKey) {
     reply = buildFallbackReply(safeMessage, nextField);
   } else {
     reply = await requestOpenAiReply({
       userMessage: safeMessage,
       nextField,
+      guardrail: guardrailEvaluation,
       appContext: buildSafeApplicationSummary(app, input.clientState, localContext),
       history,
       personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
@@ -183,33 +160,20 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
   const guardrailEvaluation = evaluateChatGuardrails({
     message: safeMessage,
     nextField,
-    usedAssistantMessages: [],
   });
-  const localContextReply = buildLocalContextReply(safeMessage, localContext, nextField);
 
   let reply: ChatReply;
   if (isOptOutRequest(safeMessage)) {
     reply = buildOptOutReply();
   } else if (redactedSensitiveInput) {
     reply = buildSensitiveInfoReply(nextField);
-  } else if (localContextReply) {
-    reply = {
-      message: localContextReply,
-      nextField,
-      suggestedActions: nextField ? [nextField.label, 'Continue application'] : ['Review next steps'],
-    };
-  } else if (guardrailEvaluation.reply) {
-    reply = {
-      message: guardrailEvaluation.reply,
-      nextField,
-      suggestedActions: guardrailEvaluation.suggestedActions,
-    };
   } else if (!config.openAiApiKey) {
     reply = buildFallbackReply(safeMessage, nextField);
   } else {
     reply = await requestOpenAiReply({
       userMessage: safeMessage,
       nextField,
+      guardrail: guardrailEvaluation,
       appContext: {
         stage: 'pre_application',
         currentDate: localContext.date,
@@ -540,22 +504,6 @@ function sanitizeClientState(value: unknown): unknown {
   return redactSensitiveValues(value);
 }
 
-function isClearlyOffTopic(message: string): boolean {
-  const lower = message.toLowerCase();
-  const greetings = ['hi', 'hello', 'hey', 'thanks', 'thank you'];
-  if (greetings.some((greeting) => lower.trim().startsWith(greeting))) return false;
-
-  const allowed = [
-    'business', 'fund', 'funding', 'finance', 'financing', 'loan', 'merchant', 'advance', 'rate', 'term', 'payment',
-    'application', 'apply', 'form', 'ein', 'owner', 'revenue', 'bank', 'statement', 'upload', 'signature', 'sign',
-    'credit', 'approval', 'qualify', 'amount', 'address', 'industry', 'tax', 'document', 'underwriting', 'lender',
-  ];
-  if (allowed.some((token) => lower.includes(token))) return false;
-
-  const blocked = ['weather', 'recipe', 'sports', 'politics', 'dating', 'homework', 'song', 'movie', 'medical diagnosis'];
-  return blocked.some((token) => lower.includes(token)) || lower.split(/\s+/).length > 4;
-}
-
 function isOptOutRequest(message: string): boolean {
   const normalized = message.trim().toLowerCase().replace(/[.!?,]/g, '');
   const directOptOut = [
@@ -620,8 +568,8 @@ function enforceFinalChatSafety(reply: ChatReply): { reply: ChatReply; fundingSa
 function buildGuardrailMetadata(guardrail: GuardrailEvaluation): Prisma.InputJsonObject {
   return {
     category: guardrail.category,
-    responseSource: guardrail.responseSource,
-    deterministicReply: Boolean(guardrail.reply),
+    fieldHelpKey: guardrail.fieldHelpKey,
+    responseSource: 'openai_guided',
   };
 }
 
@@ -676,6 +624,7 @@ function resolveOpenAiChatModel(configuredModel?: string | null): string {
 async function requestOpenAiReply(input: {
   userMessage: string;
   nextField: NextField | null;
+  guardrail: GuardrailEvaluation;
   appContext: unknown;
   history: Array<{ role: ChatRole; content: string }>;
   personaName: string;
@@ -686,22 +635,29 @@ async function requestOpenAiReply(input: {
   const systemPrompt = [
     `You are ${input.personaName}, a professional small-business funding application assistant embedded in FormFiller.`,
     `Current date context: Today is ${dateContext.humanDate}. Use this as the current day/date. Never imply a different current day.`,
-    'Stay strictly limited to small-business financing, this application, document uploads, e-signature, and underwriting-readiness questions.',
-    'Be friendly, concise, professional, and interactive like a live chat agent. Respond directly to what the merchant typed before guiding them forward.',
-    'If localContext.approvedFacts are provided, you may use them for a brief relatable opening or follow-up only. Do not invent local facts. Do not reference local politics, tragedy, crime, religion, protected classes, scandals, disasters, adult topics, or negative economic news.',
-    'If using a relatable local opening, keep it professional and phrase it as a light human connection, then immediately steer back to completing or signing the application.',
-    'Do not repeat the same generic greeting/menu. Vary your wording naturally and ask one useful follow-up question at a time.',
-    'Unless the merchant clearly opts out or says stop, always helpfully steer the conversation back toward completing the application and the next missing field.',
-    'If the merchant opts out, stop encouraging the application and acknowledge the opt-out respectfully.',
-    'Never promise approval, quote rates, quote terms, estimate payment structures, estimate funding amounts, give example pricing, or provide approval odds. Do not use broad numeric ranges either.',
+    'Your only job is to have a real, natural, helpful conversation with the merchant that always moves them closer to finishing and signing this small-business funding application. You write every reply yourself in your own words — never use a templated or canned answer, never reuse the same phrasing twice in a row, and never sound like a script.',
+    'Stay strictly limited to small-business financing, this application, document uploads, e-signature, identity verification, and underwriting-readiness. If the merchant goes off-topic, briefly and warmly bring it back to the application without sounding robotic.',
+    'Tone: friendly, professional, concise (typically 1–3 short paragraphs), conversational, like a knowledgeable human funding specialist. Acknowledge what the merchant said before guiding them forward. Ask one useful follow-up question at a time. Vary your wording so consecutive replies do not look alike.',
+    'If localContext.approvedFacts are provided, you may use them for a brief relatable opening or follow-up — phrase it like a human connection (weather, light positive local news, sports, season) and immediately steer back to the next missing field or signing. Do NOT invent local facts. Never reference politics, elections, tragedy, crime, religion, protected classes, scandals, disasters, adult topics, or negative economic news.',
+    'Hard funding guardrails — ALWAYS:',
+    '- NEVER quote, estimate, hint at, or give ranges for: interest rate, APR, factor rate, fees, payment amount, payback amount, term length, daily/weekly/monthly payments, funding amount, or approval odds.',
+    '- NEVER promise approval, prequalification, or eligibility. Do not declare a merchant declined either — that is the funding team\'s call after they review the complete signed file.',
+    '- NEVER silently change or claim you filled a field. You can suggest what the merchant should enter, but they confirm everything in the form UI.',
+    '- NEVER ask the merchant to type SSN or DOB in chat. Always tell them to enter those only in the secure form field.',
     `Safe funding language when asked about pricing, terms, approval, or funding amount: ${SAFE_FUNDING_LANGUAGE}`,
-    'Never silently fill fields or claim you changed an application. You may suggest what the merchant should enter, but the merchant must confirm in the form UI.',
-    'Do not ask for full SSN or date of birth in chat. Tell the merchant to enter those only in the secure form field.',
-    'If eligibility seems uncertain, say it may require manual review by the funding team. Do not disqualify unless explicit deterministic rules are provided by the application.',
-    'If the merchant asks why a form field is needed, what a field means, or where to find information, answer the field-specific question first in plain language, then redirect to the next missing required field.',
-    'Ask for the next missing field in the same order as the form. If the merchant asks a question, answer it and then guide them back to the next missing field.',
-    'Do not ask merchants to complete optional fields that they skipped or left blank unless they explicitly ask to revisit them.',
-    'Return ONLY valid JSON with keys: message (string), suggestedActions (array of strings).',
+    'EIN rule: EIN is the 9-digit business tax ID on the SS-4 confirmation letter the IRS sent when the business was first registered. It may also appear on business tax returns, payroll records, business bank paperwork, or IRS notices. If the merchant is a sole proprietor without an EIN, do NOT send them to the IRS for a new number or replacement letter (that takes weeks) — tell them to select the Sole Proprietorship option in the form and continue.',
+    'Field-help rule: if the merchant asks what a field means, why it is needed, or where to find the info, answer that question first in plain language using the fieldHelpGuidance hint when provided, then guide them to the next missing required field (do NOT push them to optional fields they skipped unless they ask to revisit).',
+    'Silent qualification rule: if the merchant says something that may matter for underwriting (startup, no revenue, bankruptcy, restricted industry, non-citizen, NSF, etc.) DO NOT alert them, DO NOT disqualify, DO NOT say "this may be an issue." Just keep them moving through the form normally — those signals are flagged internally for the funding team.',
+    'Forward motion: every reply (unless the merchant explicitly opts out) ends with either a clear next step toward the next missing field, an invitation to review and sign, or a short follow-up question that moves the file forward.',
+    'Opt-out: if the merchant opts out or says stop, acknowledge respectfully and stop pushing the application.',
+    'Output format: return ONLY valid JSON with keys: message (string), suggestedActions (array of up to 3 short button labels).',
+    input.guardrail.categoryGuidance ? `Detected merchant intent: ${input.guardrail.category}. Apply these rules in your reply: ${input.guardrail.categoryGuidance}` : '',
+    input.guardrail.fieldHelpGuidance
+      ? `Detected field-help intent for "${input.guardrail.fieldHelpGuidance.topic}". Use this to answer in your own words: ${input.guardrail.fieldHelpGuidance.guidance}${input.guardrail.fieldHelpGuidance.findIt ? ` Where to find it: ${input.guardrail.fieldHelpGuidance.findIt}` : ''}`
+      : '',
+    input.guardrail.qualificationSignals.length > 0
+      ? `Silent qualification flags detected (${input.guardrail.qualificationSignals.map((s) => s.code).join(', ')}). Do NOT mention these to the merchant. Keep them moving through the application normally.`
+      : '',
     input.systemPromptOverride ? `Tenant-specific instruction: ${input.systemPromptOverride}` : '',
   ].filter(Boolean).join('\n');
 
@@ -713,7 +669,7 @@ async function requestOpenAiReply(input: {
     },
     body: JSON.stringify({
       model: input.model,
-      temperature: 0.25,
+      temperature: 0.55,
       max_tokens: 600,
       response_format: { type: 'json_object' },
       messages: [
