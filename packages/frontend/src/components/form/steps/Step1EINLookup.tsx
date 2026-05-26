@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BusinessInfo, ContactInfo, US_STATES, DataSource } from '@/types/application';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -34,6 +34,7 @@ interface LookupResult {
 
 interface Props {
   business: BusinessInfo;
+  contact: ContactInfo;
   onAutoPopulate: (data: Partial<BusinessInfo>) => void;
   onNext: (contact: ContactInfo) => Promise<void>;
   token: string | null;
@@ -42,9 +43,9 @@ interface Props {
 const TCPA_TEXT =
   'By clicking "Continue", I consent to be contacted about my funding request via phone, email, or text message. Standard message and data rates may apply. This consent is not required to receive funding.';
 
-export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Props) {
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, token }: Props) {
+  const [email, setEmail] = useState(contact.email || '');
+  const [phone, setPhone] = useState(contact.phone || '');
   const [tcpaConsent, setTcpaConsent] = useState(false);
   const [searchName, setSearchName] = useState(business.legalName || '');
   const [searchState, setSearchState] = useState(business.stateOfFormation || '');
@@ -54,6 +55,18 @@ export function Step1EINLookup({ business, onAutoPopulate, onNext, token }: Prop
   const [result, setResult] = useState<LookupResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEmail(contact.email || '');
+    setPhone(contact.phone || '');
+  }, [contact.email, contact.phone]);
+
+  useEffect(() => {
+    setSearchName(business.legalName || '');
+    setSearchState(business.stateOfFormation || '');
+    setSearchEin(business.ein || '');
+    setSoleProprietorship(business.entityType === 'SOLE_PROPRIETORSHIP');
+  }, [business.legalName, business.stateOfFormation, business.ein, business.entityType]);
 
   const formatEin = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 9);

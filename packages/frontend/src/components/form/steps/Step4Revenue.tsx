@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAnalyticsContext } from '@/hooks/useAnalytics';
 import { cn } from '@/lib/cn';
 import { FinancialInfo, LoanRequest, ANNUAL_REVENUE_RANGES, FUNDING_AMOUNT_RANGES } from '@/types/application';
@@ -90,6 +90,11 @@ export function Step4Revenue({ financial, loanRequest, onNext, onBack }: Props) 
   const [amountRequested, setAmountRequested] = useState(loanRequest.amountRequested || '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setAnnualRevenue(financial.annualRevenue || '');
+    setAmountRequested(loanRequest.amountRequested || '');
+  }, [financial.annualRevenue, loanRequest.amountRequested]);
 
   const validate = () => {
     const errs: Record<string, string> = {};

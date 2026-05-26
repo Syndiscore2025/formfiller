@@ -194,6 +194,44 @@ export function MultiStepForm({ token }: Props) {
     }
   }, [state.applicationId, token]);
 
+  const handleChatFieldAnswer = useCallback((field: { step: number; fieldKey: string }, rawValue: string): boolean => {
+    const value = rawValue.trim();
+    if (!value || field.fieldKey === 'owner.ssn' || field.fieldKey === 'owner.dateOfBirth') return false;
+
+    setState((prev) => {
+      const owner = prev.owners[0] || {
+        ownerIndex: 0, firstName: '', lastName: '', email: prev.contact.email, phone: prev.contact.phone,
+        ownershipPct: '', ssn: '', dateOfBirth: '', creditScore: '', streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',
+      } as OwnerInfo;
+
+      switch (field.fieldKey) {
+        case 'business.legalName': return { ...prev, currentStep: field.step, business: { ...prev.business, legalName: value } };
+        case 'business.stateOfFormation': return { ...prev, currentStep: field.step, business: { ...prev.business, stateOfFormation: value.toUpperCase() } };
+        case 'business.ein': return { ...prev, currentStep: field.step, business: { ...prev.business, ein: value.replace(/[^0-9-]/g, '') } };
+        case 'business.entityType': return { ...prev, currentStep: field.step, business: { ...prev.business, entityType: value as BusinessInfo['entityType'] } };
+        case 'business.industry': return { ...prev, currentStep: field.step, business: { ...prev.business, industry: value } };
+        case 'business.streetAddress': return { ...prev, currentStep: field.step, business: { ...prev.business, streetAddress: value } };
+        case 'business.city': return { ...prev, currentStep: field.step, business: { ...prev.business, city: value } };
+        case 'business.state': return { ...prev, currentStep: field.step, business: { ...prev.business, state: value.toUpperCase() } };
+        case 'business.zipCode': return { ...prev, currentStep: field.step, business: { ...prev.business, zipCode: value } };
+        case 'contact.email': return { ...prev, currentStep: field.step, contact: { ...prev.contact, email: value } };
+        case 'contact.phone': return { ...prev, currentStep: field.step, contact: { ...prev.contact, phone: value } };
+        case 'financial.annualRevenue': return { ...prev, currentStep: field.step, financial: { ...prev.financial, annualRevenue: value } };
+        case 'loanRequest.amountRequested': return { ...prev, currentStep: field.step, loanRequest: { ...prev.loanRequest, amountRequested: value } };
+        case 'owner.firstName': return { ...prev, currentStep: field.step, owners: [{ ...owner, firstName: value }] };
+        case 'owner.lastName': return { ...prev, currentStep: field.step, owners: [{ ...owner, lastName: value }] };
+        case 'owner.ownershipPct': return { ...prev, currentStep: field.step, owners: [{ ...owner, ownershipPct: value.replace(/[^0-9.]/g, '') }] };
+        case 'owner.streetAddress': return { ...prev, currentStep: field.step, owners: [{ ...owner, streetAddress: value }] };
+        case 'owner.city': return { ...prev, currentStep: field.step, owners: [{ ...owner, city: value }] };
+        case 'owner.state': return { ...prev, currentStep: field.step, owners: [{ ...owner, state: value.toUpperCase() }] };
+        case 'owner.zipCode': return { ...prev, currentStep: field.step, owners: [{ ...owner, zipCode: value }] };
+        default: return prev;
+      }
+    });
+
+    return true;
+  }, []);
+
   // Step 1: Contact + Business Identity + EIN + Lookup → Step 2
   const handleStep1Next = useCallback(async (contact: ContactInfo) => {
     const appId = await ensureApplication(contact);
@@ -339,7 +377,7 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
-	        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} />
+		        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
       </>
     ) : null;
   }
@@ -355,7 +393,7 @@ export function MultiStepForm({ token }: Props) {
         </div>
 
         {state.currentStep === 1 && (
-          <Step1EINLookup business={state.business} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} />
+          <Step1EINLookup business={state.business} contact={state.contact} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} />
         )}
         {state.currentStep === 2 && (
           <Step2ConfirmBusiness business={state.business} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
@@ -384,7 +422,7 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
       </div>
     </AnalyticsContext.Provider>
   );

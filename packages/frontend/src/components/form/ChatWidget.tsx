@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { FormState } from '@/types/application';
 import { ChatDrawer } from './ChatDrawer';
 
@@ -9,20 +10,27 @@ interface Props {
   token: string | null;
   formState: FormState;
   onNavigateToField?: (field: { step: number; fieldKey: string }) => void;
+  onApplyFieldAnswer?: (field: { step: number; fieldKey: string }, value: string) => boolean;
 }
 
-export function ChatWidget({ applicationId, token, formState, onNavigateToField }: Props) {
+export function ChatWidget({ applicationId, token, formState, onNavigateToField, onApplyFieldAnswer }: Props) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
+        suppressHydrationWarning
         className="fixed bottom-5 right-5 z-[60] rounded-full border border-cyan-300/30 bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 shadow-[0_18px_50px_rgba(34,211,238,0.25)] transition hover:bg-cyan-300"
         aria-label="Open AI funding assistant"
       >
-        💬 Funding Assistant
+        💬 Need help? Chat now
       </button>
       <ChatDrawer
         open={open}
@@ -30,8 +38,10 @@ export function ChatWidget({ applicationId, token, formState, onNavigateToField 
         token={token}
         formState={formState}
         onNavigateToField={onNavigateToField}
+        onApplyFieldAnswer={onApplyFieldAnswer}
         onClose={() => setOpen(false)}
       />
-    </>
+    </>,
+    document.body,
   );
 }

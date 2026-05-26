@@ -46,6 +46,17 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const [submitting, setSubmitting] = useState(false);
   const ssnInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setFirstName(owner.firstName || contact.firstName || '');
+    setLastName(owner.lastName || contact.lastName || '');
+    setOwnershipPct(owner.ownershipPct || '');
+    if (owner.streetAddress) setStreetAddress(owner.streetAddress);
+    if (owner.streetAddress2) setStreetAddress2(owner.streetAddress2);
+    if (owner.city) setCity(owner.city);
+    if (owner.state) setState(owner.state);
+    if (owner.zipCode) setZipCode(owner.zipCode);
+  }, [owner.firstName, owner.lastName, owner.ownershipPct, owner.streetAddress, owner.streetAddress2, owner.city, owner.state, owner.zipCode, contact.firstName, contact.lastName]);
+
   const pct = Number(ownershipPct);
   const showAdditionalQuestion = !(pct >= 81 && pct <= 100);
 

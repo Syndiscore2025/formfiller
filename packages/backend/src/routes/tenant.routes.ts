@@ -153,7 +153,7 @@ const ADMIN_DEFAULTS = {
   aiPersonaName: 'Funding Assistant',
   aiSystemPromptOverride: null,
   aiEligibilityRules: null,
-  aiModel: 'claude-3-5-sonnet-latest',
+  aiModel: 'gpt-4o',
 };
 
 router.get(

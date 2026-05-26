@@ -69,10 +69,8 @@ Do **not** commit real credential values to this repository or to exported Postm
 | `ALLOWED_ORIGINS` | yes | no | Frontend URL(s), comma-separated | DO frontend URL/custom domains |
 | `OPENCORPORATES_API_KEY` | optional | yes | Business lookup enrichment | OpenCorporates account |
 | `GOOGLE_PLACES_API_KEY` | optional | yes | Address autocomplete/place details | Google Cloud project |
-| `OPENAI_API_KEY` | optional | yes | Bank help instructions | OpenAI project |
-| `OPENAI_MODEL` | optional | no | Bank help model, default `gpt-4o-mini` | App Platform env |
-| `ANTHROPIC_API_KEY` | optional | yes | Claude-powered live AI chat | Anthropic console |
-| `ANTHROPIC_MODEL` | optional | no | AI chat model, default `claude-3-5-sonnet-latest` | App Platform env |
+| `OPENAI_API_KEY` | optional | yes | Bank help instructions and live AI chat | OpenAI project |
+| `OPENAI_MODEL` | optional | no | Shared AI model, default `gpt-4o-mini` | App Platform env |
 | `CRM_WEBHOOK_URL` | optional | maybe | Global fallback Switchbox webhook URL | Switchbox API owner |
 | `CRM_API_KEY` | optional | yes | Global fallback Switchbox API key | Switchbox API owner |
 

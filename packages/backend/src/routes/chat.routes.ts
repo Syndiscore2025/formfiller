@@ -6,7 +6,7 @@ import { validate } from '../middleware/validate';
 import { chatLimiter } from '../middleware/rateLimiter';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
-import { createChatReply } from '../services/chatAgent.service';
+import { createChatReply, createPreApplicationChatReply } from '../services/chatAgent.service';
 
 const router = Router();
 const guestAccess = [optionalAuth, requireTenant];
@@ -45,6 +45,29 @@ router.get(
     });
 
     res.json({ success: true, data: messages });
+  })
+);
+
+router.post(
+  '/message',
+  ...guestAccess,
+  chatLimiter,
+  validate(messageSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { message, clientState } = req.body as z.infer<typeof messageSchema>;
+
+    try {
+      const reply = await createPreApplicationChatReply({
+        tenantId: req.tenantId!,
+        userMessage: message,
+        clientState,
+      });
+      res.json({ success: true, data: reply });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unable to process chat message.';
+      if (msg.includes('not enabled')) throw createError('AI chat is not enabled for this tenant.', 403);
+      throw createError('Unable to process chat message right now. Please try again.', 502);
+    }
   })
 );
 

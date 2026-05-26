@@ -1,12 +1,31 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import type { Prisma } from '@prisma/client';
+import {
+  enforceFundingResponseSafety,
+  evaluateChatGuardrails,
+  extractQualificationSignals,
+  type FundingSafetyResult,
+  type GuardrailEvaluation,
+} from './chatGuardrails.service';
+import {
+  buildFreshLocalContext,
+  buildLocalContextReply,
+  getCurrentDateContext,
+  type LocalContext,
+} from './localContext.service';
 
 type ChatRole = 'user' | 'assistant';
 
 interface ChatMessageInput {
   tenantId: string;
   applicationId: string;
+  userMessage: string;
+  clientState?: unknown;
+}
+
+interface PreApplicationChatInput {
+  tenantId: string;
   userMessage: string;
   clientState?: unknown;
 }
@@ -25,15 +44,18 @@ interface NextField {
   question: string;
 }
 
-const APPROVED_FUNDING_LANGUAGE =
-  'Funding options can range broadly from about $2,500 up to $15 million, with terms up to 10 years and daily, weekly, or monthly payment structures depending on the product, lender, and underwriting review. This is not an approval or quote.';
+const SAFE_FUNDING_LANGUAGE =
+  "I don't want to guess at pricing, terms, payment structure, approval status, or funding amounts in chat. The funding team needs a complete signed application and supporting documents before reviewing options.";
 
 const OFF_TOPIC_MESSAGE =
   "I can help with this small-business funding application, business financing questions, bank statement uploads, and the information needed to submit your file. I can't help with unrelated topics, but I'm happy to keep moving through the application with you.";
 
 const FALLBACK_PERSONA = 'Funding Assistant';
+const DEFAULT_CHAT_MODEL = 'gpt-4o';
 const SENSITIVE_CHAT_NOTICE =
   'For your protection, do not send SSN or date of birth in chat. Identity information must be entered only in the secure form fields, where it is transmitted over HTTPS, stored encrypted where applicable, and limited to authorized application processing and underwriting workflows.';
+const OPT_OUT_MESSAGE =
+  'Understood — I will stop this chat interaction. If you decide you want help with the funding application later, you can reopen the assistant or continue directly in the form.';
 
 export async function createChatReply(input: ChatMessageInput): Promise<ChatReply> {
   const cleanMessage = input.userMessage.trim();
@@ -43,6 +65,7 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
 
   const safeMessage = redactSensitiveChatContent(cleanMessage);
   const redactedSensitiveInput = safeMessage !== cleanMessage;
+  const qualificationSignals = extractQualificationSignals(safeMessage);
 
   const app = await loadApplicationContext(input.applicationId, input.tenantId);
   if (!app) throw new Error('Application not found.');
@@ -52,42 +75,71 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
     throw new Error('AI chat is not enabled for this tenant.');
   }
 
+  const userMetadata = {
+    source: 'merchant_chat',
+    redactedSensitiveInput,
+    ...(qualificationSignals.length > 0 ? { qualificationSignals } : {}),
+  } as unknown as Prisma.InputJsonObject;
+
   await prisma.chatMessage.create({
     data: {
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       role: 'user',
       content: safeMessage,
-      metadata: { source: 'merchant_chat', redactedSensitiveInput } as Prisma.InputJsonObject,
+      metadata: userMetadata,
     },
   });
 
-  const nextField = determineNextField(app);
+  const nextField = determineNextField(app, input.clientState);
+  const history = await loadRecentHistory(input.applicationId, input.tenantId);
+  const localContext = await buildApplicationLocalContext(app, input.clientState);
+  const guardrailEvaluation = evaluateChatGuardrails({
+    message: safeMessage,
+    nextField,
+    usedAssistantMessages: history.filter((item) => item.role === 'assistant').map((item) => item.content),
+  });
+  const localContextReply = buildLocalContextReply(safeMessage, localContext, nextField);
 
   let reply: ChatReply;
-  if (redactedSensitiveInput) {
+  if (isOptOutRequest(safeMessage)) {
+    reply = buildOptOutReply();
+  } else if (redactedSensitiveInput) {
     reply = buildSensitiveInfoReply(nextField);
+  } else if (localContextReply) {
+    reply = {
+      message: localContextReply,
+      nextField,
+      suggestedActions: nextField ? [nextField.label, 'Continue application'] : ['Review and sign'],
+    };
+  } else if (guardrailEvaluation.reply) {
+    reply = {
+      message: guardrailEvaluation.reply,
+      nextField,
+      suggestedActions: guardrailEvaluation.suggestedActions,
+    };
   } else if (isClearlyOffTopic(safeMessage)) {
     reply = {
       message: nextField ? `${OFF_TOPIC_MESSAGE}\n\nNext up: ${nextField.question}` : OFF_TOPIC_MESSAGE,
       nextField,
       suggestedActions: nextField ? ['Continue application'] : [],
     };
-  } else if (!config.anthropicApiKey) {
+  } else if (!config.openAiApiKey) {
     reply = buildFallbackReply(safeMessage, nextField);
   } else {
-    reply = await requestClaudeReply({
+    reply = await requestOpenAiReply({
       userMessage: safeMessage,
       nextField,
-      appContext: buildSafeApplicationSummary(app, input.clientState),
-      history: await loadRecentHistory(input.applicationId, input.tenantId),
+      appContext: buildSafeApplicationSummary(app, input.clientState, localContext),
+      history,
       personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
       systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
-      model: tenantSettings?.aiModel || config.anthropicModel,
+      model: resolveOpenAiChatModel(tenantSettings?.aiModel),
     });
   }
 
-  reply = enforceAssistantSafety(reply);
+  const finalSafety = enforceFinalChatSafety(reply);
+  reply = finalSafety.reply;
 
   await prisma.chatMessage.create({
     data: {
@@ -95,14 +147,114 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
       applicationId: input.applicationId,
       role: 'assistant',
       content: reply.message,
-      metadata: {
-        nextField: nextField ? { ...nextField } : null,
-        suggestedActions: reply.suggestedActions,
-      } as Prisma.InputJsonObject,
+      metadata: buildAssistantChatMetadata(nextField, reply.suggestedActions, guardrailEvaluation, qualificationSignals, finalSafety.fundingSafety),
     },
   });
 
   return reply;
+}
+
+export async function createPreApplicationChatReply(input: PreApplicationChatInput): Promise<ChatReply> {
+  const cleanMessage = input.userMessage.trim();
+  if (!cleanMessage) throw new Error('Message is required.');
+
+  const safeMessage = redactSensitiveChatContent(cleanMessage);
+  const redactedSensitiveInput = safeMessage !== cleanMessage;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: input.tenantId },
+    select: {
+      settings: {
+        select: {
+          aiChatEnabled: true,
+          aiPersonaName: true,
+          aiSystemPromptOverride: true,
+          aiModel: true,
+        },
+      },
+    },
+  });
+
+  const tenantSettings = tenant?.settings;
+  if (tenantSettings && tenantSettings.aiChatEnabled === false) throw new Error('AI chat is not enabled for this tenant.');
+
+  const safeClientState = sanitizeClientState(input.clientState);
+  const nextField = determinePreApplicationNextField(safeClientState);
+  const localContext = await buildClientStateLocalContext(safeClientState);
+  const guardrailEvaluation = evaluateChatGuardrails({
+    message: safeMessage,
+    nextField,
+    usedAssistantMessages: [],
+  });
+  const localContextReply = buildLocalContextReply(safeMessage, localContext, nextField);
+
+  let reply: ChatReply;
+  if (isOptOutRequest(safeMessage)) {
+    reply = buildOptOutReply();
+  } else if (redactedSensitiveInput) {
+    reply = buildSensitiveInfoReply(nextField);
+  } else if (localContextReply) {
+    reply = {
+      message: localContextReply,
+      nextField,
+      suggestedActions: nextField ? [nextField.label, 'Continue application'] : ['Review next steps'],
+    };
+  } else if (guardrailEvaluation.reply) {
+    reply = {
+      message: guardrailEvaluation.reply,
+      nextField,
+      suggestedActions: guardrailEvaluation.suggestedActions,
+    };
+  } else if (!config.openAiApiKey) {
+    reply = buildFallbackReply(safeMessage, nextField);
+  } else {
+    reply = await requestOpenAiReply({
+      userMessage: safeMessage,
+      nextField,
+      appContext: {
+        stage: 'pre_application',
+        currentDate: localContext.date,
+        localContext: summarizeLocalContext(localContext),
+        instruction: 'The merchant has not saved the first form card yet. Be conversational and helpful. Do not repeat the same generic menu. If they provide a name or business name, acknowledge it naturally and ask what they need help with or guide them to the first required field.',
+        clientState: safeClientState,
+      },
+      history: [],
+      personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
+      systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
+      model: resolveOpenAiChatModel(tenantSettings?.aiModel),
+    });
+  }
+
+  return enforceFinalChatSafety(reply).reply;
+}
+
+const PRE_APPLICATION_FIELDS: NextField[] = [
+  field(1, 'Get Started', 'business.legalName', 'Name of Business', 'What is the exact legal name of your business?'),
+  field(1, 'Get Started', 'business.stateOfFormation', 'State of Incorporation', 'What state is the business incorporated or registered in?'),
+  field(1, 'Get Started', 'contact.email', 'Email Address', 'What email address should we use for the application?'),
+  field(1, 'Get Started', 'contact.phone', 'Phone Number', 'What phone number should we use for the application?'),
+  field(1, 'Get Started', 'business.ein', 'EIN', 'What is the business EIN? If you are a sole proprietor, select Sole Proprietorship in the form instead.'),
+];
+
+function determinePreApplicationNextField(clientState: unknown): NextField | null {
+  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
+  const applied = state.appliedField && typeof state.appliedField === 'object'
+    ? state.appliedField as { fieldKey?: string }
+    : null;
+
+  if (applied?.fieldKey) {
+    const index = PRE_APPLICATION_FIELDS.findIndex((item) => item.fieldKey === applied.fieldKey);
+    if (index >= 0) return PRE_APPLICATION_FIELDS[index + 1] ?? null;
+  }
+
+  const business = state.business && typeof state.business === 'object' ? state.business as Record<string, unknown> : {};
+  const contact = state.contact && typeof state.contact === 'object' ? state.contact as Record<string, unknown> : {};
+
+  if (!hasText(business.legalName)) return PRE_APPLICATION_FIELDS[0];
+  if (!hasText(business.stateOfFormation)) return PRE_APPLICATION_FIELDS[1];
+  if (contact.hasEmail !== true) return PRE_APPLICATION_FIELDS[2];
+  if (contact.hasPhone !== true) return PRE_APPLICATION_FIELDS[3];
+  if (!hasText(business.ein) && business.entityType !== 'SOLE_PROPRIETORSHIP') return PRE_APPLICATION_FIELDS[4];
+  return null;
 }
 
 async function loadApplicationContext(applicationId: string, tenantId: string) {
@@ -172,7 +324,7 @@ function shouldAskAdditionalOwners(app: ApplicationContext): boolean {
   return !(pct >= 81 && pct <= 100);
 }
 
-function determineNextField(app: ApplicationContext): NextField | null {
+function determineNextField(app: ApplicationContext, clientState?: unknown): NextField | null {
   const business = app.business;
   const owner = primaryOwner(app);
 
@@ -207,7 +359,7 @@ function determineNextField(app: ApplicationContext): NextField | null {
     field(6, 'Bank Statements', 'documents.bankStatements', 'Bank Statements', 'Please upload the most recent business bank statement PDFs.'),
   ];
 
-  return fields.find((candidate) => isMissing(candidate.fieldKey, app, business, owner)) ?? null;
+  return fields.find((candidate) => isMissing(candidate.fieldKey, app, business, owner) && !hasClientFieldValue(clientState, candidate.fieldKey)) ?? null;
 }
 
 function field(step: number, stepName: string, fieldKey: string, label: string, question: string): NextField {
@@ -246,9 +398,97 @@ function isMissing(fieldKey: string, app: ApplicationContext, business = app.bus
   }
 }
 
-function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unknown) {
+function hasClientFieldValue(clientState: unknown, fieldKey: string): boolean {
+  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
+  const applied = state.appliedField && typeof state.appliedField === 'object'
+    ? state.appliedField as { fieldKey?: string; value?: unknown }
+    : null;
+  if (applied?.fieldKey === fieldKey && hasMeaningfulFieldValue(fieldKey, applied.value, state)) return true;
+
+  const [section, key] = fieldKey.split('.');
+  if (fieldKey === 'tcpaConsent') {
+    const contact = state.contact && typeof state.contact === 'object' ? state.contact as Record<string, unknown> : {};
+    return contact.tcpaConsent === true;
+  }
+  if (section === 'contact') {
+    const contact = state.contact && typeof state.contact === 'object' ? state.contact as Record<string, unknown> : {};
+    if (key === 'email') return contact.hasEmail === true;
+    if (key === 'phone') return contact.hasPhone === true;
+  }
+  if (section === 'application') {
+    if (fieldKey === 'application.hasAdditionalOwners') {
+      const owner = state.owner && typeof state.owner === 'object' ? state.owner as Record<string, unknown> : {};
+      const pct = Number(owner.ownershipPct || '');
+      if (pct >= 81 && pct <= 100) return true;
+      if (typeof state.hasAdditionalOwners === 'boolean') return true;
+    }
+    return hasMeaningfulFieldValue(fieldKey, state[key], state);
+  }
+
+  const source = state[section];
+  const record = source && typeof source === 'object' ? source as Record<string, unknown> : {};
+  return hasMeaningfulFieldValue(fieldKey, record[key], state);
+}
+
+function hasMeaningfulFieldValue(fieldKey: string, value: unknown, state?: Record<string, unknown>): boolean {
+  if (fieldKey === 'business.ein') {
+    const business = state?.business && typeof state.business === 'object' ? state.business as Record<string, unknown> : {};
+    if (business.entityType === 'SOLE_PROPRIETORSHIP') return true;
+  }
+  if (fieldKey === 'application.hasAdditionalOwners') return typeof value === 'boolean';
+  if (fieldKey === 'owner.ssn' || fieldKey === 'owner.dateOfBirth') return value === 'present' || hasText(value);
+  return hasText(value);
+}
+
+async function buildApplicationLocalContext(app: ApplicationContext, clientState?: unknown): Promise<LocalContext> {
+  const clientBusiness = extractClientBusiness(clientState);
+  return buildFreshLocalContext({
+    zipCode: app.business?.zipCode || clientBusiness.zipCode,
+    city: app.business?.city || clientBusiness.city,
+    state: app.business?.state || clientBusiness.state,
+    industry: app.business?.industry || clientBusiness.industry,
+  });
+}
+
+async function buildClientStateLocalContext(clientState?: unknown): Promise<LocalContext> {
+  const clientBusiness = extractClientBusiness(clientState);
+  return buildFreshLocalContext({
+    zipCode: clientBusiness.zipCode,
+    city: clientBusiness.city,
+    state: clientBusiness.state,
+    industry: clientBusiness.industry,
+  });
+}
+
+function extractClientBusiness(clientState?: unknown): { zipCode?: string; city?: string; state?: string; industry?: string } {
+  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
+  const business = state.business && typeof state.business === 'object' ? state.business as Record<string, unknown> : {};
+  return {
+    zipCode: typeof business.zipCode === 'string' ? business.zipCode : undefined,
+    city: typeof business.city === 'string' ? business.city : undefined,
+    state: typeof business.state === 'string' ? business.state : undefined,
+    industry: typeof business.industry === 'string' ? business.industry : undefined,
+  };
+}
+
+function summarizeLocalContext(localContext: LocalContext) {
+  return {
+    location: localContext.location,
+    approvedFacts: localContext.approvedFacts.map((fact) => ({
+      topic: fact.topic,
+      summary: fact.summary,
+      sourceLabel: fact.sourceLabel,
+      fetchedAt: fact.fetchedAt,
+    })),
+    suggestedIcebreaker: localContext.icebreaker,
+    safetyNotes: localContext.safetyNotes,
+  };
+}
+
+function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unknown, localContext?: LocalContext) {
   const owner = primaryOwner(app);
   return {
+    currentDate: localContext?.date || getCurrentDateContext(),
     currentStep: app.currentStep,
     status: app.status,
     finalized: Boolean(app.finalizedAt),
@@ -284,6 +524,7 @@ function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unkn
     bankStatementCount: app.documents.length,
     homeBasedBusiness: app.homeBasedBusiness,
     ownerHomeSameAsBusiness: app.ownerHomeSameAsBusiness,
+    localContext: localContext ? summarizeLocalContext(localContext) : undefined,
     recentFieldMemoryEvents: app.analyticsEvents.map((event) => ({
       fieldName: event.fieldName,
       eventType: event.eventType,
@@ -315,13 +556,35 @@ function isClearlyOffTopic(message: string): boolean {
   return blocked.some((token) => lower.includes(token)) || lower.split(/\s+/).length > 4;
 }
 
+function isOptOutRequest(message: string): boolean {
+  const normalized = message.trim().toLowerCase().replace(/[.!?,]/g, '');
+  const directOptOut = [
+    'stop',
+    'unsubscribe',
+    'cancel',
+    'do not contact me',
+    "don't contact me",
+    'dont contact me',
+    'leave me alone',
+    'remove me',
+    'remove my information',
+    'no more messages',
+  ];
+
+  return directOptOut.some((phrase) => normalized === phrase || normalized.includes(phrase));
+}
+
+function buildOptOutReply(): ChatReply {
+  return { message: OPT_OUT_MESSAGE, nextField: null, suggestedActions: [] };
+}
+
 function buildFallbackReply(userMessage: string, nextField: NextField | null): ChatReply {
   if (isSecureIdentityField(nextField)) return buildSensitiveInfoReply(nextField);
 
   const lower = userMessage.toLowerCase();
   const fundingQuestion = ['rate', 'term', 'amount', 'payment', 'fund'].some((token) => lower.includes(token));
   const message = fundingQuestion
-    ? `${APPROVED_FUNDING_LANGUAGE}\n\n${nextField ? `To keep your application moving, ${nextField.question}` : 'Your application looks complete from what I can see.'}`
+    ? `${SAFE_FUNDING_LANGUAGE}\n\n${nextField ? `Next up: ${nextField.question}` : 'Please review and sign so the team can move the file forward.'}`
     : nextField
       ? `I can help you through the application one step at a time. Next up: ${nextField.question}`
       : 'Your application looks complete from what I can see. If you have questions about bank statements, signing, or next steps, I can help.';
@@ -339,6 +602,45 @@ function buildSensitiveInfoReply(nextField: NextField | null): ChatReply {
     nextField,
     suggestedActions: nextField ? [nextField.label] : ['Continue in secure form'],
   };
+}
+
+function enforceFinalChatSafety(reply: ChatReply): { reply: ChatReply; fundingSafety: FundingSafetyResult } {
+  const fundingSafety = enforceFundingResponseSafety(reply.message, reply.nextField);
+  const safeFundingReply: ChatReply = fundingSafety.replaced
+    ? {
+        ...reply,
+        message: fundingSafety.message,
+        suggestedActions: reply.nextField ? [reply.nextField.label, 'Continue application'] : ['Review and sign'],
+      }
+    : reply;
+
+  return { reply: enforceAssistantSafety(safeFundingReply), fundingSafety };
+}
+
+function buildGuardrailMetadata(guardrail: GuardrailEvaluation): Prisma.InputJsonObject {
+  return {
+    category: guardrail.category,
+    responseSource: guardrail.responseSource,
+    deterministicReply: Boolean(guardrail.reply),
+  };
+}
+
+function buildAssistantChatMetadata(
+  nextField: NextField | null,
+  suggestedActions: string[],
+  guardrail: GuardrailEvaluation,
+  qualificationSignals: ReturnType<typeof extractQualificationSignals>,
+  fundingSafety: FundingSafetyResult,
+): Prisma.InputJsonObject {
+  return {
+    nextField: nextField ? { ...nextField } : null,
+    suggestedActions,
+    guardrail: buildGuardrailMetadata(guardrail),
+    fundingSafety: fundingSafety.replaced
+      ? { replaced: true, issues: fundingSafety.issues }
+      : { replaced: false },
+    ...(qualificationSignals.length > 0 ? { qualificationSignals } : {}),
+  } as unknown as Prisma.InputJsonObject;
 }
 
 function enforceAssistantSafety(reply: ChatReply): ChatReply {
@@ -363,7 +665,15 @@ function isSecureIdentityField(nextField: NextField | null): boolean {
   return nextField?.fieldKey === 'owner.ssn' || nextField?.fieldKey === 'owner.dateOfBirth';
 }
 
-async function requestClaudeReply(input: {
+function resolveOpenAiChatModel(configuredModel?: string | null): string {
+  const model = configuredModel?.trim();
+  if (!model) return DEFAULT_CHAT_MODEL;
+  const lower = model.toLowerCase();
+  if (lower.startsWith('gpt-') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) return model;
+  return DEFAULT_CHAT_MODEL;
+}
+
+async function requestOpenAiReply(input: {
   userMessage: string;
   nextField: NextField | null;
   appContext: unknown;
@@ -372,34 +682,42 @@ async function requestClaudeReply(input: {
   systemPromptOverride?: string;
   model: string;
 }): Promise<ChatReply> {
+  const dateContext = getCurrentDateContext();
   const systemPrompt = [
     `You are ${input.personaName}, a professional small-business funding application assistant embedded in FormFiller.`,
+    `Current date context: Today is ${dateContext.humanDate}. Use this as the current day/date. Never imply a different current day.`,
     'Stay strictly limited to small-business financing, this application, document uploads, e-signature, and underwriting-readiness questions.',
-    'Be friendly, concise, and professional. Do not discuss unrelated topics.',
-    'Never promise approval, exact rates, exact terms, or exact offers. Use broad language only.',
-    `Approved funding language: ${APPROVED_FUNDING_LANGUAGE}`,
+    'Be friendly, concise, professional, and interactive like a live chat agent. Respond directly to what the merchant typed before guiding them forward.',
+    'If localContext.approvedFacts are provided, you may use them for a brief relatable opening or follow-up only. Do not invent local facts. Do not reference local politics, tragedy, crime, religion, protected classes, scandals, disasters, adult topics, or negative economic news.',
+    'If using a relatable local opening, keep it professional and phrase it as a light human connection, then immediately steer back to completing or signing the application.',
+    'Do not repeat the same generic greeting/menu. Vary your wording naturally and ask one useful follow-up question at a time.',
+    'Unless the merchant clearly opts out or says stop, always helpfully steer the conversation back toward completing the application and the next missing field.',
+    'If the merchant opts out, stop encouraging the application and acknowledge the opt-out respectfully.',
+    'Never promise approval, quote rates, quote terms, estimate payment structures, estimate funding amounts, give example pricing, or provide approval odds. Do not use broad numeric ranges either.',
+    `Safe funding language when asked about pricing, terms, approval, or funding amount: ${SAFE_FUNDING_LANGUAGE}`,
     'Never silently fill fields or claim you changed an application. You may suggest what the merchant should enter, but the merchant must confirm in the form UI.',
     'Do not ask for full SSN or date of birth in chat. Tell the merchant to enter those only in the secure form field.',
     'If eligibility seems uncertain, say it may require manual review by the funding team. Do not disqualify unless explicit deterministic rules are provided by the application.',
+    'If the merchant asks why a form field is needed, what a field means, or where to find information, answer the field-specific question first in plain language, then redirect to the next missing required field.',
     'Ask for the next missing field in the same order as the form. If the merchant asks a question, answer it and then guide them back to the next missing field.',
     'Do not ask merchants to complete optional fields that they skipped or left blank unless they explicitly ask to revisit them.',
     'Return ONLY valid JSON with keys: message (string), suggestedActions (array of strings).',
     input.systemPromptOverride ? `Tenant-specific instruction: ${input.systemPromptOverride}` : '',
   ].filter(Boolean).join('\n');
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': config.anthropicApiKey,
-      'anthropic-version': '2023-06-01',
+      Authorization: `Bearer ${config.openAiApiKey}`,
     },
     body: JSON.stringify({
       model: input.model,
       temperature: 0.25,
       max_tokens: 600,
-      system: systemPrompt,
+      response_format: { type: 'json_object' },
       messages: [
+        { role: 'system', content: systemPrompt },
         ...input.history,
         {
           role: 'user',
@@ -415,8 +733,8 @@ async function requestClaudeReply(input: {
 
   if (!res.ok) return buildFallbackReply(input.userMessage, input.nextField);
 
-  const payload = await res.json() as { content?: Array<{ type?: string; text?: string }> };
-  const content = payload.content?.find((part) => part.type === 'text')?.text;
+  const payload = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = payload.choices?.[0]?.message?.content;
   if (!content) return buildFallbackReply(input.userMessage, input.nextField);
 
   try {
