@@ -83,9 +83,10 @@ interface Props {
   loanRequest: LoanRequest;
   onNext: (financial: FinancialInfo, loanRequest: LoanRequest) => void;
   onBack: () => void;
+  onDraftChange?: (financial: FinancialInfo, loanRequest: LoanRequest) => void;
 }
 
-export function Step4Revenue({ financial, loanRequest, onNext, onBack }: Props) {
+export function Step4Revenue({ financial, loanRequest, onNext, onBack, onDraftChange }: Props) {
   const [annualRevenue, setAnnualRevenue] = useState(financial.annualRevenue || '');
   const [amountRequested, setAmountRequested] = useState(loanRequest.amountRequested || '');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -95,6 +96,10 @@ export function Step4Revenue({ financial, loanRequest, onNext, onBack }: Props) 
     setAnnualRevenue(financial.annualRevenue || '');
     setAmountRequested(loanRequest.amountRequested || '');
   }, [financial.annualRevenue, loanRequest.amountRequested]);
+
+  useEffect(() => {
+    onDraftChange?.({ annualRevenue }, { amountRequested, urgency: loanRequest.urgency || '' });
+  }, [annualRevenue, amountRequested, loanRequest.urgency, onDraftChange]);
 
   const validate = () => {
     const errs: Record<string, string> = {};

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { BankStatementUpload } from './BankStatementUpload';
@@ -74,6 +74,11 @@ export function MultiStepForm({ token }: Props) {
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
   const [uploadedDocumentsCount, setUploadedDocumentsCount] = useState(0);
   const [aiFocusField, setAiFocusField] = useState<string | null>(null);
+  // TCPA consent signaled from the AI chat
+  const [chatTcpaConsented, setChatTcpaConsented] = useState(false);
+  // Auto-open chat when entering step 2 with Google-populated business data
+  const [autoOpenChat, setAutoOpenChat] = useState(false);
+  const autoOpenChatFiredRef = useRef(false);
 
   // Stable callback so BankStatementUpload's completion effect isn't torn down
   // on every parent render (which would cancel the 1.2s reveal timer).
@@ -87,6 +92,30 @@ export function MultiStepForm({ token }: Props) {
   const handleCloseComplete = useCallback(() => setIsComplete(false), []);
   const handleDocumentsCountChange = useCallback((count: number) => {
     setUploadedDocumentsCount(count);
+  }, []);
+
+  const handleStep1DraftChange = useCallback((contactDraft: Partial<ContactInfo>, businessDraft: Partial<BusinessInfo>) => {
+    setState((prev) => ({
+      ...prev,
+      contact: { ...prev.contact, ...contactDraft },
+      business: { ...prev.business, ...businessDraft },
+    }));
+  }, []);
+
+  const handleStep2DraftChange = useCallback((businessDraft: Partial<BusinessInfo>, homeAddrSame: boolean | null) => {
+    setState((prev) => ({
+      ...prev,
+      business: { ...prev.business, ...businessDraft },
+      homeAddressSameAsBusiness: homeAddrSame === null ? prev.homeAddressSameAsBusiness : homeAddrSame,
+    }));
+  }, []);
+
+  const handleStep3DraftChange = useCallback((financial: FinancialInfo, loanRequest: LoanRequest) => {
+    setState((prev) => ({ ...prev, financial, loanRequest }));
+  }, []);
+
+  const handleStep4DraftChange = useCallback((owner: OwnerInfo, hasAdditionalOwners: boolean | null, ownerHomeSameAsBusiness: boolean) => {
+    setState((prev) => ({ ...prev, owners: [owner], hasAdditionalOwners, ownerHomeSameAsBusiness }));
   }, []);
 
   // Fetch public tenant settings once on mount for branding / redirect URL
@@ -106,6 +135,16 @@ export function MultiStepForm({ token }: Props) {
 
   // Apply tenant theme (dark/light). A user override in localStorage wins.
   useTheme(tenantSettings?.theme ?? null);
+
+  // Auto-open the chat once when entering step 2 with Google-populated business data
+  useEffect(() => {
+    if (state.currentStep !== 2 || autoOpenChatFiredRef.current) return;
+    const hasGoogleData = Object.keys(state.business?.fieldSources || {}).length > 0;
+    if (hasGoogleData) {
+      autoOpenChatFiredRef.current = true;
+      setAutoOpenChat(true);
+    }
+  }, [state.currentStep, state.business?.fieldSources]);
 
   // ── Analytics: keystroke tracking, field-level events, abandonment ──
   const analytics = useAnalytics(state.applicationId, token);
@@ -197,6 +236,31 @@ export function MultiStepForm({ token }: Props) {
   const handleChatFieldAnswer = useCallback((field: { step: number; fieldKey: string }, rawValue: string): boolean => {
     const value = rawValue.trim();
     if (!value || field.fieldKey === 'owner.ssn' || field.fieldKey === 'owner.dateOfBirth') return false;
+    const lower = value.toLowerCase();
+
+    if (field.fieldKey === 'contact.tcpaConsent' || field.fieldKey === 'tcpaConsent') {
+      const agreed = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'agree', 'agreed', 'i agree',
+        'i consent', 'consent', 'absolutely', 'definitely', 'of course', 'sounds good', 'go ahead']
+        .some((w) => lower === w || lower.startsWith(w));
+      if (!agreed) return false;
+      setChatTcpaConsented(true);
+      return true;
+    }
+
+    const homeBasedAnswer = ['no', 'nope', 'false', 'not home based', 'not home-based'].some((w) => lower === w || lower.includes(w))
+      ? false
+      : ['yes', 'yeah', 'yep', 'true', 'home based', 'home-based'].some((w) => lower === w || lower.includes(w))
+        ? true
+        : null;
+
+    const supportedFieldKeys = new Set([
+      'business.legalName', 'business.stateOfFormation', 'business.ein', 'business.entityType', 'business.industry',
+      'business.streetAddress', 'business.city', 'business.state', 'business.zipCode', 'contact.email', 'contact.phone',
+      'application.homeBasedBusiness', 'financial.annualRevenue', 'loanRequest.amountRequested', 'owner.firstName',
+      'owner.lastName', 'owner.ownershipPct', 'owner.streetAddress', 'owner.city', 'owner.state', 'owner.zipCode',
+    ]);
+    if (!supportedFieldKeys.has(field.fieldKey)) return false;
+    if (field.fieldKey === 'application.homeBasedBusiness' && homeBasedAnswer === null) return false;
 
     setState((prev) => {
       const owner = prev.owners[0] || {
@@ -216,6 +280,9 @@ export function MultiStepForm({ token }: Props) {
         case 'business.zipCode': return { ...prev, currentStep: field.step, business: { ...prev.business, zipCode: value } };
         case 'contact.email': return { ...prev, currentStep: field.step, contact: { ...prev.contact, email: value } };
         case 'contact.phone': return { ...prev, currentStep: field.step, contact: { ...prev.contact, phone: value } };
+        case 'application.homeBasedBusiness': {
+          return { ...prev, currentStep: field.step, homeAddressSameAsBusiness: homeBasedAnswer ?? false };
+        }
         case 'financial.annualRevenue': return { ...prev, currentStep: field.step, financial: { ...prev.financial, annualRevenue: value } };
         case 'loanRequest.amountRequested': return { ...prev, currentStep: field.step, loanRequest: { ...prev.loanRequest, amountRequested: value } };
         case 'owner.firstName': return { ...prev, currentStep: field.step, owners: [{ ...owner, firstName: value }] };
@@ -377,7 +444,7 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
-		        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
       </>
     ) : null;
   }
@@ -393,20 +460,20 @@ export function MultiStepForm({ token }: Props) {
         </div>
 
         {state.currentStep === 1 && (
-          <Step1EINLookup business={state.business} contact={state.contact} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} />
+          <Step1EINLookup business={state.business} contact={state.contact} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} onDraftChange={handleStep1DraftChange} chatTcpaConsentSignal={chatTcpaConsented} />
         )}
         {state.currentStep === 2 && (
           <Step2ConfirmBusiness business={state.business} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
-            onNext={handleStep2Next} onBack={() => void goBackOneSection()} />
+            onNext={handleStep2Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep2DraftChange} />
         )}
         {state.currentStep === 3 && (
-          <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => void goBackOneSection()} />
+          <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep3DraftChange} />
         )}
         {state.currentStep === 4 && (
           <Step6OwnerDetails owner={state.owners[0] || {} as OwnerInfo} contact={state.contact} business={state.business}
             hasAdditionalOwners={state.hasAdditionalOwners} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
             aiFocusField={aiFocusField} onAiFocusHandled={() => setAiFocusField(null)}
-            onNext={handleStep4Next} onBack={() => void goBackOneSection()} />
+            onNext={handleStep4Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep4DraftChange} />
           )}
         {state.currentStep === 5 && (
           <Step8ReviewSign
@@ -422,7 +489,7 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} autoOpen={autoOpenChat} />
       </div>
     </AnalyticsContext.Provider>
   );

@@ -11,13 +11,19 @@ interface Props {
   formState: FormState;
   onNavigateToField?: (field: { step: number; fieldKey: string }) => void;
   onApplyFieldAnswer?: (field: { step: number; fieldKey: string }, value: string) => boolean;
+  autoOpen?: boolean;
 }
 
-export function ChatWidget({ applicationId, token, formState, onNavigateToField, onApplyFieldAnswer }: Props) {
+export function ChatWidget({ applicationId, token, formState, onNavigateToField, onApplyFieldAnswer, autoOpen }: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  // Auto-open when parent signals it (e.g. step 2 with Google data)
+  useEffect(() => {
+    if (autoOpen) setOpen(true);
+  }, [autoOpen]);
 
   if (!mounted) return null;
 

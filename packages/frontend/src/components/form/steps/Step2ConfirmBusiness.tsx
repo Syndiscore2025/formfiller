@@ -1,5 +1,5 @@
 'use client';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { BusinessInfo, ENTITY_TYPES, INDUSTRIES, US_STATES, getIndustryCodes, type FieldMemory } from '@/types/application';
 import { useAnalyticsContext } from '@/hooks/useAnalytics';
 import { AddressInput } from '@/components/ui/AddressInput';
@@ -14,6 +14,7 @@ interface Props {
   homeAddressSameAsBusiness: boolean | null;
   onNext: (data: BusinessInfo, homeAddressSameAsBusiness: boolean) => Promise<void>;
   onBack: () => void;
+  onDraftChange?: (data: Partial<BusinessInfo>, homeAddressSameAsBusiness: boolean | null) => void;
 }
 
 /* Fields the user already typed on Step 1 — these don't count as "lookup data" */
@@ -59,7 +60,7 @@ const FIELD_META: { key: string; label: string; required?: boolean }[] = [
   { key: 'website', label: 'Website' },
 ];
 
-export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: initialHomeAddr, onNext, onBack }: Props) {
+export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: initialHomeAddr, onNext, onBack, onDraftChange }: Props) {
   const analytics = useAnalyticsContext();
   const src = business.fieldSources || {};
   const partialBusinessStartYear = getPartialBusinessStartYear(business.businessStartDate);
@@ -92,6 +93,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     if (partialBusinessStartYear) set.delete('businessStartDate');
     return set;
   }, [filledFields, partialBusinessStartYear]);
+  const initiallyCompletedFieldsRef = useRef(completedFields);
 
   // Which fields still need to be filled in?
   const missingFields = useMemo(
@@ -123,8 +125,9 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [addrState, setAddrState] = useState(business.state || '');
   const [zipCode, setZipCode] = useState(business.zipCode || '');
 
-  // Home based business toggle — off means we'll ask for a separate home address later
+  // Home based business — null means not yet answered
   const [homeAddrSame, setHomeAddrSame] = useState<boolean>(initialHomeAddr ?? false);
+  const [homeAddrSameAnswered, setHomeAddrSameAnswered] = useState<boolean>(initialHomeAddr !== null);
   const [googlePlaceAutofill, setGooglePlaceAutofill] = useState<Record<string, string>>({});
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -132,6 +135,53 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [showTollFreeModal, setShowTollFreeModal] = useState(false);
 
   const selectedIndustryCodes = useMemo(() => getIndustryCodes(industry), [industry]);
+
+  // Keep editable local state in sync when the AI/chat updates parent form state.
+  // Without this, a field can be marked "completed" and disappear before the
+  // local input state receives the value the AI just applied.
+  useEffect(() => {
+    setLegalName(business.legalName || '');
+    setDba(business.dba || '');
+    setEntityType(business.entityType || inferEntityType(business.legalName || ''));
+    setIndustry(business.industry || '');
+    setStateOfFormation(business.stateOfFormation || '');
+    setEin(formatEinDisplay(business.ein || ''));
+    setBusinessStartDate(normalizeBusinessStartDateInput(business.businessStartDate));
+    setBusinessPhone(formatPhoneInput(business.phone || ''));
+    setWebsite(business.website || '');
+    setStreetAddress(business.streetAddress || '');
+    setStreetAddress2(business.streetAddress2 || '');
+    setCity(business.city || '');
+    setAddrState(business.state || '');
+    setZipCode(business.zipCode || '');
+  }, [business]);
+
+  useEffect(() => {
+    setHomeAddrSame(initialHomeAddr ?? false);
+    setHomeAddrSameAnswered(initialHomeAddr !== null);
+  }, [initialHomeAddr]);
+
+  useEffect(() => {
+    onDraftChange?.({
+      legalName,
+      dba,
+      entityType,
+      industry,
+      stateOfFormation,
+      ein: ein.replace(/\D/g, ''),
+      businessStartDate,
+      phone: normalizeUsPhoneDigits(businessPhone),
+      website,
+      streetAddress,
+      streetAddress2,
+      city,
+      state: addrState,
+      zipCode,
+      sicCode: selectedIndustryCodes?.sicCode || '',
+      naicsCode: selectedIndustryCodes?.naicsCode || '',
+    }, homeAddrSameAnswered ? homeAddrSame : null);
+  }, [legalName, dba, entityType, industry, stateOfFormation, ein, businessStartDate, businessPhone, website, streetAddress, streetAddress2, city, addrState, zipCode, selectedIndustryCodes, homeAddrSameAnswered, homeAddrSame, onDraftChange]);
+
   const displayIndustryCodes = useMemo(() => {
     const mapped = getIndustryCodes(business.industry || industry);
     return {
@@ -178,6 +228,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
 
   const setHomeBasedBusiness = (nextValue: boolean) => {
     setHomeAddrSame(nextValue);
+    setHomeAddrSameAnswered(true);
     analytics?.track({
       eventType: 'toggle_selected',
       fieldName: 'application.homeBasedBusiness',
@@ -384,30 +435,39 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
                 )}
               </Fragment>
             ))}
+            </div>
+
+            {/* Home Based Business — visually separated, Yes/No buttons */}
             {hasBusinessAddr && (
-              <div className="business-confirm-row flex flex-col gap-1 rounded-xl px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-slate-400">Home Based Business</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={homeAddrSame}
-                  aria-label="Home Based Business"
-                  onClick={() => setHomeBasedBusiness(!homeAddrSame)}
-                  className={`home-business-switch relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/40 ${
-                    homeAddrSame
-                      ? 'is-on border-sky-600 bg-sky-600'
-                      : 'is-off border-slate-600 bg-slate-800/80'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-md transition-transform ${
-                      homeAddrSame ? 'translate-x-6' : 'translate-x-1'
+              <div className="mt-4 border-t border-white/10 pt-5">
+                <p className="mb-1 text-sm font-semibold text-slate-200">Home Based Business?</p>
+                <p className="mb-4 text-xs text-slate-400">Does the primary owner operate this business from their home address?</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setHomeBasedBusiness(true)}
+                    className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${
+                      homeAddrSameAnswered && homeAddrSame
+                        ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200'
+                        : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/25 hover:text-slate-200'
                     }`}
-                  />
-                </button>
+                  >
+                    ✓ Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHomeBasedBusiness(false)}
+                    className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${
+                      homeAddrSameAnswered && !homeAddrSame
+                        ? 'border-rose-400/50 bg-rose-400/10 text-rose-200'
+                        : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/25 hover:text-slate-200'
+                    }`}
+                  >
+                    ✗ No
+                  </button>
+                </div>
               </div>
             )}
-            </div>
           </div>
 
           <div className="flex gap-3 justify-between mt-8">
@@ -443,7 +503,10 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   // just an apt/suite field is confusing when the address was already confirmed).
   const show = (key: string) => {
     if (!showAll && key === 'streetAddress2') return false;
-    return showAll || !completedFields.has(key);
+    // In minimal mode, hide fields that were already completed when this step
+    // opened. If the AI fills a missing field while the merchant is watching,
+    // keep it visible so the value does not appear to vanish.
+    return showAll || !initiallyCompletedFieldsRef.current.has(key);
   };
 
   const showIdentity = show('legalName') || show('dba');

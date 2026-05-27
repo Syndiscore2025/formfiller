@@ -38,12 +38,15 @@ interface Props {
   onAutoPopulate: (data: Partial<BusinessInfo>) => void;
   onNext: (contact: ContactInfo) => Promise<void>;
   token: string | null;
+  onDraftChange?: (contact: Partial<ContactInfo>, business: Partial<BusinessInfo>) => void;
+  /** Signals from the AI chat that the merchant has given TCPA consent verbally */
+  chatTcpaConsentSignal?: boolean;
 }
 
 const TCPA_TEXT =
   'By clicking "Continue", I consent to be contacted about my funding request via phone, email, or text message. Standard message and data rates may apply. This consent is not required to receive funding.';
 
-export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, token }: Props) {
+export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, token, onDraftChange, chatTcpaConsentSignal }: Props) {
   const [email, setEmail] = useState(contact.email || '');
   const [phone, setPhone] = useState(contact.phone || '');
   const [tcpaConsent, setTcpaConsent] = useState(false);
@@ -61,6 +64,15 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
     setPhone(contact.phone || '');
   }, [contact.email, contact.phone]);
 
+  // When the AI chat captures verbal TCPA consent, check the box and auto-submit
+  useEffect(() => {
+    if (!chatTcpaConsentSignal) return;
+    setTcpaConsent(true);
+    setErrors((p) => { const next = { ...p }; delete next.tcpaConsent; return next; });
+    void handleNext(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatTcpaConsentSignal]);
+
   useEffect(() => {
     setSearchName(business.legalName || '');
     setSearchState(business.stateOfFormation || '');
@@ -68,13 +80,20 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
     setSoleProprietorship(business.entityType === 'SOLE_PROPRIETORSHIP');
   }, [business.legalName, business.stateOfFormation, business.ein, business.entityType]);
 
+  useEffect(() => {
+    onDraftChange?.(
+      { email, phone, tcpaConsent },
+      { legalName: searchName, stateOfFormation: searchState, ein: searchEin, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : business.entityType },
+    );
+  }, [email, phone, tcpaConsent, searchName, searchState, searchEin, soleProprietorship, business.entityType, onDraftChange]);
+
   const formatEin = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 9);
     if (digits.length > 2) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
     return digits;
   };
 
-  const validate = () => {
+  const validate = (forceTcpaConsent = false) => {
     const errs: Record<string, string> = {};
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Valid email is required';
     if (!phone.trim() || phone.replace(/\D/g, '').length < 10) errs.phone = 'Valid 10-digit phone is required';
@@ -85,12 +104,12 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
       if (!einDigits) errs.searchEin = 'EIN is required';
       else if (einDigits.length !== 9) errs.searchEin = 'EIN must be 9 digits';
     }
-    if (!tcpaConsent) errs.tcpaConsent = 'You must agree to continue';
+    if (!tcpaConsent && !forceTcpaConsent) errs.tcpaConsent = 'You must agree to continue';
     return errs;
   };
 
-  const handleNext = async () => {
-    const errs = validate();
+  const handleNext = async (forceTcpaConsent = false) => {
+    const errs = validate(forceTcpaConsent);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSubmitError(null);
     setSubmitting(true);
@@ -132,7 +151,7 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
       } else if (searchName.trim()) {
         onAutoPopulate({ legalName: searchName.trim(), stateOfFormation: searchState || undefined, ein: einDigits, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : undefined });
       }
-      await onNext({ firstName: '', lastName: '', email, phone, tcpaConsent });
+      await onNext({ firstName: '', lastName: '', email, phone, tcpaConsent: tcpaConsent || forceTcpaConsent });
     } catch (err) {
       setSubmitError(
         err instanceof Error
@@ -202,7 +221,7 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
           <div />
         )}
 
-        <Button type="button" onClick={handleNext} loading={submitting}>
+        <Button type="button" onClick={() => void handleNext()} loading={submitting}>
           Continue →
         </Button>
       </div>

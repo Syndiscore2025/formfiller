@@ -288,42 +288,42 @@ function shouldAskAdditionalOwners(app: ApplicationContext): boolean {
   return !(pct >= 81 && pct <= 100);
 }
 
+const APPLICATION_FLOW_FIELDS: NextField[] = [
+  field(1, 'Get Started', 'business.legalName', 'Name of Business', "What is the exact legal name of your business?"),
+  field(1, 'Get Started', 'business.stateOfFormation', 'State of Incorporation', 'What state was the business formed or incorporated in?'),
+  field(1, 'Get Started', 'contact.email', 'Email Address', 'What email should we use for this funding request?'),
+  field(1, 'Get Started', 'contact.phone', 'Phone Number', 'What is the best phone number for this funding request?'),
+  field(1, 'Get Started', 'business.ein', 'EIN', 'What is the business EIN? If this is a sole proprietorship without an EIN, say that.'),
+  field(1, 'Get Started', 'tcpaConsent', 'Contact Consent', 'Please confirm the contact consent so we can continue the application.'),
+
+  field(2, 'Business Details', 'business.industry', 'Industry', 'What industry best describes your business?'),
+  field(2, 'Business Details', 'business.streetAddress', 'Business Street Address', 'What is the street address for the business?'),
+  field(2, 'Business Details', 'business.city', 'Business City', 'What city is the business located in?'),
+  field(2, 'Business Details', 'business.state', 'Business State', 'What state is the business located in?'),
+  field(2, 'Business Details', 'business.zipCode', 'Business ZIP Code', 'What is the business ZIP code?'),
+  field(2, 'Business Details', 'application.homeBasedBusiness', 'Home Based Business', 'Is this a home-based business? Please choose Yes or No on the Business Details page.'),
+  field(3, 'Revenue & Funding', 'financial.annualRevenue', 'Estimated Annual Revenue', 'Which annual revenue range best matches the business?'),
+  field(3, 'Revenue & Funding', 'loanRequest.amountRequested', 'Funding Needed', 'How much funding are you looking for?'),
+
+  field(4, 'Owner Details', 'owner.firstName', 'Owner First Name', 'What is the primary owner’s first name?'),
+  field(4, 'Owner Details', 'owner.lastName', 'Owner Last Name', 'What is the primary owner’s last name?'),
+  field(4, 'Owner Details', 'owner.ownershipPct', 'Ownership %', 'What percentage of the business does the primary owner own?'),
+  field(4, 'Owner Details', 'owner.streetAddress', 'Owner Home Address', 'What is the primary owner’s home street address?'),
+  field(4, 'Owner Details', 'owner.city', 'Owner City', 'What city does the primary owner live in?'),
+  field(4, 'Owner Details', 'owner.state', 'Owner State', 'What state does the primary owner live in?'),
+  field(4, 'Owner Details', 'owner.zipCode', 'Owner ZIP Code', 'What is the primary owner’s ZIP code?'),
+  field(4, 'Owner Details', 'application.hasAdditionalOwners', 'Additional Owners', 'Are there any other owners with 20% or more ownership?'),
+  field(4, 'Owner Details', 'owner.ssn', 'Owner SSN', 'For identity verification, please enter the primary owner’s SSN in the secure form field.'),
+  field(4, 'Owner Details', 'owner.dateOfBirth', 'Owner Date of Birth', 'For identity verification, please enter the primary owner’s date of birth in the secure form field.'),
+
+  field(5, 'Review & Sign', 'signature', 'Electronic Signature', 'Please review the application, check the authorizations, and electronically sign.'),
+  field(6, 'Bank Statements', 'documents.bankStatements', 'Bank Statements', 'Please upload the most recent business bank statement PDFs.'),
+];
+
 function determineNextField(app: ApplicationContext, clientState?: unknown): NextField | null {
   const business = app.business;
   const owner = primaryOwner(app);
-
-  const fields: NextField[] = [
-    field(1, 'Get Started', 'business.legalName', 'Name of Business', "What is the exact legal name of your business?"),
-    field(1, 'Get Started', 'business.stateOfFormation', 'State of Incorporation', 'What state was the business formed or incorporated in?'),
-    field(1, 'Get Started', 'contact.email', 'Email Address', 'What email should we use for this funding request?'),
-    field(1, 'Get Started', 'contact.phone', 'Phone Number', 'What is the best phone number for this funding request?'),
-    field(1, 'Get Started', 'business.ein', 'EIN', 'What is the business EIN? If this is a sole proprietorship without an EIN, say that.'),
-    field(1, 'Get Started', 'tcpaConsent', 'Contact Consent', 'Please confirm the contact consent so we can continue the application.'),
-
-    field(2, 'Business Details', 'business.industry', 'Industry', 'What industry best describes your business?'),
-    field(2, 'Business Details', 'business.streetAddress', 'Business Street Address', 'What is the street address for the business?'),
-    field(2, 'Business Details', 'business.city', 'Business City', 'What city is the business located in?'),
-    field(2, 'Business Details', 'business.state', 'Business State', 'What state is the business located in?'),
-    field(2, 'Business Details', 'business.zipCode', 'Business ZIP Code', 'What is the business ZIP code?'),
-    field(3, 'Revenue & Funding', 'financial.annualRevenue', 'Estimated Annual Revenue', 'Which annual revenue range best matches the business?'),
-    field(3, 'Revenue & Funding', 'loanRequest.amountRequested', 'Funding Needed', 'How much funding are you looking for?'),
-
-    field(4, 'Owner Details', 'owner.firstName', 'Owner First Name', 'What is the primary owner’s first name?'),
-    field(4, 'Owner Details', 'owner.lastName', 'Owner Last Name', 'What is the primary owner’s last name?'),
-    field(4, 'Owner Details', 'owner.ownershipPct', 'Ownership %', 'What percentage of the business does the primary owner own?'),
-    field(4, 'Owner Details', 'owner.streetAddress', 'Owner Home Address', 'What is the primary owner’s home street address?'),
-    field(4, 'Owner Details', 'owner.city', 'Owner City', 'What city does the primary owner live in?'),
-    field(4, 'Owner Details', 'owner.state', 'Owner State', 'What state does the primary owner live in?'),
-    field(4, 'Owner Details', 'owner.zipCode', 'Owner ZIP Code', 'What is the primary owner’s ZIP code?'),
-    field(4, 'Owner Details', 'application.hasAdditionalOwners', 'Additional Owners', 'Are there any other owners with 20% or more ownership?'),
-    field(4, 'Owner Details', 'owner.ssn', 'Owner SSN', 'For identity verification, please enter the primary owner’s SSN in the secure form field.'),
-    field(4, 'Owner Details', 'owner.dateOfBirth', 'Owner Date of Birth', 'For identity verification, please enter the primary owner’s date of birth in the secure form field.'),
-
-    field(5, 'Review & Sign', 'signature', 'Electronic Signature', 'Please review the application, check the authorizations, and electronically sign.'),
-    field(6, 'Bank Statements', 'documents.bankStatements', 'Bank Statements', 'Please upload the most recent business bank statement PDFs.'),
-  ];
-
-  return fields.find((candidate) => isMissing(candidate.fieldKey, app, business, owner) && !hasClientFieldValue(clientState, candidate.fieldKey)) ?? null;
+  return APPLICATION_FLOW_FIELDS.find((candidate) => isMissing(candidate.fieldKey, app, business, owner) && !hasClientFieldValue(clientState, candidate.fieldKey)) ?? null;
 }
 
 function field(step: number, stepName: string, fieldKey: string, label: string, question: string): NextField {
@@ -343,6 +343,7 @@ function isMissing(fieldKey: string, app: ApplicationContext, business = app.bus
     case 'business.city': return !hasText(business?.city);
     case 'business.state': return !hasText(business?.state);
     case 'business.zipCode': return !hasText(business?.zipCode);
+    case 'application.homeBasedBusiness': return app.homeBasedBusiness === null;
     case 'business.businessStartDate': return !business?.businessStartDate;
     case 'financial.annualRevenue': return !hasText(app.financial?.annualRevenue);
     case 'loanRequest.amountRequested': return !hasText(app.loanRequest?.amountRequested);
@@ -380,6 +381,9 @@ function hasClientFieldValue(clientState: unknown, fieldKey: string): boolean {
     if (key === 'phone') return contact.hasPhone === true;
   }
   if (section === 'application') {
+    if (fieldKey === 'application.homeBasedBusiness') {
+      return typeof state.homeAddressSameAsBusiness === 'boolean' || typeof state.homeBasedBusiness === 'boolean';
+    }
     if (fieldKey === 'application.hasAdditionalOwners') {
       const owner = state.owner && typeof state.owner === 'object' ? state.owner as Record<string, unknown> : {};
       const pct = Number(owner.ownershipPct || '');
@@ -399,6 +403,7 @@ function hasMeaningfulFieldValue(fieldKey: string, value: unknown, state?: Recor
     const business = state?.business && typeof state.business === 'object' ? state.business as Record<string, unknown> : {};
     if (business.entityType === 'SOLE_PROPRIETORSHIP') return true;
   }
+  if (fieldKey === 'application.homeBasedBusiness') return typeof value === 'boolean';
   if (fieldKey === 'application.hasAdditionalOwners') return typeof value === 'boolean';
   if (fieldKey === 'owner.ssn' || fieldKey === 'owner.dateOfBirth') return value === 'present' || hasText(value);
   return hasText(value);
@@ -449,11 +454,57 @@ function summarizeLocalContext(localContext: LocalContext) {
   };
 }
 
+function extractClientCurrentStep(clientState?: unknown): number | null {
+  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
+  return typeof state.currentStep === 'number' ? state.currentStep : null;
+}
+
+function buildApplicationProgress(app: ApplicationContext, clientState?: unknown) {
+  const business = app.business;
+  const owner = primaryOwner(app);
+  const currentStep = extractClientCurrentStep(clientState) ?? app.currentStep;
+  const nextMissingField = determineNextField(app, clientState);
+  const fields = APPLICATION_FLOW_FIELDS.map((item) => {
+    const completed = !isMissing(item.fieldKey, app, business, owner) || hasClientFieldValue(clientState, item.fieldKey);
+    return {
+      step: item.step,
+      stepName: item.stepName,
+      fieldKey: item.fieldKey,
+      label: item.label,
+      completed,
+      isNext: nextMissingField?.fieldKey === item.fieldKey,
+    };
+  });
+
+  const steps = Array.from(new Set(APPLICATION_FLOW_FIELDS.map((item) => item.step))).map((step) => {
+    const stepFields = fields.filter((item) => item.step === step);
+    const stepName = APPLICATION_FLOW_FIELDS.find((item) => item.step === step)?.stepName || `Step ${step}`;
+    return {
+      step,
+      stepName,
+      isCurrentStep: step === currentStep,
+      completedFields: stepFields.filter((item) => item.completed).map((item) => item.label),
+      missingFields: stepFields.filter((item) => !item.completed).map((item) => item.label),
+    };
+  });
+
+  return {
+    currentStep,
+    currentStepName: APPLICATION_FLOW_FIELDS.find((item) => item.step === currentStep)?.stepName || null,
+    nextMissingField,
+    completedCount: fields.filter((item) => item.completed).length,
+    missingCount: fields.filter((item) => !item.completed).length,
+    steps,
+  };
+}
+
 function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unknown, localContext?: LocalContext) {
   const owner = primaryOwner(app);
+  const progress = buildApplicationProgress(app, clientState);
   return {
     currentDate: localContext?.date || getCurrentDateContext(),
-    currentStep: app.currentStep,
+    currentStep: progress.currentStep,
+    databaseCurrentStep: app.currentStep,
     status: app.status,
     finalized: Boolean(app.finalizedAt),
     disqualified: Boolean(app.disqualifiedAt),
@@ -488,6 +539,8 @@ function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unkn
     bankStatementCount: app.documents.length,
     homeBasedBusiness: app.homeBasedBusiness,
     ownerHomeSameAsBusiness: app.ownerHomeSameAsBusiness,
+    progress,
+    conversationInstruction: 'Trust applicationContext.progress as the live source of truth for where the merchant is. If databaseCurrentStep differs from currentStep, the merchant is actively moving through the form and currentStep is more current.',
     localContext: localContext ? summarizeLocalContext(localContext) : undefined,
     recentFieldMemoryEvents: app.analyticsEvents.map((event) => ({
       fieldName: event.fieldName,
@@ -638,11 +691,14 @@ async function requestOpenAiReply(input: {
     'Your only job is to have a real, natural, helpful conversation with the merchant that always moves them closer to finishing and signing this small-business funding application. You write every reply yourself in your own words — never use a templated or canned answer, never reuse the same phrasing twice in a row, and never sound like a script.',
     'Stay strictly limited to small-business financing, this application, document uploads, e-signature, identity verification, and underwriting-readiness. If the merchant goes off-topic, briefly and warmly bring it back to the application without sounding robotic.',
     'Tone: friendly, professional, concise (typically 1–3 short paragraphs), conversational, like a knowledgeable human funding specialist. Acknowledge what the merchant said before guiding them forward. Ask one useful follow-up question at a time. Vary your wording so consecutive replies do not look alike.',
+    'Live progress awareness: before answering, inspect applicationContext.progress. Treat it as the live source of truth, especially when the merchant is filling fields without AI help. Use progress.currentStepName, progress.nextMissingField, and each step’s missingFields/completedFields to know exactly what comes next. Do not ask for a field that progress marks completed.',
+    'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If a step is complete, recognize that and move them to the next step. If they are on Step 2 with lookup data, ask them to confirm the details and answer Home Based Business with Yes or No.',
+    'Field capture flow: if applicationContext.clientState.appliedField is present, you may naturally acknowledge that the answer was captured from chat, then immediately move to the next missing field. If no appliedField is present, do not claim you changed the form — guide them to enter or confirm it in the visible UI.',
     'If localContext.approvedFacts are provided, you may use them for a brief relatable opening or follow-up — phrase it like a human connection (weather, light positive local news, sports, season) and immediately steer back to the next missing field or signing. Do NOT invent local facts. Never reference politics, elections, tragedy, crime, religion, protected classes, scandals, disasters, adult topics, or negative economic news.',
     'Hard funding guardrails — ALWAYS:',
     '- NEVER quote, estimate, hint at, or give ranges for: interest rate, APR, factor rate, fees, payment amount, payback amount, term length, daily/weekly/monthly payments, funding amount, or approval odds.',
     '- NEVER promise approval, prequalification, or eligibility. Do not declare a merchant declined either — that is the funding team\'s call after they review the complete signed file.',
-    '- NEVER silently change or claim you filled a field. You can suggest what the merchant should enter, but they confirm everything in the form UI.',
+    '- NEVER silently change or claim you filled a field unless applicationContext.clientState.appliedField shows the merchant just provided that answer through chat. Otherwise, you can suggest what they should enter, but they confirm everything in the form UI.',
     '- NEVER ask the merchant to type SSN or DOB in chat. Always tell them to enter those only in the secure form field.',
     `Safe funding language when asked about pricing, terms, approval, or funding amount: ${SAFE_FUNDING_LANGUAGE}`,
     'EIN rule: EIN is the 9-digit business tax ID on the SS-4 confirmation letter the IRS sent when the business was first registered. It may also appear on business tax returns, payroll records, business bank paperwork, or IRS notices. If the merchant is a sole proprietor without an EIN, do NOT send them to the IRS for a new number or replacement letter (that takes weeks) — tell them to select the Sole Proprietorship option in the form and continue.',

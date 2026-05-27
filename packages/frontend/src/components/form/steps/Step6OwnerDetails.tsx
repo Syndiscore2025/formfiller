@@ -19,9 +19,10 @@ interface Props {
   onAiFocusHandled?: () => void;
   onNext: (owner: OwnerInfo, hasAdditionalOwners: boolean | null, ownerHomeSameAsBusiness: boolean) => void;
   onBack: () => void;
+  onDraftChange?: (owner: OwnerInfo, hasAdditionalOwners: boolean | null, ownerHomeSameAsBusiness: boolean) => void;
 }
 
-export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, aiFocusField, onAiFocusHandled, onNext, onBack }: Props) {
+export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, aiFocusField, onAiFocusHandled, onNext, onBack, onDraftChange }: Props) {
   const analytics = useAnalyticsContext();
   const [firstName, setFirstName] = useState(owner.firstName || contact.firstName || '');
   const [lastName, setLastName] = useState(owner.lastName || contact.lastName || '');
@@ -92,6 +93,25 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [showVerification, submitting]);
+
+  useEffect(() => {
+    onDraftChange?.({
+      ownerIndex: owner.ownerIndex ?? 0,
+      firstName,
+      lastName,
+      email,
+      phone,
+      ownershipPct,
+      ssn,
+      dateOfBirth,
+      creditScore: owner.creditScore || '',
+      streetAddress,
+      streetAddress2,
+      city,
+      state,
+      zipCode,
+    }, hasAdditional, sameAsBusiness);
+  }, [owner.ownerIndex, owner.creditScore, firstName, lastName, email, phone, ownershipPct, ssn, dateOfBirth, streetAddress, streetAddress2, city, state, zipCode, hasAdditional, sameAsBusiness, onDraftChange]);
 
   const handleSameAsBusinessChange = (checked: boolean) => {
     setSameAsBusiness(checked);

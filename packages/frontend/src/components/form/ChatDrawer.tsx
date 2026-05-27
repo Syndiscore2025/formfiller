@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { FormState } from '@/types/application';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -38,11 +38,15 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
   const [error, setError] = useState('');
   const [chatStopped, setChatStopped] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const step2GreetedRef = useRef(false);
+  // Keep a stable ref to formState so we can read it inside effects without adding it to deps
+  const formStateRef = useRef(formState);
+  useEffect(() => { formStateRef.current = formState; });
 
   const introMessage = useMemo<ChatMessage>(() => ({
     id: 'intro',
     role: 'assistant',
-    content: 'Hi! I’m your funding assistant. Is there anything you need help with today? I can explain a form field, answer general funding-process questions, or help you pick up where you left off.',
+    content: 'Hi — I’ll follow along as you complete the application. If you get stuck, ask me what to do next and I’ll guide you to the exact field or button without slowing you down.',
   }), [applicationId]);
 
   useEffect(() => {
@@ -64,9 +68,22 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
           // conversation from localStorage so it feels continuous, then clear
           // localStorage so it doesn't bleed into a future new application.
           const preApp = loadPreApplicationMessages(introMessage);
-          setMessages(preApp);
           if (typeof window !== 'undefined') {
             window.localStorage.removeItem(PRE_APP_CHAT_KEY);
+          }
+          // Inject a step-2 greeting if Google populated business data and we
+          // haven't greeted yet — guides merchant to confirm info + home-based Q.
+          const hasGoogleData = Object.keys(formStateRef.current.business?.fieldSources || {}).length > 0;
+          if (hasGoogleData && !step2GreetedRef.current) {
+            step2GreetedRef.current = true;
+            const greeting: ChatMessage = {
+              id: createLocalId(),
+              role: 'assistant',
+              content: "I found your business info — take a look at the details on screen and make sure everything is accurate. If anything looks off, hit Edit. Also, don't forget to answer the Home Based Business question at the bottom of the page — just click Yes or No.",
+            };
+            setMessages([...preApp, greeting]);
+          } else {
+            setMessages(preApp);
           }
         }
       })
@@ -162,7 +179,7 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
         <div className="border-t border-white/10 p-4">
           {error && <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
           <div className="mb-3 flex flex-wrap gap-2">
-            <button type="button" suppressHydrationWarning onClick={() => void sendMessage('What should I do next?')} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/[0.06]">What next?</button>
+            <button type="button" suppressHydrationWarning onClick={() => void sendMessage('What should I do next?')} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/[0.06]">Help me continue</button>
             <button type="button" suppressHydrationWarning onClick={() => void sendMessage('Can you explain how funding review works?')} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/[0.06]">Funding review</button>
           </div>
           <textarea
@@ -210,6 +227,18 @@ function shouldAutoApplyFieldAnswer(field: NonNullable<ChatReply['nextField']>, 
   if (!value || looksLikeQuestionOrObjection(value)) return false;
 
   switch (field.fieldKey) {
+    case 'tcpaConsent': {
+      const lower = value.toLowerCase();
+      return ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'agree', 'agreed', 'i agree', 'i consent',
+        'consent', 'absolutely', 'definitely', 'of course', 'sounds good', 'go ahead'].some(
+          (w) => lower === w || lower.startsWith(w),
+        );
+    }
+    case 'application.homeBasedBusiness': {
+      const lower = value.toLowerCase();
+      return ['yes', 'yeah', 'yep', 'true', 'home based', 'home-based', 'no', 'nope', 'false', 'not home based', 'not home-based']
+        .some((w) => lower === w || lower.includes(w));
+    }
     case 'contact.email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     case 'contact.phone': return value.replace(/[^0-9]/g, '').length >= 10;
     case 'business.ein': return /^\d{2}-?\d{7}$/.test(value) || /sole propriet/i.test(value);
@@ -252,7 +281,7 @@ function buildSafeClientState(state: FormState, appliedField?: { fieldKey: strin
     currentStep: state.currentStep,
     appliedField: appliedField || undefined,
     recentAssistantMessages: messages.filter((message) => message.role === 'assistant').slice(-8).map((message) => message.content),
-    contact: { hasEmail: Boolean(state.contact.email), hasPhone: Boolean(state.contact.phone) },
+    contact: { hasEmail: Boolean(state.contact.email), hasPhone: Boolean(state.contact.phone), tcpaConsent: state.contact.tcpaConsent },
     business: state.business,
     financial: state.financial,
     loanRequest: state.loanRequest,
@@ -262,6 +291,7 @@ function buildSafeClientState(state: FormState, appliedField?: { fieldKey: strin
       dateOfBirth: owner.dateOfBirth ? 'present' : '',
     } : null,
     hasAdditionalOwners: state.hasAdditionalOwners,
+    homeBasedBusiness: state.homeAddressSameAsBusiness,
     homeAddressSameAsBusiness: state.homeAddressSameAsBusiness,
     ownerHomeSameAsBusiness: state.ownerHomeSameAsBusiness,
   };
