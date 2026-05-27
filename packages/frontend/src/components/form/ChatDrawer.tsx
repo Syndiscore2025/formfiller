@@ -55,8 +55,22 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
 
     setError('');
     api.get<{ success: boolean; data: ChatMessage[] }>(`/api/chat/${applicationId}/history`, token ?? undefined)
-      .then((res) => setMessages(res.data.length ? res.data : [introMessage]))
-      .catch(() => setMessages([introMessage]));
+      .then((res) => {
+        if (res.data.length) {
+          // DB has history for this application — use it
+          setMessages(res.data);
+        } else {
+          // No DB history yet (first visit after step 1) — carry over pre-app
+          // conversation from localStorage so it feels continuous, then clear
+          // localStorage so it doesn't bleed into a future new application.
+          const preApp = loadPreApplicationMessages(introMessage);
+          setMessages(preApp);
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(PRE_APP_CHAT_KEY);
+          }
+        }
+      })
+      .catch(() => setMessages(loadPreApplicationMessages(introMessage)));
   }, [open, applicationId, token, introMessage]);
 
   useEffect(() => {
