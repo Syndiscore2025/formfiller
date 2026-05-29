@@ -6,13 +6,17 @@ import { validate } from '../middleware/validate';
 import { chatLimiter } from '../middleware/rateLimiter';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
-import { createChatReply, createPreApplicationChatReply } from '../services/chatAgent.service';
+import { createChatReply, createPostConsentTransitionReply, createPreApplicationChatReply } from '../services/chatAgent.service';
 
 const router = Router();
 const guestAccess = [optionalAuth, requireTenant];
 
 const messageSchema = z.object({
   message: z.string().trim().min(1, 'Message is required').max(1200, 'Message is too long'),
+  clientState: z.unknown().optional(),
+});
+
+const transitionSchema = z.object({
   clientState: z.unknown().optional(),
 });
 
@@ -67,6 +71,31 @@ router.post(
       const msg = error instanceof Error ? error.message : 'Unable to process chat message.';
       if (msg.includes('not enabled')) throw createError('AI chat is not enabled for this tenant.', 403);
       throw createError('Unable to process chat message right now. Please try again.', 502);
+    }
+  })
+);
+
+router.post(
+  '/:appId/post-consent-transition',
+  ...guestAccess,
+  chatLimiter,
+  validate(transitionSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const applicationId = String(req.params.appId);
+    const { clientState } = req.body as z.infer<typeof transitionSchema>;
+
+    try {
+      const reply = await createPostConsentTransitionReply({
+        tenantId: req.tenantId!,
+        applicationId,
+        clientState,
+      });
+      res.json({ success: true, data: reply });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unable to process chat transition.';
+      if (msg.includes('not found')) throw createError('Application not found', 404);
+      if (msg.includes('not enabled')) throw createError('AI chat is not enabled for this tenant.', 403);
+      throw createError('Unable to process chat transition right now. Please try again.', 502);
     }
   })
 );

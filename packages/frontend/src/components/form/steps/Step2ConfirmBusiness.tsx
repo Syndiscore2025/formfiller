@@ -81,6 +81,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     const set = new Set<string>();
     for (const { key } of FIELD_META) {
       const v = biz[key];
+      if (key === 'industry' && typeof v === 'string' && !normalizeIndustryValue(v)) continue;
       if (typeof v === 'string' && v.trim()) set.add(key);
     }
     // If entityType was inferred from the legal name, treat it as populated
@@ -113,7 +114,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [entityType, setEntityType] = useState<BusinessInfo['entityType']>(
     business.entityType || inferEntityType(business.legalName || ''),
   );
-  const [industry, setIndustry] = useState(business.industry || '');
+  const [industry, setIndustry] = useState(normalizeIndustryValue(business.industry));
   const [stateOfFormation, setStateOfFormation] = useState(business.stateOfFormation || '');
   const [ein, setEin] = useState(formatEinDisplay(business.ein || ''));
   const [businessStartDate, setBusinessStartDate] = useState(normalizedBusinessStartDate);
@@ -135,26 +136,41 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const [showTollFreeModal, setShowTollFreeModal] = useState(false);
 
   const selectedIndustryCodes = useMemo(() => getIndustryCodes(industry), [industry]);
+  // Tracks the business prop values we last pushed UP via onDraftChange, so the
+  // sync-down effect can ignore prop changes that are just our own draft echoing
+  // back (which otherwise causes the phone field to reformat mid-typing/flicker).
+  const lastPushedBusinessRef = useRef<Record<string, string>>({});
 
   // Keep editable local state in sync when the AI/chat updates parent form state.
   // Without this, a field can be marked "completed" and disappear before the
   // local input state receives the value the AI just applied.
   useEffect(() => {
-    setLegalName(business.legalName || '');
-    setDba(business.dba || '');
-    setEntityType(business.entityType || inferEntityType(business.legalName || ''));
-    setIndustry(business.industry || '');
-    setStateOfFormation(business.stateOfFormation || '');
-    setEin(formatEinDisplay(business.ein || ''));
-    setBusinessStartDate(normalizeBusinessStartDateInput(business.businessStartDate));
-    setBusinessPhone(formatPhoneInput(business.phone || ''));
-    setWebsite(business.website || '');
-    setStreetAddress(business.streetAddress || '');
-    setStreetAddress2(business.streetAddress2 || '');
-    setCity(business.city || '');
-    setAddrState(business.state || '');
-    setZipCode(business.zipCode || '');
-  }, [business]);
+    // Ignore any field whose incoming prop value matches what we last pushed up:
+    // that's just our own draft echoing back, and re-applying it mid-typing is
+    // what makes the phone/address fields flicker.
+    const pushed = lastPushedBusinessRef.current;
+    const isEcho = (key: string, rawPropValue: string) => pushed[key] !== undefined && pushed[key] === rawPropValue;
+    const isPhoneEcho = (rawPropValue: string) => pushed.phone !== undefined && pushed.phone === normalizeUsPhoneDigits(rawPropValue);
+
+    const nextPhone = formatPhoneInput(business.phone || '');
+    const nextEin = formatEinDisplay(business.ein || '');
+    const nextStartDate = normalizeBusinessStartDateInput(business.businessStartDate);
+    const nextIndustry = normalizeIndustryValue(business.industry);
+    if (!isEcho('legalName', business.legalName || '')) setLegalName((prev) => (prev === (business.legalName || '') ? prev : business.legalName || ''));
+    if (!isEcho('dba', business.dba || '')) setDba((prev) => (prev === (business.dba || '') ? prev : business.dba || ''));
+    if (!isEcho('entityType', business.entityType || '')) setEntityType((prev) => (prev === (business.entityType || inferEntityType(business.legalName || '')) ? prev : business.entityType || inferEntityType(business.legalName || '')));
+    if (!isEcho('industry', business.industry || '')) setIndustry((prev) => (prev === nextIndustry ? prev : nextIndustry));
+    if (!isEcho('stateOfFormation', business.stateOfFormation || '')) setStateOfFormation((prev) => (prev === (business.stateOfFormation || '') ? prev : business.stateOfFormation || ''));
+    if (!isEcho('ein', business.ein || '')) setEin((prev) => (prev === nextEin ? prev : nextEin));
+    if (!isEcho('businessStartDate', business.businessStartDate || '')) setBusinessStartDate((prev) => (prev === nextStartDate ? prev : nextStartDate));
+    if (!isPhoneEcho(business.phone || '')) setBusinessPhone((prev) => (prev === nextPhone ? prev : nextPhone));
+    if (!isEcho('website', business.website || '')) setWebsite((prev) => (prev === (business.website || '') ? prev : business.website || ''));
+    if (!isEcho('streetAddress', business.streetAddress || '')) setStreetAddress((prev) => (prev === (business.streetAddress || '') ? prev : business.streetAddress || ''));
+    if (!isEcho('streetAddress2', business.streetAddress2 || '')) setStreetAddress2((prev) => (prev === (business.streetAddress2 || '') ? prev : business.streetAddress2 || ''));
+    if (!isEcho('city', business.city || '')) setCity((prev) => (prev === (business.city || '') ? prev : business.city || ''));
+    if (!isEcho('state', business.state || '')) setAddrState((prev) => (prev === (business.state || '') ? prev : business.state || ''));
+    if (!isEcho('zipCode', business.zipCode || '')) setZipCode((prev) => (prev === (business.zipCode || '') ? prev : business.zipCode || ''));
+  }, [business.legalName, business.dba, business.entityType, business.industry, business.stateOfFormation, business.ein, business.businessStartDate, business.phone, business.website, business.streetAddress, business.streetAddress2, business.city, business.state, business.zipCode]);
 
   useEffect(() => {
     setHomeAddrSame(initialHomeAddr ?? false);
@@ -162,7 +178,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   }, [initialHomeAddr]);
 
   useEffect(() => {
-    onDraftChange?.({
+    const draft: Partial<BusinessInfo> = {
       legalName,
       dba,
       entityType,
@@ -179,11 +195,15 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
       zipCode,
       sicCode: selectedIndustryCodes?.sicCode || '',
       naicsCode: selectedIndustryCodes?.naicsCode || '',
-    }, homeAddrSameAnswered ? homeAddrSame : null);
+    };
+    // Remember the raw values we just pushed up so the sync-down effect can tell
+    // our own echo apart from a genuine external (lookup/AI) change.
+    lastPushedBusinessRef.current = draft as Record<string, string>;
+    onDraftChange?.(draft, homeAddrSameAnswered ? homeAddrSame : null);
   }, [legalName, dba, entityType, industry, stateOfFormation, ein, businessStartDate, businessPhone, website, streetAddress, streetAddress2, city, addrState, zipCode, selectedIndustryCodes, homeAddrSameAnswered, homeAddrSame, onDraftChange]);
 
   const displayIndustryCodes = useMemo(() => {
-    const mapped = getIndustryCodes(business.industry || industry);
+    const mapped = getIndustryCodes(normalizeIndustryValue(business.industry) || industry);
     return {
       sicCode: business.sicCode || mapped?.sicCode || '',
       naicsCode: business.naicsCode || mapped?.naicsCode || '',
@@ -241,7 +261,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!legalName.trim()) errs.legalName = 'Business name is required';
-    if (!industry.trim()) errs.industry = 'Industry is required';
+    if (!normalizeIndustryValue(industry)) errs.industry = 'Select an industry from the list';
     if (!stateOfFormation) errs.stateOfFormation = 'State of formation is required';
     if (!isSoleProp) {
       const einDigits = ein.replace(/\D/g, '');
@@ -734,6 +754,11 @@ function formatPhoneDisplay(value: string): string {
   const digits = normalizeUsPhoneDigits(value);
   if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   return value;
+}
+
+function normalizeIndustryValue(value: string | null | undefined): string {
+  const lower = (value || '').trim().toLowerCase();
+  return INDUSTRIES.find((industry) => industry.toLowerCase() === lower) || '';
 }
 
 function getPartialBusinessStartYear(value: string | null | undefined): string | null {

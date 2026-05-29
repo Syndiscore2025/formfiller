@@ -54,7 +54,8 @@ const CATEGORY_PATTERNS: Array<{ category: Exclude<GuardrailCategory, 'field_hel
     patterns: [
       /\brate\b/i, /\brates\b/i, /\bapr\b/i, /\binterest\b/i, /\bfactor\b/i, /\bfee\b/i,
       /\bcost\b/i, /\bpayment\b/i, /\bpayments\b/i, /\bpayback\b/i, /\bterm\b/i, /\bterms\b/i,
-      /\bhow much can i get\b/i, /\bwhat can i get\b/i, /\bmonthly\b/i, /\bweekly\b/i, /\bdaily\b/i,
+      /\bhow much can i get\b/i, /\bwhat can i get\b/i, /\bmonthly\s+payments?\b/i,
+      /\bweekly\s+payments?\b/i, /\bdaily\s+payments?\b/i,
     ],
   },
   {
@@ -318,11 +319,29 @@ export function enforceFundingResponseSafety(message: string, nextField: Guardra
     .map(({ issue }) => issue);
 
   if (issues.length === 0) return { message, replaced: false, issues: [] };
+  if (isAnnualRevenueMathGuidance(assistantAnswerOnly, nextField, issues)) return { message, replaced: false, issues: [] };
+  if (isOwnershipPctAcknowledgement(assistantAnswerOnly, nextField, issues)) return { message, replaced: false, issues: [] };
   return {
     message: appendForwardMotion(NO_QUOTE_MESSAGE, nextField),
     replaced: true,
     issues,
   };
+}
+
+function isAnnualRevenueMathGuidance(message: string, nextField: GuardrailNextField | null, issues: string[]): boolean {
+  if (nextField?.fieldKey !== 'financial.annualRevenue') return false;
+  const lower = message.toLowerCase();
+  const talksAboutRevenue = /\b(?:annual|yearly|per year|revenue|gross sales|sales)\b/i.test(lower);
+  const talksAboutFundingOffer = /\b(?:rate|apr|factor|fee|payback|approval|approved|qualify|funding amount|amount requested|offer|term|payment)\b/i.test(lower);
+  const onlyMathIssues = issues.every((issue) => issue === 'dollar_amount' || issue === 'term_length');
+  return talksAboutRevenue && !talksAboutFundingOffer && onlyMathIssues;
+}
+
+function isOwnershipPctAcknowledgement(message: string, nextField: GuardrailNextField | null, issues: string[]): boolean {
+  if (nextField?.fieldKey !== 'owner.ownershipPct') return false;
+  const talksAboutFundingOffer = /\b(?:rate|apr|factor|fee|payback|approval|approved|qualify|funding amount|amount requested|offer|term|payment)\b/i.test(message);
+  const onlyPercentIssue = issues.every((issue) => issue === 'rate_or_percent');
+  return onlyPercentIssue && !talksAboutFundingOffer;
 }
 
 export function extractQualificationSignals(message: string): QualificationSignal[] {

@@ -8,11 +8,7 @@ import {
   type FundingSafetyResult,
   type GuardrailEvaluation,
 } from './chatGuardrails.service';
-import {
-  buildFreshLocalContext,
-  getCurrentDateContext,
-  type LocalContext,
-} from './localContext.service';
+import { getCurrentDateContext } from './localContext.service';
 
 type ChatRole = 'user' | 'assistant';
 
@@ -26,6 +22,12 @@ interface ChatMessageInput {
 interface PreApplicationChatInput {
   tenantId: string;
   userMessage: string;
+  clientState?: unknown;
+}
+
+interface TransitionChatInput {
+  tenantId: string;
+  applicationId: string;
   clientState?: unknown;
 }
 
@@ -59,10 +61,6 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
     throw new Error('Message is required.');
   }
 
-  const safeMessage = redactSensitiveChatContent(cleanMessage);
-  const redactedSensitiveInput = safeMessage !== cleanMessage;
-  const qualificationSignals = extractQualificationSignals(safeMessage);
-
   const app = await loadApplicationContext(input.applicationId, input.tenantId);
   if (!app) throw new Error('Application not found.');
 
@@ -70,6 +68,13 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
   if (tenantSettings && tenantSettings.aiChatEnabled === false) {
     throw new Error('AI chat is not enabled for this tenant.');
   }
+
+  const nextField = determineNextField(app, input.clientState);
+  const safeMessage = redactSensitiveChatContent(cleanMessage, {
+    allowEin: isExpectedEinAnswer(input.clientState, nextField),
+  });
+  const redactedSensitiveInput = safeMessage !== cleanMessage;
+  const qualificationSignals = extractQualificationSignals(safeMessage);
 
   const userMetadata = {
     source: 'merchant_chat',
@@ -87,9 +92,7 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
     },
   });
 
-  const nextField = determineNextField(app, input.clientState);
   const history = await loadRecentHistory(input.applicationId, input.tenantId);
-  const localContext = await buildApplicationLocalContext(app, input.clientState);
   const guardrailEvaluation = evaluateChatGuardrails({
     message: safeMessage,
     nextField,
@@ -107,7 +110,7 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
       userMessage: safeMessage,
       nextField,
       guardrail: guardrailEvaluation,
-      appContext: buildSafeApplicationSummary(app, input.clientState, localContext),
+      appContext: buildSafeApplicationSummary(app, input.clientState),
       history,
       personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
       systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
@@ -134,9 +137,6 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
 export async function createPreApplicationChatReply(input: PreApplicationChatInput): Promise<ChatReply> {
   const cleanMessage = input.userMessage.trim();
   if (!cleanMessage) throw new Error('Message is required.');
-
-  const safeMessage = redactSensitiveChatContent(cleanMessage);
-  const redactedSensitiveInput = safeMessage !== cleanMessage;
   const tenant = await prisma.tenant.findUnique({
     where: { id: input.tenantId },
     select: {
@@ -156,7 +156,10 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
 
   const safeClientState = sanitizeClientState(input.clientState);
   const nextField = determinePreApplicationNextField(safeClientState);
-  const localContext = await buildClientStateLocalContext(safeClientState);
+  const safeMessage = redactSensitiveChatContent(cleanMessage, {
+    allowEin: isExpectedEinAnswer(safeClientState, nextField),
+  });
+  const redactedSensitiveInput = safeMessage !== cleanMessage;
   const guardrailEvaluation = evaluateChatGuardrails({
     message: safeMessage,
     nextField,
@@ -176,9 +179,8 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
       guardrail: guardrailEvaluation,
       appContext: {
         stage: 'pre_application',
-        currentDate: localContext.date,
-        localContext: summarizeLocalContext(localContext),
-        instruction: 'The merchant has not saved the first form card yet. Be conversational and helpful. Do not repeat the same generic menu. If they provide a name or business name, acknowledge it naturally and ask what they need help with or guide them to the first required field.',
+        currentDate: getCurrentDateContext(),
+        instruction: 'The merchant has not saved the first form card yet. Be conversational and helpful. Do not repeat the same generic menu. If they provide a name or business name, acknowledge it naturally and guide them to the next required Step 1 field. After TCPA/contact consent is captured, do not ask for Business Start Date; the next instruction is to review/confirm the Business Details page if lookup found data, or fill the visible business fields if lookup did not.',
         clientState: safeClientState,
       },
       history: [],
@@ -191,12 +193,63 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
   return enforceFinalChatSafety(reply).reply;
 }
 
+export async function createPostConsentTransitionReply(input: TransitionChatInput): Promise<ChatReply> {
+  const app = await loadApplicationContext(input.applicationId, input.tenantId);
+  if (!app) throw new Error('Application not found.');
+
+  const tenantSettings = app.tenant.settings;
+  if (tenantSettings && tenantSettings.aiChatEnabled === false) throw new Error('AI chat is not enabled for this tenant.');
+
+  const nextField = determineNextField(app, input.clientState);
+  const guardrailEvaluation = evaluateChatGuardrails({
+    message: 'post_tcpa_step2_transition',
+    nextField,
+  });
+
+  const appContext = {
+    ...buildSafeApplicationSummary(app, input.clientState),
+    transition: {
+      type: 'post_tcpa_to_business_details',
+      instruction: 'Write ONE concise assistant message. Thank the merchant for consenting. Then tell them the next step is Business Details: confirm the business information on screen if lookup populated it; otherwise fill in the visible business details. If Business Start Date is visible/missing, mention it as part of Step 2, not Revenue & Funding. Do not include an icebreaker, weather, local news, sports, or other local-context opener.',
+    },
+  };
+
+  const reply = config.openAiApiKey
+    ? await requestOpenAiReply({
+        userMessage: 'The merchant gave TCPA/contact consent and is arriving at Step 2 Business Details. Give the post-consent transition message now.',
+        nextField,
+        guardrail: guardrailEvaluation,
+        appContext,
+        history: [],
+        personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
+        systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
+        model: resolveOpenAiChatModel(tenantSettings?.aiModel),
+      })
+    : buildPostConsentFallbackReply(nextField);
+
+  const finalSafety = enforceFinalChatSafety(reply);
+  const safeReply = finalSafety.reply;
+
+  await prisma.chatMessage.create({
+    data: {
+      tenantId: input.tenantId,
+      applicationId: input.applicationId,
+      role: 'assistant',
+      content: safeReply.message,
+      metadata: buildAssistantChatMetadata(nextField, safeReply.suggestedActions, guardrailEvaluation, [], finalSafety.fundingSafety),
+    },
+  });
+
+  return safeReply;
+}
+
 const PRE_APPLICATION_FIELDS: NextField[] = [
   field(1, 'Get Started', 'business.legalName', 'Name of Business', 'What is the exact legal name of your business?'),
   field(1, 'Get Started', 'business.stateOfFormation', 'State of Incorporation', 'What state is the business incorporated or registered in?'),
   field(1, 'Get Started', 'contact.email', 'Email Address', 'What email address should we use for the application?'),
   field(1, 'Get Started', 'contact.phone', 'Phone Number', 'What phone number should we use for the application?'),
   field(1, 'Get Started', 'business.ein', 'EIN', 'What is the business EIN? If you are a sole proprietor, select Sole Proprietorship in the form instead.'),
+  field(1, 'Get Started', 'tcpaConsent', 'Contact Consent', 'Do I have your permission to check the contact-consent box for you and continue to the next page?'),
 ];
 
 function determinePreApplicationNextField(clientState: unknown): NextField | null {
@@ -218,6 +271,7 @@ function determinePreApplicationNextField(clientState: unknown): NextField | nul
   if (contact.hasEmail !== true) return PRE_APPLICATION_FIELDS[2];
   if (contact.hasPhone !== true) return PRE_APPLICATION_FIELDS[3];
   if (!hasText(business.ein) && business.entityType !== 'SOLE_PROPRIETORSHIP') return PRE_APPLICATION_FIELDS[4];
+  if (contact.tcpaConsent !== true) return PRE_APPLICATION_FIELDS[5];
   return null;
 }
 
@@ -294,9 +348,10 @@ const APPLICATION_FLOW_FIELDS: NextField[] = [
   field(1, 'Get Started', 'contact.email', 'Email Address', 'What email should we use for this funding request?'),
   field(1, 'Get Started', 'contact.phone', 'Phone Number', 'What is the best phone number for this funding request?'),
   field(1, 'Get Started', 'business.ein', 'EIN', 'What is the business EIN? If this is a sole proprietorship without an EIN, say that.'),
-  field(1, 'Get Started', 'tcpaConsent', 'Contact Consent', 'Please confirm the contact consent so we can continue the application.'),
+  field(1, 'Get Started', 'tcpaConsent', 'Contact Consent', 'Do I have your permission to check the contact-consent box for you and continue to the next page?'),
 
   field(2, 'Business Details', 'business.industry', 'Industry', 'What industry best describes your business?'),
+  field(2, 'Business Details', 'business.businessStartDate', 'Business Start Date', 'What date did the business start? Use the Business Start Date field on this page.'),
   field(2, 'Business Details', 'business.streetAddress', 'Business Street Address', 'What is the street address for the business?'),
   field(2, 'Business Details', 'business.city', 'Business City', 'What city is the business located in?'),
   field(2, 'Business Details', 'business.state', 'Business State', 'What state is the business located in?'),
@@ -409,51 +464,6 @@ function hasMeaningfulFieldValue(fieldKey: string, value: unknown, state?: Recor
   return hasText(value);
 }
 
-async function buildApplicationLocalContext(app: ApplicationContext, clientState?: unknown): Promise<LocalContext> {
-  const clientBusiness = extractClientBusiness(clientState);
-  return buildFreshLocalContext({
-    zipCode: app.business?.zipCode || clientBusiness.zipCode,
-    city: app.business?.city || clientBusiness.city,
-    state: app.business?.state || clientBusiness.state,
-    industry: app.business?.industry || clientBusiness.industry,
-  });
-}
-
-async function buildClientStateLocalContext(clientState?: unknown): Promise<LocalContext> {
-  const clientBusiness = extractClientBusiness(clientState);
-  return buildFreshLocalContext({
-    zipCode: clientBusiness.zipCode,
-    city: clientBusiness.city,
-    state: clientBusiness.state,
-    industry: clientBusiness.industry,
-  });
-}
-
-function extractClientBusiness(clientState?: unknown): { zipCode?: string; city?: string; state?: string; industry?: string } {
-  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
-  const business = state.business && typeof state.business === 'object' ? state.business as Record<string, unknown> : {};
-  return {
-    zipCode: typeof business.zipCode === 'string' ? business.zipCode : undefined,
-    city: typeof business.city === 'string' ? business.city : undefined,
-    state: typeof business.state === 'string' ? business.state : undefined,
-    industry: typeof business.industry === 'string' ? business.industry : undefined,
-  };
-}
-
-function summarizeLocalContext(localContext: LocalContext) {
-  return {
-    location: localContext.location,
-    approvedFacts: localContext.approvedFacts.map((fact) => ({
-      topic: fact.topic,
-      summary: fact.summary,
-      sourceLabel: fact.sourceLabel,
-      fetchedAt: fact.fetchedAt,
-    })),
-    suggestedIcebreaker: localContext.icebreaker,
-    safetyNotes: localContext.safetyNotes,
-  };
-}
-
 function extractClientCurrentStep(clientState?: unknown): number | null {
   const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
   return typeof state.currentStep === 'number' ? state.currentStep : null;
@@ -498,11 +508,11 @@ function buildApplicationProgress(app: ApplicationContext, clientState?: unknown
   };
 }
 
-function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unknown, localContext?: LocalContext) {
+function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unknown) {
   const owner = primaryOwner(app);
   const progress = buildApplicationProgress(app, clientState);
   return {
-    currentDate: localContext?.date || getCurrentDateContext(),
+    currentDate: getCurrentDateContext(),
     currentStep: progress.currentStep,
     databaseCurrentStep: app.currentStep,
     status: app.status,
@@ -541,7 +551,6 @@ function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unkn
     ownerHomeSameAsBusiness: app.ownerHomeSameAsBusiness,
     progress,
     conversationInstruction: 'Trust applicationContext.progress as the live source of truth for where the merchant is. If databaseCurrentStep differs from currentStep, the merchant is actively moving through the form and currentStep is more current.',
-    localContext: localContext ? summarizeLocalContext(localContext) : undefined,
     recentFieldMemoryEvents: app.analyticsEvents.map((event) => ({
       fieldName: event.fieldName,
       eventType: event.eventType,
@@ -567,6 +576,10 @@ function isOptOutRequest(message: string): boolean {
     "don't contact me",
     'dont contact me',
     'leave me alone',
+    'go away',
+    'shut up',
+    'fuck off',
+    'f off',
     'remove me',
     'remove my information',
     'no more messages',
@@ -591,6 +604,18 @@ function buildFallbackReply(userMessage: string, nextField: NextField | null): C
       : 'Your application looks complete from what I can see. If you have questions about bank statements, signing, or next steps, I can help.';
 
   return { message, nextField, suggestedActions: nextField ? [nextField.label] : ['Review next steps'] };
+}
+
+function buildPostConsentFallbackReply(nextField: NextField | null): ChatReply {
+  const next = nextField?.fieldKey === 'business.businessStartDate'
+    ? 'I checked the consent box and moved you forward. Please review the business details on screen, then enter the Business Start Date before continuing.'
+    : 'I checked the consent box and moved you forward. Please review the business details on screen and confirm anything Google found. If something is missing, fill in the visible business fields before continuing.';
+
+  return {
+    message: next,
+    nextField,
+    suggestedActions: [],
+  };
 }
 
 function buildSensitiveInfoReply(nextField: NextField | null): ChatReply {
@@ -692,15 +717,16 @@ async function requestOpenAiReply(input: {
     'Stay strictly limited to small-business financing, this application, document uploads, e-signature, identity verification, and underwriting-readiness. If the merchant goes off-topic, briefly and warmly bring it back to the application without sounding robotic.',
     'Tone: friendly, professional, concise (typically 1–3 short paragraphs), conversational, like a knowledgeable human funding specialist. Acknowledge what the merchant said before guiding them forward. Ask one useful follow-up question at a time. Vary your wording so consecutive replies do not look alike.',
     'Live progress awareness: before answering, inspect applicationContext.progress. Treat it as the live source of truth, especially when the merchant is filling fields without AI help. Use progress.currentStepName, progress.nextMissingField, and each step’s missingFields/completedFields to know exactly what comes next. Do not ask for a field that progress marks completed.',
-    'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If a step is complete, recognize that and move them to the next step. If they are on Step 2 with lookup data, ask them to confirm the details and answer Home Based Business with Yes or No.',
+    'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If a step is complete, recognize that and move them to the next step. Immediately after contact consent/TCPA on Step 1, the next move is ALWAYS Step 2 Business Details review — ask the merchant to confirm the business information if lookup populated it, or fill the visible business fields if lookup did not. Do NOT jump to Business Start Date after consent.',
+    'Post-consent transition: if applicationContext.transition.type is post_tcpa_to_business_details, write exactly one concise transition message. Thank the merchant for consenting, then guide them to Step 2 Business Details. Do not include an icebreaker, weather, local news, sports, or other local-context opener. Do not ask a separate question before the Step 2 instruction.',
     'Field capture flow: if applicationContext.clientState.appliedField is present, you may naturally acknowledge that the answer was captured from chat, then immediately move to the next missing field. If no appliedField is present, do not claim you changed the form — guide them to enter or confirm it in the visible UI.',
-    'If localContext.approvedFacts are provided, you may use them for a brief relatable opening or follow-up — phrase it like a human connection (weather, light positive local news, sports, season) and immediately steer back to the next missing field or signing. Do NOT invent local facts. Never reference politics, elections, tragedy, crime, religion, protected classes, scandals, disasters, adult topics, or negative economic news.',
     'Hard funding guardrails — ALWAYS:',
     '- NEVER quote, estimate, hint at, or give ranges for: interest rate, APR, factor rate, fees, payment amount, payback amount, term length, daily/weekly/monthly payments, funding amount, or approval odds.',
     '- NEVER promise approval, prequalification, or eligibility. Do not declare a merchant declined either — that is the funding team\'s call after they review the complete signed file.',
     '- NEVER silently change or claim you filled a field unless applicationContext.clientState.appliedField shows the merchant just provided that answer through chat. Otherwise, you can suggest what they should enter, but they confirm everything in the form UI.',
     '- NEVER ask the merchant to type SSN or DOB in chat. Always tell them to enter those only in the secure form field.',
     `Safe funding language when asked about pricing, terms, approval, or funding amount: ${SAFE_FUNDING_LANGUAGE}`,
+    'Annual revenue math is allowed: if the merchant asks how to annualize monthly revenue/sales for the Estimated Annual Revenue field, you may multiply monthly revenue by 12, state the annualized revenue, and tell them which visible annual revenue range to select. This is field help, not a funding quote. Do not discuss approval, rates, terms, payments, or funding offers in that answer.',
     'EIN rule: EIN is the 9-digit business tax ID on the SS-4 confirmation letter the IRS sent when the business was first registered. It may also appear on business tax returns, payroll records, business bank paperwork, or IRS notices. If the merchant is a sole proprietor without an EIN, do NOT send them to the IRS for a new number or replacement letter (that takes weeks) — tell them to select the Sole Proprietorship option in the form and continue.',
     'Field-help rule: if the merchant asks what a field means, why it is needed, or where to find the info, answer that question first in plain language using the fieldHelpGuidance hint when provided, then guide them to the next missing required field (do NOT push them to optional fields they skipped unless they ask to revisit).',
     'Silent qualification rule: if the merchant says something that may matter for underwriting (startup, no revenue, bankruptcy, restricted industry, non-citizen, NSF, etc.) DO NOT alert them, DO NOT disqualify, DO NOT say "this may be an issue." Just keep them moving through the form normally — those signals are flagged internally for the funding team.',
@@ -774,12 +800,26 @@ function parseJsonObject(content: string): unknown {
   }
 }
 
-export function redactSensitiveChatContent(content: string): string {
-  return content
+type RedactionOptions = { allowEin?: boolean };
+
+function isExpectedEinAnswer(clientState: unknown, nextField: NextField | null): boolean {
+  if (nextField?.fieldKey === 'business.ein') return true;
+  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
+  const applied = state.appliedField && typeof state.appliedField === 'object'
+    ? state.appliedField as { fieldKey?: string }
+    : null;
+  return applied?.fieldKey === 'business.ein';
+}
+
+export function redactSensitiveChatContent(content: string, options: RedactionOptions = {}): string {
+  let redacted = content
     .replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[redacted SSN]')
-    .replace(/\b\d{9}\b/g, '[redacted sensitive number]')
     .replace(/\b(?:\d{1,2}[/-]){2}\d{2,4}\b/g, '[redacted date]')
     .replace(/\b(?:19|20)\d{2}-\d{2}-\d{2}\b/g, '[redacted date]');
+  if (!options.allowEin) {
+    redacted = redacted.replace(/\b\d{9}\b/g, '[redacted sensitive number]');
+  }
+  return redacted;
 }
 
 function redactSensitiveValues(value: unknown): unknown {

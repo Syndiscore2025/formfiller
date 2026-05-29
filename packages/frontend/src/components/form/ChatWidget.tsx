@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function ChatWidget({ applicationId, token, formState, onNavigateToField, onApplyFieldAnswer, autoOpen }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);

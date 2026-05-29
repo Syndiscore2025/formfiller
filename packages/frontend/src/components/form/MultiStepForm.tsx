@@ -10,7 +10,7 @@ import { Step2ConfirmBusiness } from './steps/Step2ConfirmBusiness';
 import { Step4Revenue } from './steps/Step4Revenue';
 import { Step6OwnerDetails } from './steps/Step6OwnerDetails';
 import { Step8ReviewSign } from './steps/Step8ReviewSign';
-import type { FormState, ContactInfo, BusinessInfo, OwnerInfo, FinancialInfo, LoanRequest } from '@/types/application';
+import { INDUSTRIES, type FormState, type ContactInfo, type BusinessInfo, type OwnerInfo, type FinancialInfo, type LoanRequest } from '@/types/application';
 import { api } from '@/lib/api';
 import { useAnalytics, AnalyticsContext } from '@/hooks/useAnalytics';
 import { useTheme } from '@/hooks/useTheme';
@@ -45,6 +45,19 @@ const EMPTY_BUSINESS: BusinessInfo = {
 };
 const EMPTY_FINANCIAL: FinancialInfo = { annualRevenue: '' };
 const EMPTY_LOAN: LoanRequest = { amountRequested: '', urgency: '' };
+
+function isSamePartialBusiness(current: BusinessInfo, draft: Partial<BusinessInfo>): boolean {
+  return Object.entries(draft).every(([key, value]) => {
+    const currentValue = current[key as keyof BusinessInfo];
+    return currentValue === value;
+  });
+}
+
+function normalizeUsPhoneDigits(value: string | null | undefined): string {
+  const digits = (value || '').replace(/\D/g, '');
+  if (digits.length > 10 && digits.startsWith('1')) return digits.slice(1, 11);
+  return digits.slice(0, 10);
+}
 
 interface Props { token: string | null; }
 
@@ -103,11 +116,16 @@ export function MultiStepForm({ token }: Props) {
   }, []);
 
   const handleStep2DraftChange = useCallback((businessDraft: Partial<BusinessInfo>, homeAddrSame: boolean | null) => {
-    setState((prev) => ({
-      ...prev,
-      business: { ...prev.business, ...businessDraft },
-      homeAddressSameAsBusiness: homeAddrSame === null ? prev.homeAddressSameAsBusiness : homeAddrSame,
-    }));
+    setState((prev) => {
+      const nextHomeAddrSame = homeAddrSame === null ? prev.homeAddressSameAsBusiness : homeAddrSame;
+      const businessUnchanged = isSamePartialBusiness(prev.business, businessDraft);
+      if (businessUnchanged && nextHomeAddrSame === prev.homeAddressSameAsBusiness) return prev;
+      return {
+        ...prev,
+        business: businessUnchanged ? prev.business : { ...prev.business, ...businessDraft },
+        homeAddressSameAsBusiness: nextHomeAddrSame,
+      };
+    });
   }, []);
 
   const handleStep3DraftChange = useCallback((financial: FinancialInfo, loanRequest: LoanRequest) => {
@@ -210,6 +228,9 @@ export function MultiStepForm({ token }: Props) {
     const previousStep = Math.max(1, state.currentStep - 1);
     if (previousStep === state.currentStep) return;
 
+    // If the merchant backs up to Step 1 after chat-captured TCPA consent,
+    // clear the one-shot signal so Step1 doesn't immediately auto-submit again.
+    if (previousStep === 1) setChatTcpaConsented(false);
     setState((prev) => ({ ...prev, currentStep: previousStep }));
     if (!state.applicationId) return;
 
@@ -237,6 +258,7 @@ export function MultiStepForm({ token }: Props) {
     const value = rawValue.trim();
     if (!value || field.fieldKey === 'owner.ssn' || field.fieldKey === 'owner.dateOfBirth') return false;
     const lower = value.toLowerCase();
+    if (looksLikeHostileOrProfane(value)) return false;
 
     if (field.fieldKey === 'contact.tcpaConsent' || field.fieldKey === 'tcpaConsent') {
       const agreed = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'agree', 'agreed', 'i agree',
@@ -255,12 +277,14 @@ export function MultiStepForm({ token }: Props) {
 
     const supportedFieldKeys = new Set([
       'business.legalName', 'business.stateOfFormation', 'business.ein', 'business.entityType', 'business.industry',
-      'business.streetAddress', 'business.city', 'business.state', 'business.zipCode', 'contact.email', 'contact.phone',
+      'business.businessStartDate', 'business.streetAddress', 'business.city', 'business.state', 'business.zipCode', 'contact.email', 'contact.phone',
       'application.homeBasedBusiness', 'financial.annualRevenue', 'loanRequest.amountRequested', 'owner.firstName',
       'owner.lastName', 'owner.ownershipPct', 'owner.streetAddress', 'owner.city', 'owner.state', 'owner.zipCode',
     ]);
     if (!supportedFieldKeys.has(field.fieldKey)) return false;
     if (field.fieldKey === 'application.homeBasedBusiness' && homeBasedAnswer === null) return false;
+    const normalizedIndustry = field.fieldKey === 'business.industry' ? normalizeIndustryValue(value) : null;
+    if (field.fieldKey === 'business.industry' && !normalizedIndustry) return false;
 
     setState((prev) => {
       const owner = prev.owners[0] || {
@@ -273,7 +297,8 @@ export function MultiStepForm({ token }: Props) {
         case 'business.stateOfFormation': return { ...prev, currentStep: field.step, business: { ...prev.business, stateOfFormation: value.toUpperCase() } };
         case 'business.ein': return { ...prev, currentStep: field.step, business: { ...prev.business, ein: value.replace(/[^0-9-]/g, '') } };
         case 'business.entityType': return { ...prev, currentStep: field.step, business: { ...prev.business, entityType: value as BusinessInfo['entityType'] } };
-        case 'business.industry': return { ...prev, currentStep: field.step, business: { ...prev.business, industry: value } };
+        case 'business.industry': return { ...prev, currentStep: field.step, business: { ...prev.business, industry: normalizedIndustry || value } };
+        case 'business.businessStartDate': return { ...prev, currentStep: field.step, business: { ...prev.business, businessStartDate: value } };
         case 'business.streetAddress': return { ...prev, currentStep: field.step, business: { ...prev.business, streetAddress: value } };
         case 'business.city': return { ...prev, currentStep: field.step, business: { ...prev.business, city: value } };
         case 'business.state': return { ...prev, currentStep: field.step, business: { ...prev.business, state: value.toUpperCase() } };
@@ -356,10 +381,14 @@ export function MultiStepForm({ token }: Props) {
 
   // Auto-populate handler from business lookup
   const handleAutoPopulate = useCallback((data: Partial<BusinessInfo>) => {
+    const normalizedData = {
+      ...data,
+      ...(data.phone !== undefined ? { phone: normalizeUsPhoneDigits(data.phone) } : {}),
+    };
     const now = new Date().toISOString();
-    const fieldSources = data.fieldSources || {};
+    const fieldSources = normalizedData.fieldSources || {};
     const memory = Object.fromEntries(
-      Object.keys(data)
+      Object.keys(normalizedData)
         .filter((key) => !['fieldSources', 'autoPopulated'].includes(key))
         .map((key) => [key, {
           autoFilled: true,
@@ -373,7 +402,7 @@ export function MultiStepForm({ token }: Props) {
       ...prev,
       business: {
         ...prev.business,
-        ...data,
+        ...normalizedData,
         autoPopulated: { ...(prev.business.autoPopulated || {}), ...memory },
       },
     }));
@@ -493,5 +522,27 @@ export function MultiStepForm({ token }: Props) {
       </div>
     </AnalyticsContext.Provider>
   );
+}
+
+function looksLikeHostileOrProfane(value: string): boolean {
+  const lower = value.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return [
+    /\bf+u+c+k+\b/i,
+    /\bshit+\b/i,
+    /\bass+hole\b/i,
+    /\bbitch+\b/i,
+    /\bcunt+\b/i,
+    /\bdick+\b/i,
+    /\bmotherf/i,
+    /\bshut up\b/i,
+    /\bgo away\b/i,
+    /\bleave me alone\b/i,
+    /\bnot interested\b/i,
+  ].some((pattern) => pattern.test(lower));
+}
+
+function normalizeIndustryValue(value: string): string | null {
+  const lower = value.trim().toLowerCase();
+  return INDUSTRIES.find((industry) => industry.toLowerCase() === lower) || null;
 }
 

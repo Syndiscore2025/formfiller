@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import type { FormState } from '@/types/application';
+import { INDUSTRIES, type FormState } from '@/types/application';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 
@@ -30,6 +30,7 @@ interface Props {
 }
 
 const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
+const POST_CONSENT_TRANSITION_KEY = 'formfiller.postConsentTransitionPending.v1';
 
 export function ChatDrawer({ open, applicationId, token, formState, onNavigateToField, onApplyFieldAnswer, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -71,10 +72,35 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
           if (typeof window !== 'undefined') {
             window.localStorage.removeItem(PRE_APP_CHAT_KEY);
           }
-          // Inject a step-2 greeting if Google populated business data and we
-          // haven't greeted yet — guides merchant to confirm info + home-based Q.
-          const hasGoogleData = Object.keys(formStateRef.current.business?.fieldSources || {}).length > 0;
-          if (hasGoogleData && !step2GreetedRef.current) {
+          // Inject a step-2 greeting only when the TCPA chat transition did not
+          // already give the merchant the same instruction.
+          const pendingPostConsentTransition = typeof window !== 'undefined'
+            && window.localStorage.getItem(POST_CONSENT_TRANSITION_KEY) === 'true';
+          const alreadyTransitioned = preApp.some((msg) => msg.id === 'tcpa-transition');
+          if ((pendingPostConsentTransition || alreadyTransitioned) && !step2GreetedRef.current) {
+            step2GreetedRef.current = true;
+            const baseMessages = preApp.filter((msg) => msg.id !== 'tcpa-transition');
+            api.post<{ success: boolean; data: ChatReply }>(
+              `/api/chat/${applicationId}/post-consent-transition`,
+              { clientState: buildSafeClientState(formStateRef.current, null, baseMessages) },
+              token ?? undefined,
+            ).then((transitionRes) => {
+              if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
+              setMessages([...baseMessages, {
+                id: createLocalId(),
+                role: 'assistant',
+                content: transitionRes.data.message,
+                nextField: transitionRes.data.nextField,
+              }]);
+            }).catch(() => {
+              if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
+              setMessages([...baseMessages, {
+                id: createLocalId(),
+                role: 'assistant',
+                content: buildTcpaTransitionMessage(formStateRef.current),
+              }]);
+            });
+          } else if (Object.keys(formStateRef.current.business?.fieldSources || {}).length > 0 && !step2GreetedRef.current) {
             step2GreetedRef.current = true;
             const greeting: ChatMessage = {
               id: createLocalId(),
@@ -111,6 +137,21 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
       ? { fieldKey: pendingField.fieldKey, value: message }
       : null;
     setMessages((current) => [...current, { id: createLocalId(), role: 'user', content: message }]);
+
+    // Consent is a transition action. Keep it to one clean assistant message
+    // instead of calling the API and then also injecting the Step 2 greeting.
+    if (appliedField?.fieldKey === 'tcpaConsent' || appliedField?.fieldKey === 'contact.tcpaConsent') {
+      setMessages((current) => {
+        const next = current;
+        if (!applicationId && typeof window !== 'undefined') {
+          window.localStorage.setItem(POST_CONSENT_TRANSITION_KEY, 'true');
+          window.localStorage.setItem(PRE_APP_CHAT_KEY, JSON.stringify(next.slice(-20)));
+        }
+        return next;
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -152,24 +193,11 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
           </button>
         </header>
 
-        <div ref={scrollerRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div ref={scrollerRef} className="flex-1 space-y-3 overflow-y-auto p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {messages.map((message) => (
             <div key={message.id} className={message.role === 'user' ? 'text-right' : 'text-left'}>
               <div className={`inline-block max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'bg-cyan-500 text-slate-950' : 'border border-white/10 bg-white/[0.05] text-slate-100'}`}>
                 {message.content}
-                {message.role === 'assistant' && message.nextField && onNavigateToField && (
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={() => {
-                      onNavigateToField(message.nextField!);
-                      onClose();
-                    }}
-                    className="mt-3 block rounded-full border border-cyan-300/30 bg-cyan-400/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/60 hover:bg-cyan-400/15"
-                  >
-                    {isSecureIdentityField(message.nextField) ? 'Go to secure verification fields' : `Go to ${message.nextField.stepName}`}
-                  </button>
-                )}
               </div>
             </div>
           ))}
@@ -178,10 +206,6 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
 
         <div className="border-t border-white/10 p-4">
           {error && <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
-          <div className="mb-3 flex flex-wrap gap-2">
-            <button type="button" suppressHydrationWarning onClick={() => void sendMessage('What should I do next?')} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/[0.06]">Help me continue</button>
-            <button type="button" suppressHydrationWarning onClick={() => void sendMessage('Can you explain how funding review works?')} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/[0.06]">Funding review</button>
-          </div>
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -225,6 +249,7 @@ function shouldAutoApplyFieldAnswer(field: NonNullable<ChatReply['nextField']>, 
   if (isSecureIdentityField(field)) return false;
   const value = rawValue.trim();
   if (!value || looksLikeQuestionOrObjection(value)) return false;
+  if (looksLikeHostileOrProfane(value)) return false;
 
   switch (field.fieldKey) {
     case 'tcpaConsent': {
@@ -242,6 +267,8 @@ function shouldAutoApplyFieldAnswer(field: NonNullable<ChatReply['nextField']>, 
     case 'contact.email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     case 'contact.phone': return value.replace(/[^0-9]/g, '').length >= 10;
     case 'business.ein': return /^\d{2}-?\d{7}$/.test(value) || /sole propriet/i.test(value);
+    case 'business.industry': return isKnownIndustry(value);
+    case 'business.businessStartDate': return value.length >= 4 && value.length <= 40;
     case 'business.stateOfFormation':
     case 'business.state':
     case 'owner.state': return /^[A-Za-z]{2}$/.test(value) || value.length > 3;
@@ -264,6 +291,28 @@ function looksLikeQuestionOrObjection(value: string): boolean {
   ].some((phrase) => lower.startsWith(phrase) || lower.includes(` ${phrase}`));
 }
 
+function looksLikeHostileOrProfane(value: string): boolean {
+  const lower = value.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return [
+    /\bf+u+c+k+\b/i,
+    /\bshit+\b/i,
+    /\bass+hole\b/i,
+    /\bbitch+\b/i,
+    /\bcunt+\b/i,
+    /\bdick+\b/i,
+    /\bmotherf/i,
+    /\bshut up\b/i,
+    /\bgo away\b/i,
+    /\bleave me alone\b/i,
+    /\bnot interested\b/i,
+  ].some((pattern) => pattern.test(lower));
+}
+
+function isKnownIndustry(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  return INDUSTRIES.some((industry) => industry.toLowerCase() === lower);
+}
+
 function loadPreApplicationMessages(introMessage: ChatMessage): ChatMessage[] {
   if (typeof window === 'undefined') return [introMessage];
   try {
@@ -272,6 +321,17 @@ function loadPreApplicationMessages(introMessage: ChatMessage): ChatMessage[] {
   } catch {
     return [introMessage];
   }
+}
+
+function buildTcpaTransitionMessage(state: FormState): string {
+  const fieldSources = state.business?.fieldSources || {};
+  const googleFoundDetails = Object.keys(fieldSources).some((key) => !['legalName', 'stateOfFormation', 'ein'].includes(key));
+
+  if (googleFoundDetails) {
+    return 'Thanks — I checked the consent box and moved you to the next page. Please review the business information that appeared, make sure everything looks correct, and answer the Home Based Business question with Yes or No.';
+  }
+
+  return 'Thanks — I checked the consent box and moved you to the next page. I could not confirm all of the business details from lookup, so the next step is to fill in the business information shown on the page.';
 }
 
 function buildSafeClientState(state: FormState, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {
