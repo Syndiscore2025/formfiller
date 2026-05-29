@@ -1,148 +1,102 @@
-# Private Super-Admin Report Console
+# Private Lead Export (Local-Only Tool)
 
-This file documents the private cross-tenant CSV export feature. It was intentionally **not** added to the Postman collection and should not be copied into tenant-facing or Switchbox handover docs.
+This documents the private cross-tenant lead CSV export. It is intentionally **not** in the Postman collection and must never be copied into tenant-facing or Switchbox handover docs.
 
-## Purpose
+## Architecture: fully isolated from the merchant/Switchbox app
 
-The report console lets the platform owner download a de-duplicated merchant lead CSV across all tenants from the primary DigitalOcean Postgres database.
+There is **no deployed page and no deployed endpoint** for this capability. It does not exist in the frontend that tenants/merchants load, and it does not exist in the backend that Switchbox integrates with. Export runs as a **local CLI script** on the owner's machine against the database.
 
-## Private frontend link
+- No `/mycba/...` route ships in the frontend build (verify with `npm run build` — it is absent from the route table).
+- No `/api/admin/*` endpoint is mounted in the backend.
+- No `super_admin` login, JWT, or account is involved in the export.
 
-```text
-/mycba/0c7f2e9a5b184d6f/portal/91a3d8e0c4b7
+## How to run
+
+Script: `packages/backend/src/scripts/export-leads.ts` (run via `npm run report:export`).
+
+```bash
+# from packages/backend, with a local .env (see "Local env" below)
+npm run report:export -- --start=2025-01-01 --end=2025-12-31 --sensitive --out=report.csv
 ```
 
-The page requires an authenticated user whose JWT role is `super_admin`.
-
-This path is intentionally deep, unlinked, and unrelated to the normal merchant form routes. Do not add backlinks to it from `/apply`, `/settings`, tenant pages, Postman, public docs, or shared handover reports.
-
-## Backend route
-
-```text
-POST /api/admin/sync
-```
-
-The path is generic by design. Request filters are sent in the JSON body, not the URL.
+Flags (all optional):
+- `--start=YYYY-MM-DD` / `--end=YYYY-MM-DD`: filter by application `createdAt`.
+- `--sensitive`: include full SSN + DOB (otherwise SSN is last-four, DOB blank).
+- `--out=path.csv`: output file (default `merchant-report-<date>.csv` in the current directory).
 
 ## CSV behavior
 
-- Source: existing DO Postgres application tables.
+- Source: the primary Postgres application tables (read-only).
 - Scope: all tenants.
-- Date filters: application `createdAt` start/end dates.
+- Date filters: application `createdAt` start/end (`--start`/`--end`).
 - Sorting: newest applications first.
 - De-duplication order:
   1. contact/owner email
   2. contact/owner/business phone
   3. business legal name + business ZIP
-- CSV is streamed directly to the browser.
-- The app does not write the generated CSV to disk.
+- The CSV is written to a local file (`--out`); nothing is streamed over the network.
 
 ## Sensitive export mode
 
-The frontend has a checkbox to include full SSN and DOB. When enabled, the page requires this exact confirmation phrase:
+Pass `--sensitive` to include full SSN and DOB.
 
-```text
-EXPORT_FULL_SSN_DOB
-```
-
-If sensitive mode is off:
+If `--sensitive` is omitted:
 
 - SSN is exported as last four only.
 - DOB is blank.
 
-If sensitive mode is on:
+If `--sensitive` is passed:
 
-- SSN is decrypted inside the backend export stream.
+- SSN is decrypted locally using `ENCRYPTION_KEY`.
 - DOB is included.
-- Values are not logged or stored in the audit row.
+- Treat the output file as highly sensitive (see Safety notes).
 
-## Audit trail
+## No audit row / read-only access
 
-Each export creates a `ReportExportAudit` row with:
+The local tool is designed to run against a **read-only** database role, so it does **not** write a `ReportExportAudit` row — the owner running the script is the audit boundary. The `ReportExportAudit` table still exists in the schema; it is simply not written by this tool.
 
-- user ID
-- report type
-- whether sensitive mode was used
-- start/end date filters
-- row count
-- timestamp
+## Local env
 
-No merchant values, SSNs, DOBs, CSV rows, or request/response bodies are stored in the audit table.
-
-## DO setup
-
-1. Deploy the backend migration containing `ReportExportAudit`.
-2. Create or identify the platform owner user.
-3. Promote that user in Postgres:
-
-```sql
-UPDATE "User"
-SET "role" = 'super_admin'
-WHERE "email" = '<owner-email>';
-```
-
-4. Sign out/in so the browser stores a JWT with `role: super_admin`.
-5. Visit the private frontend link listed above.
-
-## Disable / rollback plan
-
-There is intentionally **no environment-variable toggle** for this feature. The preferred control is access-based and module-based so no sensitive private reporting capability is advertised in deployment env vars.
-
-### Fastest live disable: remove super-admin access
-
-Run this in Postgres to immediately prevent the private report page and backend export endpoint from working for the owner account:
-
-```sql
-UPDATE "User"
-SET "role" = 'admin'
-WHERE "email" = '<owner-email>';
-```
-
-Then sign out of the browser. Existing JWTs expire after the normal auth window, so for immediate lockout rotate `JWT_SECRET` and redeploy the backend.
-
-### Disable at the app/proxy layer
-
-If DigitalOcean routing/proxy controls are available, block both paths:
+Create a local `.env` in `packages/backend` (never commit it) with:
 
 ```text
-/mycba/0c7f2e9a5b184d6f/portal/91a3d8e0c4b7
-/api/admin/sync
+DATABASE_URL=<read-only connection string to the primary Postgres>
+ENCRYPTION_KEY=<the SAME key used in production — never rotate it>
 ```
 
-This disables the frontend screen and backend export route without changing the database.
+Notes:
+- `ENCRYPTION_KEY` must match production exactly or SSN decryption fails. Never rotate it; existing SSN/ITIN data would become unreadable.
+- Leave `NODE_ENV` unset (development) when running locally so the script does not require unrelated production env vars like `JWT_SECRET`.
 
-### Code-level disable
+## Read-only database role (recommended)
 
-To disable the backend module in code, remove the route mount from `packages/backend/src/app.ts`:
+Run the export with a least-privilege role so the tool can never modify data. In Postgres:
 
-```ts
-app.use('/api/admin', adminReportRoutes);
+```sql
+CREATE ROLE lead_export LOGIN PASSWORD '<strong-password>';
+GRANT CONNECT ON DATABASE <dbname> TO lead_export;
+GRANT USAGE ON SCHEMA public TO lead_export;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO lead_export;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO lead_export;
 ```
 
-To disable the frontend module in code, remove or rename:
+Use that role's credentials in the local `DATABASE_URL`.
 
-```text
-packages/frontend/src/app/mycba/0c7f2e9a5b184d6f/portal/91a3d8e0c4b7/page.tsx
-```
+## Why this is isolated
 
-### Full rollback
+- The tenant/Switchbox-facing frontend and backend contain no route, endpoint, link, or build-manifest entry for the export — it physically isn't in their deployment.
+- The capability exists only as code that runs on the owner's machine, on demand.
+- There is one copy of the data (the primary DB); the tool reads it via a read-only role.
 
-If the feature must be fully removed later:
+## Restore a web console later (if ever needed)
 
-1. Remove `packages/backend/src/routes/adminReport.routes.ts`.
-2. Remove the `/api/admin` route mount from `packages/backend/src/app.ts`.
-3. Remove `packages/frontend/src/app/mycba/0c7f2e9a5b184d6f/portal/91a3d8e0c4b7/page.tsx`.
-4. Keep or drop `ReportExportAudit` depending on retention requirements. Keeping it preserves export audit history.
-
-Do not remove merchant/application source data; the report reads existing records and does not maintain a separate lead database.
+This was previously a `super_admin`-gated web page (`/mycba/...`) plus `POST /api/admin/sync`. Both were removed for isolation. If a browser-based console is ever required again, re-add a route file under the frontend `app/` directory and a backend route mounted in `packages/backend/src/app.ts`, reusing the same de-dup/CSV logic now in `export-leads.ts`. Prefer keeping it local unless a web UI is strictly necessary.
 
 ## Safety notes
 
-- Do not add this route to Postman or tenant docs.
-- Do not add a public env var advertising this capability.
-- Do not add links to the private page from any visible frontend navigation.
-- The private route has `noindex`/`nofollow` metadata; do not create a robots.txt entry that reveals the path.
+- Do not add any export route to Postman, tenant docs, or Switchbox handover docs.
+- Do not deploy this script as an HTTP endpoint.
 - Do not email CSVs containing full SSN/DOB.
-- Store downloaded CSVs only on trusted devices.
-- Delete local CSV copies when no longer needed.
-- Use the date filters to limit exports to the smallest practical range.
+- Store downloaded CSVs only on trusted devices; delete local copies when no longer needed.
+- Use `--start`/`--end` to limit exports to the smallest practical range.
+- Never rotate `ENCRYPTION_KEY`.

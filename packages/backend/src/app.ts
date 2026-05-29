@@ -13,7 +13,6 @@ import analyticsRoutes from './routes/analytics.routes';
 import einLookupRoutes from './routes/einLookup.routes';
 import tenantRoutes from './routes/tenant.routes';
 import chatRoutes from './routes/chat.routes';
-import adminReportRoutes from './routes/adminReport.routes';
 
 const app = express();
 
@@ -64,7 +63,6 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/business', einLookupRoutes);
 app.use('/api/tenant', tenantRoutes);
 app.use('/api/chat', chatRoutes);
-app.use('/api/admin', adminReportRoutes);
 
 // 404
 app.use((_req, res) => {

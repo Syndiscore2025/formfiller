@@ -1,22 +1,21 @@
-import { Router, Response } from 'express';
-import { z } from 'zod';
+/**
+ * Local-only lead export tool.
+ *
+ * This is NOT an HTTP route and is NOT mounted in the deployed app. It runs on
+ * your own machine against the database (use a read-only DATABASE_URL) and writes
+ * a CSV to disk. Nothing about this capability ships to the tenant/Switchbox-facing
+ * deployment.
+ *
+ * Usage:
+ *   npm run report:export -- [--start=YYYY-MM-DD] [--end=YYYY-MM-DD] [--sensitive] [--out=path.csv]
+ *
+ * Requires local env: DATABASE_URL (read-only role) and ENCRYPTION_KEY.
+ */
+import 'dotenv/config';
+import fs from 'fs';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { requireAuth, requireSuperAdmin, AuthRequest } from '../middleware/auth';
-import { validate } from '../middleware/validate';
-import { asyncHandler } from '../utils/asyncHandler';
-import { createError } from '../middleware/errorHandler';
 import { decrypt } from '../utils/encryption';
-
-const router = Router();
-
-const reportSchema = z.object({
-  report: z.literal('lead_export'),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  includeSensitive: z.boolean().optional(),
-  confirmSensitive: z.string().optional(),
-});
 
 const CSV_HEADERS = [
   'createdDate', 'updatedDate', 'tenantSlug', 'tenantName', 'applicationId', 'status',
@@ -29,60 +28,6 @@ const CSV_HEADERS = [
   'hasAdditionalOwners', 'homeBasedBusiness', 'ownerHomeSameAsBusiness', 'bankStatementCount',
 ];
 
-router.post(
-  '/sync',
-  requireAuth,
-  requireSuperAdmin,
-  validate(reportSchema),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const body = req.body as z.infer<typeof reportSchema>;
-    const includeSensitive = body.includeSensitive === true;
-    if (includeSensitive && body.confirmSensitive !== 'EXPORT_FULL_SSN_DOB') {
-      throw createError('Sensitive export confirmation is required.', 400);
-    }
-
-    const { start, endExclusive } = parseDateRange(body.startDate || undefined, body.endDate || undefined);
-    const where: Prisma.ApplicationWhereInput = {};
-    if (start || endExclusive) {
-      where.createdAt = { ...(start ? { gte: start } : {}), ...(endExclusive ? { lt: endExclusive } : {}) };
-    }
-
-    const apps = await prisma.application.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }],
-      take: 25000,
-      include: {
-        tenant: { select: { slug: true, name: true } },
-        business: true,
-        owners: { orderBy: { ownerIndex: 'asc' } },
-        financial: true,
-        loanRequest: true,
-        documents: { where: { documentType: 'bank_statement' }, select: { id: true } },
-      },
-    });
-
-    const rows = dedupeApplications(apps).map((app) => toCsvRow(app, includeSensitive));
-
-    await prisma.reportExportAudit.create({
-      data: {
-        userId: req.userId,
-        reportType: body.report,
-        includeSensitive,
-        startDate: start,
-        endDate: endExclusive,
-        rowCount: rows.length,
-      },
-    });
-
-    const fileDate = new Date().toISOString().slice(0, 10);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="merchant-report-${fileDate}.csv"`);
-    res.write(`${CSV_HEADERS.map(csvEscape).join(',')}\n`);
-    for (const row of rows) res.write(`${CSV_HEADERS.map((header) => csvEscape(row[header] ?? '')).join(',')}\n`);
-    res.end();
-  })
-);
-
 type ExportApplication = Prisma.ApplicationGetPayload<{
   include: {
     tenant: { select: { slug: true; name: true } };
@@ -93,6 +38,67 @@ type ExportApplication = Prisma.ApplicationGetPayload<{
     documents: { select: { id: true } };
   };
 }>;
+
+interface CliArgs {
+  start?: string;
+  end?: string;
+  includeSensitive: boolean;
+  out: string;
+}
+
+function parseArgs(): CliArgs {
+  const args = process.argv.slice(2);
+  const get = (name: string): string | undefined => {
+    const hit = args.find((a) => a.startsWith(`--${name}=`));
+    return hit ? hit.split('=').slice(1).join('=') : undefined;
+  };
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const start = get('start');
+  const end = get('end');
+  if (start && !dateRe.test(start)) throw new Error('--start must be YYYY-MM-DD');
+  if (end && !dateRe.test(end)) throw new Error('--end must be YYYY-MM-DD');
+  const fileDate = new Date().toISOString().slice(0, 10);
+  return {
+    start,
+    end,
+    includeSensitive: args.includes('--sensitive'),
+    out: get('out') || `merchant-report-${fileDate}.csv`,
+  };
+}
+
+async function main(): Promise<void> {
+  const { start: startStr, end: endStr, includeSensitive, out } = parseArgs();
+  const { start, endExclusive } = parseDateRange(startStr, endStr);
+
+  const where: Prisma.ApplicationWhereInput = {};
+  if (start || endExclusive) {
+    where.createdAt = { ...(start ? { gte: start } : {}), ...(endExclusive ? { lt: endExclusive } : {}) };
+  }
+
+  const apps = await prisma.application.findMany({
+    where,
+    orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }],
+    take: 25000,
+    include: {
+      tenant: { select: { slug: true, name: true } },
+      business: true,
+      owners: { orderBy: { ownerIndex: 'asc' } },
+      financial: true,
+      loanRequest: true,
+      documents: { where: { documentType: 'bank_statement' }, select: { id: true } },
+    },
+  });
+
+  const rows = dedupeApplications(apps).map((app) => toCsvRow(app, includeSensitive));
+
+  const lines = [CSV_HEADERS.map(csvEscape).join(',')];
+  for (const row of rows) lines.push(CSV_HEADERS.map((h) => csvEscape(row[h] ?? '')).join(','));
+  fs.writeFileSync(out, `${lines.join('\n')}\n`, 'utf8');
+
+  process.stdout.write(
+    `Wrote ${rows.length} merchant row(s) to ${out} (sensitive=${includeSensitive}).\n`
+  );
+}
 
 function parseDateRange(startDate?: string, endDate?: string) {
   const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : undefined;
@@ -179,4 +185,11 @@ function csvEscape(value: string): string {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
-export default router;
+main()
+  .catch((err) => {
+    process.stderr.write(`Export failed: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

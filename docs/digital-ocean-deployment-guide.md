@@ -122,17 +122,9 @@ Deploy the frontend service after setting these.
 
 ---
 
-## Step 8 — Set up the private lead export console
+## Step 8 — Private lead export
 
-The private CSV export console requires a `super_admin` account. After logging in with the owner account, run this SQL on your Postgres database once:
-
-```sql
-UPDATE "User"
-SET "role" = 'super_admin'
-WHERE "email" = 'your-owner-email@example.com';
-```
-
-Sign out and back in so the new role takes effect. The private console URL is documented separately — do not share it publicly.
+Lead export is **not deployed** with this app — there is no admin page or admin endpoint in the deployed frontend/backend. Export runs as a local CLI script on the owner's machine against the database. Setup and usage are documented separately in `private-super-admin-report-console.md`; nothing about it needs to be configured in DigitalOcean.
 
 ---
 
@@ -144,8 +136,6 @@ Run through these checks after everything is deployed:
 - [ ] `/apply` loads the merchant form in the browser
 - [ ] AI chat opens automatically and responds
 - [ ] Fill out and submit a test application end-to-end
-- [ ] Confirm the application appears in the private lead export console
-- [ ] Download a CSV from the console and verify the data looks correct
 - [ ] Confirm the application is delivered to Switchbox (check `/settings` delivery status)
 
 ---
@@ -155,5 +145,5 @@ Run through these checks after everything is deployed:
 - **Never rotate `ENCRYPTION_KEY`** after launch — it encrypts SSNs already stored in the database. Rotating it will break decryption of existing records.
 - **`/submit`** moves the merchant to bank statement upload. It does not send data to Switchbox.
 - **`/finalize`** is what actually delivers the signed PDF, bank statements, and application data to Switchbox.
-- SSN and DOB are excluded from CSV exports by default. There is a toggle in the console that requires a typed confirmation phrase to include them.
+- SSN and DOB are excluded from CSV exports by default. The local export tool includes them only when run with the `--sensitive` flag (see `private-super-admin-report-console.md`).
 - Keep all buckets private. Never make signed PDFs or bank statements publicly accessible.
