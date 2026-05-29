@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Form Filler API - Switchbox Handoff",
-    "description": "Complete endpoint collection matching all real API routes. Uses placeholders only; set real secrets in local/current Postman values or Switchbox password manager, never in source control. Live DigitalOcean URLs (backend: https://formfiller-backend-wtxtc.ondigitalocean.app, frontend: https://formfiller-frontend-uasuj.ondigitalocean.app) are provided as variables below — set backend_base_url to backend_base_url_do (or select the environment file) to run against production.",
+    "description": "Complete endpoint collection matching all real API routes. Import docs/formfiller.postman_environment.json, then set real Switchbox-owned current values in Postman before running. Signature, submit, and finalize are backend-enforced: /sign requires complete application data, /submit requires a complete signed application, and /finalize requires a complete submitted application plus at least one bank statement PDF before Switchbox delivery is queued. Do not add private internal admin/export values to this collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": { "type": "noauth" },
@@ -10,13 +10,14 @@
     { "key": "backend_base_url_do", "value": "https://formfiller-backend-wtxtc.ondigitalocean.app" },
     { "key": "frontend_base_url", "value": "http://localhost:3002" },
     { "key": "frontend_base_url_do", "value": "https://formfiller-frontend-uasuj.ondigitalocean.app" },
-    { "key": "tenant_slug", "value": "default" },
-    { "key": "admin_email", "value": "admin@example.com" },
+    { "key": "tenant_slug", "value": "SET_TENANT_SLUG" },
+    { "key": "tenant_name", "value": "SET_TENANT_NAME" },
+    { "key": "admin_email", "value": "SET_ADMIN_EMAIL" },
     { "key": "admin_password", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
     { "key": "application_id", "value": "PASTE_CREATED_APPLICATION_ID" },
     { "key": "place_id", "value": "PASTE_GOOGLE_PLACE_ID" },
     { "key": "auth_token", "value": "PASTE_JWT_LOCALLY_DO_NOT_COMMIT" },
-    { "key": "switchbox_api_url", "value": "https://switchbox.example.com/webhook" },
+    { "key": "switchbox_api_url", "value": "SET_SWITCHBOX_WEBHOOK_URL" },
     { "key": "switchbox_api_key", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
     { "key": "document_storage_provider", "value": "database" },
     { "key": "document_storage_endpoint", "value": "" },
@@ -29,8 +30,48 @@
     { "key": "smtp_host", "value": "" },
     { "key": "smtp_user", "value": "" },
     { "key": "smtp_pass", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
-    { "key": "smtp_from", "value": "support@example.com" },
-    { "key": "smtp_from_name", "value": "Switchbox Funding" },
+    { "key": "smtp_from", "value": "SET_SMTP_FROM_EMAIL" },
+    { "key": "smtp_from_name", "value": "SET_SMTP_FROM_NAME" },
+    { "key": "merchant_contact_first_name", "value": "SET_MERCHANT_CONTACT_FIRST_NAME" },
+    { "key": "merchant_contact_last_name", "value": "SET_MERCHANT_CONTACT_LAST_NAME" },
+    { "key": "merchant_contact_email", "value": "SET_MERCHANT_CONTACT_EMAIL" },
+    { "key": "merchant_contact_phone", "value": "SET_MERCHANT_CONTACT_PHONE" },
+    { "key": "business_legal_name", "value": "SET_BUSINESS_LEGAL_NAME" },
+    { "key": "business_dba", "value": "SET_BUSINESS_DBA_OR_EMPTY" },
+    { "key": "business_entity_type", "value": "SET_BUSINESS_ENTITY_TYPE" },
+    { "key": "business_industry", "value": "SET_BUSINESS_INDUSTRY" },
+    { "key": "business_state_of_formation", "value": "SET_STATE_OF_FORMATION" },
+    { "key": "business_ein", "value": "SET_9_DIGIT_EIN_OR_EMPTY_FOR_SOLE_PROP" },
+    { "key": "business_start_date", "value": "SET_YYYY_MM_DD_OR_EMPTY" },
+    { "key": "business_phone", "value": "SET_BUSINESS_PHONE" },
+    { "key": "business_website", "value": "SET_BUSINESS_WEBSITE_OR_EMPTY" },
+    { "key": "business_street_address", "value": "SET_BUSINESS_STREET_ADDRESS" },
+    { "key": "business_street_address2", "value": "SET_BUSINESS_STREET_ADDRESS2_OR_EMPTY" },
+    { "key": "business_city", "value": "SET_BUSINESS_CITY" },
+    { "key": "business_state", "value": "SET_BUSINESS_STATE" },
+    { "key": "business_zip", "value": "SET_BUSINESS_ZIP" },
+    { "key": "home_based_business", "value": "false" },
+    { "key": "owner_home_same_as_business", "value": "false" },
+    { "key": "has_additional_owners", "value": "false" },
+    { "key": "owner_first_name", "value": "SET_OWNER_FIRST_NAME" },
+    { "key": "owner_last_name", "value": "SET_OWNER_LAST_NAME" },
+    { "key": "owner_email", "value": "SET_OWNER_EMAIL" },
+    { "key": "owner_phone", "value": "SET_OWNER_PHONE" },
+    { "key": "owner_ownership_pct", "value": "SET_OWNER_OWNERSHIP_PERCENT" },
+    { "key": "owner_ssn", "value": "SET_OWNER_9_DIGIT_SSN_OR_ITIN_IN_CURRENT_VALUE" },
+    { "key": "owner_date_of_birth", "value": "SET_OWNER_DOB_YYYY_MM_DD" },
+    { "key": "owner_street_address", "value": "SET_OWNER_STREET_ADDRESS" },
+    { "key": "owner_street_address2", "value": "SET_OWNER_STREET_ADDRESS2_OR_EMPTY" },
+    { "key": "owner_city", "value": "SET_OWNER_CITY" },
+    { "key": "owner_state", "value": "SET_OWNER_STATE" },
+    { "key": "owner_zip", "value": "SET_OWNER_ZIP" },
+    { "key": "annual_revenue", "value": "SET_ANNUAL_REVENUE_RANGE" },
+    { "key": "amount_requested", "value": "SET_AMOUNT_REQUESTED_RANGE" },
+    { "key": "funding_urgency", "value": "SET_FUNDING_URGENCY" },
+    { "key": "statement_month", "value": "SET_STATEMENT_MONTH_YYYY_MM" },
+    { "key": "statement_file_name", "value": "SET_BANK_STATEMENT_FILE_NAME" },
+    { "key": "bank_name", "value": "SET_BANK_NAME" },
+    { "key": "bank_url", "value": "SET_BANK_URL_OR_EMPTY" },
     { "key": "sample_base64_pdf", "value": "data:application/pdf;base64,REPLACE_WITH_BASE64_PDF" },
     { "key": "sample_signature_png", "value": "data:image/png;base64,REPLACE_WITH_BASE64_SIGNATURE" }
   ],
@@ -54,7 +95,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"tenantSlug\": \"{{tenant_slug}}\",\n  \"tenantName\": \"Switchbox Demo Tenant\"\n}"
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"tenantSlug\": \"{{tenant_slug}}\",\n  \"tenantName\": \"{{tenant_name}}\"\n}"
             },
             "url": "{{backend_base_url}}/api/auth/register"
           }
@@ -115,7 +156,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"companyName\": \"Switchbox Funding\",\n  \"legalBusinessName\": \"Switchbox LLC\",\n  \"logoUrl\": null,\n  \"companyEmail\": \"support@example.com\",\n  \"companyPhone\": \"8602026706\",\n  \"companyAddress\": \"123 Main St, Hartford, CT 06103\",\n  \"websiteUrl\": \"https://example.com\",\n  \"supportEmail\": \"support@example.com\",\n  \"theme\": \"dark\",\n  \"accentColor\": \"#0284c7\",\n  \"surfaceColor\": \"#ffffff\",\n  \"pdfShowContactEmail\": true,\n  \"pdfShowContactPhone\": true,\n  \"pdfShowAnnualRevenue\": true,\n  \"pdfShowAmountRequested\": true,\n  \"switchboxApiUrl\": \"{{switchbox_api_url}}\",\n  \"switchboxApiKey\": \"{{switchbox_api_key}}\",\n  \"documentStorageProvider\": \"{{document_storage_provider}}\",\n  \"documentStorageEndpoint\": \"{{document_storage_endpoint}}\",\n  \"documentStorageRegion\": \"{{document_storage_region}}\",\n  \"documentStorageBucket\": \"{{document_storage_bucket}}\",\n  \"documentStoragePrefix\": \"{{document_storage_prefix}}\",\n  \"documentStorageAccessKeyId\": \"{{document_storage_access_key_id}}\",\n  \"documentStorageSecretAccessKey\": \"{{document_storage_secret_access_key}}\",\n  \"documentStoragePublicBaseUrl\": \"{{document_storage_public_base_url}}\",\n  \"smtpHost\": \"{{smtp_host}}\",\n  \"smtpPort\": 587,\n  \"smtpSecure\": false,\n  \"smtpUser\": \"{{smtp_user}}\",\n  \"smtpPass\": \"{{smtp_pass}}\",\n  \"smtpFrom\": \"{{smtp_from}}\",\n  \"smtpFromName\": \"{{smtp_from_name}}\",\n  \"emailAbandonedEnabled\": true,\n  \"emailAbandonedDelayMinutes\": 1440,\n  \"emailAbandonedSubject\": \"Complete your funding application\",\n  \"emailAbandonedBody\": \"Hi {firstName},\\n\\nYou started a funding application but haven't finished it yet. We'd love to help you get funded.\\n\\nClick here to complete your application: {applicationUrl}\\n\\nIf you have any questions, reply to this email.\",\n  \"emailAbandonedIncludeLogo\": true,\n  \"emailAbandonedIncludeSig\": true,\n  \"emailNoBanksEnabled\": true,\n  \"emailNoBanksSubject\": \"Don't forget to upload your bank statements\",\n  \"emailNoBanksBody\": \"Hi {firstName},\\n\\nYour application has been received but we still need your bank statements to proceed.\\n\\nPlease upload them here: {applicationUrl}\",\n  \"emailNoBanksIncludeLogo\": true,\n  \"emailNoBanksIncludeSig\": true,\n  \"emailInsufficientBanksEnabled\": true,\n  \"emailMinBankStatements\": 3,\n  \"emailInsufficientBanksSubject\": \"We need more bank statements to process your application\",\n  \"emailInsufficientBanksBody\": \"Hi {firstName},\\n\\nWe received your application but only have {uploadedCount} of the {requiredCount} required bank statements. Please upload the remaining statements here: {applicationUrl}\",\n  \"emailInsufficientBanksIncludeLogo\": true,\n  \"emailInsufficientBanksIncludeSig\": true,\n  \"aiChatEnabled\": true,\n  \"aiPersonaName\": \"Funding Assistant\",\n  \"aiSystemPromptOverride\": null,\n  \"aiModel\": \"gpt-4o\"\n}"
+              "raw": "{\n  \"companyName\": \"{{tenant_name}}\",\n  \"legalBusinessName\": \"{{tenant_name}}\",\n  \"logoUrl\": null,\n  \"companyEmail\": \"{{smtp_from}}\",\n  \"companyPhone\": \"{{business_phone}}\",\n  \"companyAddress\": \"{{business_street_address}}, {{business_city}}, {{business_state}} {{business_zip}}\",\n  \"websiteUrl\": \"{{business_website}}\",\n  \"supportEmail\": \"{{smtp_from}}\",\n  \"theme\": \"dark\",\n  \"accentColor\": \"#0284c7\",\n  \"surfaceColor\": \"#ffffff\",\n  \"pdfShowContactEmail\": true,\n  \"pdfShowContactPhone\": true,\n  \"pdfShowAnnualRevenue\": true,\n  \"pdfShowAmountRequested\": true,\n  \"switchboxApiUrl\": \"{{switchbox_api_url}}\",\n  \"switchboxApiKey\": \"{{switchbox_api_key}}\",\n  \"documentStorageProvider\": \"{{document_storage_provider}}\",\n  \"documentStorageEndpoint\": \"{{document_storage_endpoint}}\",\n  \"documentStorageRegion\": \"{{document_storage_region}}\",\n  \"documentStorageBucket\": \"{{document_storage_bucket}}\",\n  \"documentStoragePrefix\": \"{{document_storage_prefix}}\",\n  \"documentStorageAccessKeyId\": \"{{document_storage_access_key_id}}\",\n  \"documentStorageSecretAccessKey\": \"{{document_storage_secret_access_key}}\",\n  \"documentStoragePublicBaseUrl\": \"{{document_storage_public_base_url}}\",\n  \"smtpHost\": \"{{smtp_host}}\",\n  \"smtpPort\": 587,\n  \"smtpSecure\": false,\n  \"smtpUser\": \"{{smtp_user}}\",\n  \"smtpPass\": \"{{smtp_pass}}\",\n  \"smtpFrom\": \"{{smtp_from}}\",\n  \"smtpFromName\": \"{{smtp_from_name}}\",\n  \"emailAbandonedEnabled\": true,\n  \"emailAbandonedDelayMinutes\": 1440,\n  \"emailAbandonedSubject\": \"Complete your funding application\",\n  \"emailAbandonedBody\": \"Hi {firstName},\\n\\nYou started a funding application but haven't finished it yet. Complete it here: {applicationUrl}\",\n  \"emailAbandonedIncludeLogo\": true,\n  \"emailAbandonedIncludeSig\": true,\n  \"emailNoBanksEnabled\": true,\n  \"emailNoBanksSubject\": \"Don't forget to upload your bank statements\",\n  \"emailNoBanksBody\": \"Hi {firstName},\\n\\nYour application has been received but we still need your bank statements. Upload them here: {applicationUrl}\",\n  \"emailNoBanksIncludeLogo\": true,\n  \"emailNoBanksIncludeSig\": true,\n  \"emailInsufficientBanksEnabled\": true,\n  \"emailMinBankStatements\": 3,\n  \"emailInsufficientBanksSubject\": \"We need more bank statements to process your application\",\n  \"emailInsufficientBanksBody\": \"Hi {firstName},\\n\\nWe received {uploadedCount} of the {requiredCount} requested bank statements. Upload more here: {applicationUrl}\",\n  \"emailInsufficientBanksIncludeLogo\": true,\n  \"emailInsufficientBanksIncludeSig\": true,\n  \"aiChatEnabled\": true,\n  \"aiPersonaName\": \"Funding Assistant\",\n  \"aiSystemPromptOverride\": null,\n  \"aiModel\": \"gpt-4o\"\n}"
             },
             "url": "{{backend_base_url}}/api/tenant/settings/admin"
           }
@@ -155,7 +196,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"contactFirstName\": \"Test\",\n  \"contactLastName\": \"Merchant\",\n  \"contactEmail\": \"merchant@example.com\",\n  \"contactPhone\": \"8602026706\",\n  \"tcpaConsent\": true\n}"
+              "raw": "{\n  \"contactFirstName\": \"{{merchant_contact_first_name}}\",\n  \"contactLastName\": \"{{merchant_contact_last_name}}\",\n  \"contactEmail\": \"{{merchant_contact_email}}\",\n  \"contactPhone\": \"{{merchant_contact_phone}}\",\n  \"tcpaConsent\": true\n}"
             },
             "url": "{{backend_base_url}}/api/applications"
           }
@@ -188,7 +229,7 @@
               { "key": "Content-Type", "value": "application/json" },
               { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"hasAdditionalOwners\": false,\n  \"homeBasedBusiness\": false,\n  \"ownerHomeSameAsBusiness\": false\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"hasAdditionalOwners\": {{has_additional_owners}},\n  \"homeBasedBusiness\": {{home_based_business}},\n  \"ownerHomeSameAsBusiness\": {{owner_home_same_as_business}}\n}" },
             "url": "{{backend_base_url}}/api/applications/{{application_id}}"
           }
         },
@@ -210,7 +251,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"statementMonth\": \"2026-04\",\n  \"fileName\": \"april-bank-statement.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"fileData\": \"{{sample_base64_pdf}}\"\n}"
+              "raw": "{\n  \"statementMonth\": \"{{statement_month}}\",\n  \"fileName\": \"{{statement_file_name}}\",\n  \"mimeType\": \"application/pdf\",\n  \"fileData\": \"{{sample_base64_pdf}}\"\n}"
             },
             "url": "{{backend_base_url}}/api/applications/{{application_id}}/documents"
           }
@@ -225,7 +266,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"bankName\": \"Chase\",\n  \"bankUrl\": \"https://www.chase.com\"\n}"
+              "raw": "{\n  \"bankName\": \"{{bank_name}}\",\n  \"bankUrl\": \"{{bank_url}}\"\n}"
             },
             "url": "{{backend_base_url}}/api/applications/{{application_id}}/bank-help"
           }
@@ -327,7 +368,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"legalName\": \"Demo Business LLC\",\n  \"dba\": \"Demo DBA\",\n  \"entityType\": \"LLC\",\n  \"industry\": \"Accounting & Bookkeeping\",\n  \"stateOfFormation\": \"CT\",\n  \"ein\": \"123456789\",\n  \"businessStartDate\": \"2018-03-08\",\n  \"phone\": \"8602026706\",\n  \"website\": \"example.com\",\n  \"streetAddress\": \"123 Main St\",\n  \"streetAddress2\": \"\",\n  \"city\": \"Hartford\",\n  \"state\": \"CT\",\n  \"zipCode\": \"06103\",\n  \"sicCode\": \"\",\n  \"naicsCode\": \"\",\n  \"autoPopulated\": {\n    \"streetAddress\": { \"autoFilled\": true, \"source\": \"google_places\", \"editedByMerchant\": false }\n  }\n}"
+              "raw": "{\n  \"legalName\": \"{{business_legal_name}}\",\n  \"dba\": \"{{business_dba}}\",\n  \"entityType\": \"{{business_entity_type}}\",\n  \"industry\": \"{{business_industry}}\",\n  \"stateOfFormation\": \"{{business_state_of_formation}}\",\n  \"ein\": \"{{business_ein}}\",\n  \"businessStartDate\": \"{{business_start_date}}\",\n  \"phone\": \"{{business_phone}}\",\n  \"website\": \"{{business_website}}\",\n  \"streetAddress\": \"{{business_street_address}}\",\n  \"streetAddress2\": \"{{business_street_address2}}\",\n  \"city\": \"{{business_city}}\",\n  \"state\": \"{{business_state}}\",\n  \"zipCode\": \"{{business_zip}}\",\n  \"sicCode\": \"\",\n  \"naicsCode\": \"\",\n  \"autoPopulated\": {}\n}"
             },
             "url": "{{backend_base_url}}/api/forms/{{application_id}}/business"
           }
@@ -342,7 +383,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ownerIndex\": 0,\n  \"firstName\": \"Test\",\n  \"lastName\": \"Owner\",\n  \"email\": \"owner@example.com\",\n  \"phone\": \"8602026706\",\n  \"ownershipPct\": \"100\",\n  \"ssn\": \"123456789\",\n  \"dateOfBirth\": \"1985-01-01\",\n  \"creditScore\": \"\",\n  \"streetAddress\": \"123 Main St\",\n  \"streetAddress2\": \"\",\n  \"city\": \"Hartford\",\n  \"state\": \"CT\",\n  \"zipCode\": \"06103\"\n}"
+              "raw": "{\n  \"ownerIndex\": 0,\n  \"firstName\": \"{{owner_first_name}}\",\n  \"lastName\": \"{{owner_last_name}}\",\n  \"email\": \"{{owner_email}}\",\n  \"phone\": \"{{owner_phone}}\",\n  \"ownershipPct\": \"{{owner_ownership_pct}}\",\n  \"ssn\": \"{{owner_ssn}}\",\n  \"dateOfBirth\": \"{{owner_date_of_birth}}\",\n  \"creditScore\": \"\",\n  \"streetAddress\": \"{{owner_street_address}}\",\n  \"streetAddress2\": \"{{owner_street_address2}}\",\n  \"city\": \"{{owner_city}}\",\n  \"state\": \"{{owner_state}}\",\n  \"zipCode\": \"{{owner_zip}}\"\n}"
             },
             "url": "{{backend_base_url}}/api/forms/{{application_id}}/owners"
           }
@@ -355,7 +396,7 @@
               { "key": "Content-Type", "value": "application/json" },
               { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
             ],
-            "body": { "mode": "raw", "raw": "{ \"annualRevenue\": \"500k-1m\" }" },
+            "body": { "mode": "raw", "raw": "{ \"annualRevenue\": \"{{annual_revenue}}\" }" },
             "url": "{{backend_base_url}}/api/forms/{{application_id}}/financial"
           }
         },
@@ -367,7 +408,7 @@
               { "key": "Content-Type", "value": "application/json" },
               { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
             ],
-            "body": { "mode": "raw", "raw": "{ \"amountRequested\": \"100k-250k\", \"urgency\": \"immediate\" }" },
+            "body": { "mode": "raw", "raw": "{ \"amountRequested\": \"{{amount_requested}}\", \"urgency\": \"{{funding_urgency}}\" }" },
             "url": "{{backend_base_url}}/api/forms/{{application_id}}/loan"
           }
         }
@@ -386,7 +427,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"signatureData\": \"{{sample_signature_png}}\",\n  \"signerName\": \"Test Owner\",\n  \"signerEmail\": \"owner@example.com\",\n  \"consentAcknowledged\": true,\n  \"marketingConsent\": true,\n  \"applicationAuthorizationAcknowledged\": true,\n  \"esignAndCommunicationConsent\": true\n}"
+              "raw": "{\n  \"signatureData\": \"{{sample_signature_png}}\",\n  \"signerName\": \"{{owner_first_name}} {{owner_last_name}}\",\n  \"signerEmail\": \"{{owner_email}}\",\n  \"consentAcknowledged\": true,\n  \"marketingConsent\": true,\n  \"applicationAuthorizationAcknowledged\": true,\n  \"esignAndCommunicationConsent\": true\n}"
             },
             "url": "{{backend_base_url}}/api/signatures/{{application_id}}/sign"
           }
@@ -410,12 +451,12 @@
             "method": "GET",
             "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
             "url": {
-              "raw": "{{backend_base_url}}/api/business/lookup?businessName=Demo%20Business&state=CT",
+              "raw": "{{backend_base_url}}/api/business/lookup?businessName={{business_legal_name}}&state={{business_state_of_formation}}",
               "host": ["{{backend_base_url}}"],
               "path": ["api", "business", "lookup"],
               "query": [
-                { "key": "businessName", "value": "Demo Business" },
-                { "key": "state", "value": "CT" }
+                { "key": "businessName", "value": "{{business_legal_name}}" },
+                { "key": "state", "value": "{{business_state_of_formation}}" }
               ]
             }
           }
@@ -426,11 +467,11 @@
             "method": "GET",
             "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
             "url": {
-              "raw": "{{backend_base_url}}/api/business/autocomplete?input=123%20Main",
+              "raw": "{{backend_base_url}}/api/business/autocomplete?input={{business_street_address}}",
               "host": ["{{backend_base_url}}"],
               "path": ["api", "business", "autocomplete"],
               "query": [
-                { "key": "input", "value": "123 Main" },
+                { "key": "input", "value": "{{business_street_address}}" },
                 { "key": "lat", "value": "41.76", "disabled": true },
                 { "key": "lng", "value": "-72.68", "disabled": true }
               ]

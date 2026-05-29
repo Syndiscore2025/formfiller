@@ -6,6 +6,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 import { writeAuditLog } from '../services/auditLog.service';
+import { assertReadyForSignature } from '../services/applicationValidation.service';
 
 const router = Router();
 const guestAccess = [optionalAuth, requireTenant];
@@ -49,10 +50,7 @@ router.post(
     } = req.body as z.infer<typeof signatureSchema>;
     const marketingConsent = true; // validated as z.literal(true) above
 
-    const app = await prisma.application.findFirst({
-      where: { id: appId, tenantId: req.tenantId! },
-    });
-    if (!app) throw createError('Application not found', 404);
+    await assertReadyForSignature(appId, req.tenantId!);
 
     const now = new Date();
     const ipAddress = req.ip ?? '0.0.0.0';

@@ -12,6 +12,7 @@ import { generateApplicationPdf, TenantBranding, PdfVisibility } from '../servic
 import { generateBankStatementHelp } from '../services/bankHelp.service';
 import { downloadTenantDocument, uploadTenantDocument } from '../services/documentStorage.service';
 import { decrypt } from '../utils/encryption';
+import { assertReadyForFinalize, assertReadyForSubmit } from '../services/applicationValidation.service';
 
 const router = Router();
 
@@ -289,9 +290,8 @@ router.post(
       throw createError('Application must be signed before it can be finalized.', 400);
     }
 
-    const docCount = await prisma.applicationDocument.count({
-      where: { applicationId: appId, documentType: 'bank_statement' },
-    });
+    const validation = await assertReadyForFinalize(appId, req.tenantId!);
+    const docCount = validation.bankStatementCount;
 
     const now = new Date();
     if (!app.finalizedAt) {
@@ -377,15 +377,10 @@ router.post(
   ...guestAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const submitAppId = String(req.params.id);
-    const app = await prisma.application.findFirst({
-      where: { id: submitAppId, tenantId: req.tenantId! },
-      select: { id: true, tenantId: true, signature: { select: { id: true } } },
-    });
-    if (!app) throw createError('Application not found', 404);
-    if (!app.signature) throw createError('Signature required before submission', 400);
+    const app = await assertReadyForSubmit(submitAppId, req.tenantId!);
 
-    await prisma.application.update({ where: { id: app.id }, data: { status: 'submitted', completionPct: 100 } });
-    await writeAuditLog({ applicationId: app.id, action: 'APPLICATION_SUBMITTED', actor: req.userId, ipAddress: req.ip });
+    await prisma.application.update({ where: { id: app.applicationId }, data: { status: 'submitted', completionPct: 100 } });
+    await writeAuditLog({ applicationId: app.applicationId, action: 'APPLICATION_SUBMITTED', actor: req.userId, ipAddress: req.ip });
 
     // Do not push raw signed application data from this legacy submit step.
     // Lender/API delivery happens only after the merchant clicks the final

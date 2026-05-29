@@ -79,10 +79,10 @@ Tenant settings include branding, theme, PDF privacy, Switchbox delivery credent
 6. Merchant selects revenue and requested funding information. Chat guides toward each field.
 7. Merchant enters owner/guarantor information.
 8. Merchant reviews authorizations and signs electronically.
-9. Backend saves signature and marks app `submitted` via `/submit`.
+9. Backend verifies completeness before saving the signature, then marks the app `submitted` via `/submit`. `/submit` also rejects incomplete applications even if a frontend tries to skip required sections.
 10. Merchant uploads bank statement PDFs.
 11. Merchant clicks final **Submit Application**.
-12. Backend calls `/finalize`, sets `finalizedAt`, queues Switchbox delivery, generates final signed PDF, and sends package to the configured API.
+12. Backend calls `/finalize`, verifies the completed signed application plus at least one bank statement PDF, sets `finalizedAt`, queues Switchbox delivery, generates final signed PDF, and sends package to the configured API.
 
 ## 6. Switchbox/lender delivery flow
 
@@ -92,7 +92,15 @@ The only final signed-application API handoff is:
 POST /api/applications/:id/finalize
 ```
 
-The older `/submit` endpoint is intentionally retained only to mark the signed application submitted and move the merchant to bank statement upload. It does **not** push raw application data to Switchbox.
+The older `/submit` endpoint is intentionally retained only to mark the signed application submitted and move the merchant to bank statement upload. It does **not** push raw application data to Switchbox. It now performs backend completeness validation before changing the application to `submitted`.
+
+Backend validation gates before delivery:
+
+- `/api/signatures/:appId/sign` requires complete required contact, business, financial, loan, owner, TCPA, and application flag fields before a signature is saved.
+- `/submit` requires a signature and complete required contact, business, financial, loan, owner, TCPA, and application flag fields.
+- `/finalize` requires `status = submitted`, a signature, the same required application fields, and at least one uploaded bank statement PDF.
+- Custom or external frontends cannot bypass these checks by calling endpoints out of order.
+- Switchbox payload generation still happens only inside the backend; clients cannot submit arbitrary Switchbox payload JSON.
 
 Delivery implementation:
 
@@ -198,8 +206,8 @@ All paths in the tables below are relative to the backend API base. The backend'
 | GET | `/api/applications/:id/documents` | tenant header/JWT | List uploaded documents |
 | POST | `/api/applications/:id/documents` | tenant header/JWT | Upload bank statement PDF |
 | POST | `/api/applications/:id/bank-help` | tenant header/JWT | Generate bank statement download help |
-| POST | `/api/applications/:id/submit` | tenant header/JWT | Mark signed app submitted; no lender push |
-| POST | `/api/applications/:id/finalize` | tenant header/JWT | Final submit; enqueue Switchbox delivery |
+| POST | `/api/applications/:id/submit` | tenant header/JWT | Mark signed, complete app submitted; no lender push |
+| POST | `/api/applications/:id/finalize` | tenant header/JWT | Final submit after bank statement upload; enqueue Switchbox delivery |
 | GET | `/api/applications/:id/pdf` | tenant header/JWT | Download signed application PDF |
 
 ### Form sections
@@ -215,7 +223,7 @@ All paths in the tables below are relative to the backend API base. The backend'
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| POST | `/api/signatures/:appId/sign` | tenant header/JWT | Capture signature and consent acknowledgements |
+| POST | `/api/signatures/:appId/sign` | tenant header/JWT | Capture signature and consent acknowledgements after required-field completeness check |
 | GET | `/api/signatures/:appId/signature` | tenant header/JWT | Fetch signature metadata |
 
 ### AI chat agent
@@ -248,6 +256,7 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 - Merchant flow uses tenant slug + application IDs for guest continuation.
 - Tenant scoping is enforced in queries using `tenantId`.
 - Settings secrets are write-only/masked in admin responses.
+- The backend is the FormFiller flow authority: submit/finalize validation is enforced server-side and does not rely on frontend-only checks.
 
 ### Secret handling
 
@@ -327,10 +336,13 @@ Real credential values must be transferred outside the repo. The table below doc
 | `ENCRYPTION_KEY` | yes | Switchbox | SSN/storage-secret encryption | DO encrypted env |
 | `ALLOWED_ORIGINS` | yes | Switchbox | CORS | DO env |
 | OpenCorporates API key | optional | Switchbox | Business lookup | DO encrypted env |
-| Google Places API key | optional | Switchbox | Address autocomplete | DO encrypted env |
+| Google Places API key | **yes for address autocomplete** | Switchbox | Address autocomplete | DO encrypted env |
 | OpenAI API key | **yes for AI chat** | Switchbox | AI chat agent (gpt-4o by default) | DO encrypted env |
+| OpenAI model override | optional | Switchbox | AI chat model selection | `OPENAI_MODEL` env or tenant AI settings |
 | Switchbox API endpoint | yes for delivery | Switchbox | Tenant settings or env fallback | `/settings` or DO env |
 | Switchbox API key | yes for delivery | Switchbox | Tenant settings or env fallback | `/settings` write-only or DO env |
+| `CRM_WEBHOOK_URL` / `CRM_API_KEY` | optional fallback | Switchbox | Global delivery fallback if tenant settings are not configured | DO encrypted env |
+| `FRONTEND_URL` | recommended | Switchbox | Links/email/frontend references | DO backend env |
 | Spaces/S3 access key ID | recommended | Switchbox | Document storage | `/settings` or password manager |
 | Spaces/S3 secret access key | recommended | Switchbox | Document storage | `/settings` encrypted/write-only |
 | Spaces/S3 bucket name | recommended | Switchbox | Document storage | `/settings` |
@@ -342,7 +354,16 @@ Files:
 - `docs/formfiller.postman_collection.json`
 - `docs/formfiller.postman_environment.json`
 
-The environment file ships with the live DigitalOcean URLs preset for `backend_base_url`/`frontend_base_url`, plus `backend_base_url_local`/`frontend_base_url_local` for local development. All secrets remain placeholders. Before use, Switchbox should import it and set local/current values for tenant slug, auth token, admin credentials, Switchbox API credentials, and storage credentials.
+The environment file ships with the live DigitalOcean URLs preset for `backend_base_url`/`frontend_base_url`, plus `backend_base_url_local`/`frontend_base_url_local` for local development. Before use, Switchbox should import it and set local/current values for:
+
+- Tenant/admin values: `tenant_slug`, `tenant_name`, `admin_email`, `admin_password`, `auth_token`
+- Switchbox delivery values: `switchbox_api_url`, `switchbox_api_key`, or the DO fallback env names `CRM_WEBHOOK_URL`, `CRM_API_KEY`
+- Document storage values: `document_storage_*`
+- SMTP values: `smtp_*`
+- Merchant-flow run values: `merchant_contact_*`, `business_*`, `owner_*`, `annual_revenue`, `amount_requested`, `statement_month`, `sample_base64_pdf`, `sample_signature_png`
+- Platform secrets recorded for ownership tracking: `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `GOOGLE_PLACES_API_KEY`, `OPENAI_API_KEY`, and optional `OPENCORPORATES_API_KEY`
+
+The checked-in collection/environment use placeholders so the files remain safe to store and transfer. Switchbox should populate real current values in Postman or its password manager before running production endpoint tests. Do not add private internal admin/export credentials to this Postman handoff.
 
 Do not export real current values back into the repository.
 
@@ -350,21 +371,26 @@ Do not export real current values back into the repository.
 
 - The final account/package creation in Switchbox happens after bank statement upload finalization, not immediately at signature.
 - If Switchbox needs earlier account creation plus later document upload, implement a two-stage Switchbox integration: privacy-aware account create at signature, then document attach after upload/finalize.
+- Backend submit/finalize validation is now centralized in `applicationValidation.service.ts`; custom or external frontends must satisfy the same required-field rules as the hosted `/apply` UI.
+- `/finalize` now rejects applications with zero bank statement PDFs instead of queueing delivery with an empty bank statement list.
 - Bank statement PDFs always remain part of the Switchbox package regardless of PDF Privacy toggles.
 - Existing previously generated PDFs are not retroactively changed by privacy/layout updates; regenerate/download after changes.
 - Current signed PDF output is designed to fit in two pages under normal full-data conditions.
+- Production backend env now includes `OPENAI_API_KEY` and `GOOGLE_PLACES_API_KEY` as encrypted DigitalOcean secrets, so live AI chat and Google Places address autocomplete are enabled.
+- Live smoke checks on 2026-05-29 confirmed backend health, Google Places autocomplete, and OpenAI chat responses.
 
-## 14. Immediate next steps after DigitalOcean deployment
+## 14. Immediate next steps / remaining validation
 
 1. Enter real Switchbox endpoint/API key in `/settings`.
 2. Enter real storage bucket credentials in `/settings`.
-3. Enter OpenAI API key as `OPENAI_API_KEY` in DO encrypted env vars (required for AI chat).
-4. Optionally configure AI persona name and system prompt override in `/settings`.
-5. Run full application smoke test including the AI chat flow.
-6. Verify Switchbox receives JSON payload, signed PDF, and bank statements.
-7. Verify privacy toggles redaction with all toggles off.
-8. Confirm `CrmDelivery.status = sent` and external account ID mapping.
-9. Production URLs are recorded in Section 8 (Live deployment URLs); update resource names and credential owner references as ownership transfers.
+3. Optionally configure AI persona name and system prompt override in `/settings`.
+4. Run full application smoke test including the AI chat flow.
+5. Verify `/submit` rejects unsigned/incomplete applications and accepts only complete signed applications.
+6. Verify `/finalize` rejects zero-bank-statement applications and accepts after at least one PDF upload.
+7. Verify Switchbox receives JSON payload, signed PDF, and bank statements.
+8. Verify privacy toggles redaction with all toggles off.
+9. Confirm `CrmDelivery.status = sent` and external account ID mapping.
+10. Production URLs are recorded in Section 8 (Live deployment URLs); update resource names and credential owner references as ownership transfers.
 
 ---
 
@@ -403,8 +429,14 @@ Backend
 |---|---|
 | Step 1 (pre-application) | Intro message on load. Chat answers questions, can capture verbal TCPA consent and auto-advance the form. Uses `POST /api/chat/message` (no appId yet). |
 | Step 1 → Step 2 transition | `POST /api/chat/:appId/post-consent-transition` fires after TCPA consent. Tells merchant to review business details and answer Home Based Business. |
-| Step 2 (business details) | If Google/lookup data was found, chat greets with a data-review message. AI then guides each field in order. |
+| Step 2 (business details) | If Google/lookup data was found, chat greets with a data-review message. During the Step 2 review card, the AI is constrained to visible actions: answer Home Based Business if needed, then click Confirm & Continue. It must not jump to hidden missing fields like Industry until the form switches into edit/missing-field mode. |
 | Steps 3–5 | AI reads `nextField` from server and asks targeted questions per field. Auto-applies simple answers directly into form state. |
+
+### Refresh/session behavior
+
+The merchant-facing chat UI intentionally starts a fresh visible session after a browser refresh. The drawer no longer rehydrates old visible messages from localStorage or saved application chat history. Each page load sends a transient `chatSessionId` in `clientState`; backend OpenAI context is limited to messages from that current visible chat session while `ChatMessage` rows remain available for audit/debugging.
+
+The backend still exposes `GET /api/chat/:appId/history` for authorized diagnostics and future admin tooling, but the merchant drawer does not use it to replay prior conversations after refresh.
 
 ### Auto-apply bridge
 
@@ -488,7 +520,7 @@ AI chat settings live in `TenantSettings` and are configurable at `/settings` (a
 | Eligibility rules | `aiEligibilityRules` | `null` | Reserved JSONB field for future rule-based qualification |
 | OpenAI model | `aiModel` | `"gpt-4o"` | Any OpenAI chat model string. Falls back to `gpt-4o` if null. |
 
-If `OPENAI_API_KEY` is not set in the environment, the backend falls back to a canned static reply instead of calling OpenAI. The flow still works end-to-end; the assistant just gives generic guidance.
+If `OPENAI_API_KEY` is not set in the environment, the backend falls back to a canned static reply instead of calling OpenAI. The flow still works end-to-end; the assistant just gives generic guidance. In the current DigitalOcean production backend, `OPENAI_API_KEY` is configured as an encrypted secret.
 
 ### Database schema additions (migration `20260525130000_add_ai_chat_agent`)
 
@@ -527,6 +559,6 @@ CREATE TABLE "ChatMessage" (
 | `chatAgent.service.ts` | `createChatReply`, `createPreApplicationChatReply`, `createPostConsentTransitionReply`, OpenAI call, next-field determination, sensitive input redaction, opt-out detection |
 | `chatGuardrails.service.ts` | `evaluateChatGuardrails`, `enforceFundingResponseSafety`, `extractQualificationSignals`, category classification, field help guidance, funding safety patterns |
 | `chat.routes.ts` | Express router for all four chat endpoints with rate limiting and tenant guard |
-| `ChatDrawer.tsx` | Message rendering, auto-apply bridge, `shouldAutoApplyFieldAnswer`, hostile message detection, industry validation, pre-app message persistence in localStorage |
+| `ChatDrawer.tsx` | Message rendering, auto-apply bridge, `shouldAutoApplyFieldAnswer`, hostile message detection, industry validation, fresh visible chat sessions on refresh |
 | `ChatWidget.tsx` | Portal mount, open/close state (starts open on load), `autoOpen` prop for step transitions |
-| `MultiStepForm.tsx` | `handleChatFieldAnswer`, `handleChatNavigateToField`, `handleAutoPopulate`, phone normalization, hostile input guard |
+| `MultiStepForm.tsx` | `handleChatFieldAnswer`, `handleChatNavigateToField`, `handleAutoPopulate`, Step 2 page-context handoff, phone normalization, hostile input guard |
