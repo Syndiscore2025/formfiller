@@ -7,9 +7,12 @@ Step-by-step instructions for deploying the Form Filler app (frontend + backend 
 ## Step 1 — Create the Managed PostgreSQL database
 
 1. In the DigitalOcean dashboard go to **Databases → Create Database**.
-2. Choose **PostgreSQL 16** (or newer).
-3. Pick the same region you'll use for the app services.
-4. Once it's running, copy the **private connection string** — you'll need it in Step 3.
+2. Choose **PostgreSQL 18**.
+3. Pick **Regular** CPU / **$13/mo** plan (1 vCPU, 1 GB RAM, 10 GiB). You can scale up later without losing data.
+4. Pick the same region you'll use for the app services.
+5. Once it's running, copy the **private connection string** — you'll need it in Step 3.
+
+> **Your data is completely safe across redeployments.** The Managed PostgreSQL database is a standalone service that runs independently of your App Platform services. Redeploying or restarting the backend app has zero effect on the database or any data inside it.
 
 ---
 
@@ -43,6 +46,7 @@ Add these as **encrypted** environment variables on the backend service:
 | `ENCRYPTION_KEY` | Random secret — **never change this after launch** |
 | `ALLOWED_ORIGINS` | Your frontend URL (e.g. `https://apply.yourdomain.com`) |
 | `OPENAI_API_KEY` | Your OpenAI key — required for the AI chat agent |
+| `ADMIN_REGISTRATION_KEY` | Any long random string — required to create new user accounts via `/register` |
 | `OPENCORPORATES_API_KEY` | Optional — enables business lookup |
 | `GOOGLE_PLACES_API_KEY` | Optional — enables address autocomplete |
 
@@ -54,12 +58,22 @@ Add these as **encrypted** environment variables on the backend service:
 
 1. Click **Deploy** on the backend service.
 2. Once the deploy finishes, open the **Console** tab for the backend service.
-3. Run the database migrations and seed:
-   ```
-   npm --workspace=packages/backend exec prisma migrate deploy
-   npm --workspace=packages/backend exec prisma db seed
-   ```
-4. Verify the backend is running by hitting its health endpoint:
+
+### First deploy only — run both commands once:
+```
+npm --workspace=packages/backend exec prisma migrate deploy
+npm --workspace=packages/backend exec prisma db seed
+```
+- `migrate deploy` creates all the tables. Safe to run again on later deploys — it only applies new changes and never deletes data.
+- `db seed` creates the default tenant row. It checks before inserting, so it's safe to run again, but you only need to do it this once.
+
+### Every subsequent redeploy — run only migrations:
+```
+npm --workspace=packages/backend exec prisma migrate deploy
+```
+That's it. Your data (applications, leads, signatures, tenant settings) is untouched.
+
+3. Verify the backend is running by hitting its health endpoint:
    ```
    GET https://<your-backend-url>/health
    ```
