@@ -1,12 +1,15 @@
 {
   "info": {
     "name": "Form Filler API - Switchbox Handoff",
-    "description": "Complete endpoint collection matching all real API routes. Uses placeholders only; set real secrets in local/current Postman values or Switchbox password manager, never in source control.",
+    "description": "Complete endpoint collection matching all real API routes. Uses placeholders only; set real secrets in local/current Postman values or Switchbox password manager, never in source control. Live DigitalOcean URLs (backend: https://formfiller-backend-wtxtc.ondigitalocean.app, frontend: https://formfiller-frontend-uasuj.ondigitalocean.app) are provided as variables below — set backend_base_url to backend_base_url_do (or select the environment file) to run against production.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": { "type": "noauth" },
   "variable": [
     { "key": "backend_base_url", "value": "http://localhost:4000" },
+    { "key": "backend_base_url_do", "value": "https://formfiller-backend-wtxtc.ondigitalocean.app" },
+    { "key": "frontend_base_url", "value": "http://localhost:3002" },
+    { "key": "frontend_base_url_do", "value": "https://formfiller-frontend-uasuj.ondigitalocean.app" },
     { "key": "tenant_slug", "value": "default" },
     { "key": "admin_email", "value": "admin@example.com" },
     { "key": "admin_password", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
@@ -257,6 +260,21 @@
       "name": "AI Chat Agent",
       "item": [
         {
+          "name": "POST /api/chat/message (pre-application)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What do I need to get started?\",\n  \"clientState\": {\n    \"currentStep\": 1\n  }\n}"
+            },
+            "url": "{{backend_base_url}}/api/chat/message"
+          }
+        },
+        {
           "name": "GET /api/chat/:appId/history",
           "request": {
             "method": "GET",
@@ -277,6 +295,21 @@
               "raw": "{\n  \"message\": \"What should I do next?\",\n  \"clientState\": {\n    \"currentStep\": 2\n  }\n}"
             },
             "url": "{{backend_base_url}}/api/chat/{{application_id}}/message"
+          }
+        },
+        {
+          "name": "POST /api/chat/:appId/post-consent-transition",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientState\": {\n    \"currentStep\": 2\n  }\n}"
+            },
+            "url": "{{backend_base_url}}/api/chat/{{application_id}}/post-consent-transition"
           }
         }
       ]

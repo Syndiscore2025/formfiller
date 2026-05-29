@@ -154,6 +154,17 @@ Bank statement files are **not** controlled by these toggles and are still sent 
 
 Use `x-tenant-slug: default` or the correct tenant slug on public tenant-aware endpoints. Admin-only endpoints require `Authorization: Bearer {JWT}`.
 
+### Live deployment URLs (DigitalOcean App Platform)
+
+| Service | URL |
+|---|---|
+| Backend API base | `https://formfiller-backend-wtxtc.ondigitalocean.app` |
+| Merchant application form | `https://formfiller-frontend-uasuj.ondigitalocean.app/apply` |
+| Admin login | `https://formfiller-frontend-uasuj.ondigitalocean.app/login` |
+| Backend health check | `https://formfiller-backend-wtxtc.ondigitalocean.app/health` |
+
+All paths in the tables below are relative to the backend API base. The backend's `ALLOWED_ORIGINS` must include the frontend URL above for cross-origin requests to succeed.
+
 ### Health
 
 | Method | Path | Auth | Purpose |
@@ -331,7 +342,7 @@ Files:
 - `docs/formfiller.postman_collection.json`
 - `docs/formfiller.postman_environment.json`
 
-The environment file contains placeholders only. Before use, Switchbox should import it and set local/current values for backend URL, tenant slug, auth token, admin credentials, Switchbox API credentials, and storage credentials.
+The environment file ships with the live DigitalOcean URLs preset for `backend_base_url`/`frontend_base_url`, plus `backend_base_url_local`/`frontend_base_url_local` for local development. All secrets remain placeholders. Before use, Switchbox should import it and set local/current values for tenant slug, auth token, admin credentials, Switchbox API credentials, and storage credentials.
 
 Do not export real current values back into the repository.
 
@@ -353,7 +364,7 @@ Do not export real current values back into the repository.
 6. Verify Switchbox receives JSON payload, signed PDF, and bank statements.
 7. Verify privacy toggles redaction with all toggles off.
 8. Confirm `CrmDelivery.status = sent` and external account ID mapping.
-9. Update this report with actual production URLs, resource names, and credential owner references after deployment.
+9. Production URLs are recorded in Section 8 (Live deployment URLs); update resource names and credential owner references as ownership transfers.
 
 ---
 
