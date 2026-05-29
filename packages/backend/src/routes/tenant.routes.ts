@@ -1,10 +1,16 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { optionalAuth, requireAuth, requireTenant, requireSuperAdmin, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { validate } from '../middleware/validate';
 import { encrypt } from '../utils/encryption';
+import {
+  CUSTOM_FRONTEND_PUBLIC_KEY_PATTERN,
+  deriveCustomFrontendPublicKeyConfig,
+  normalizeStringList,
+} from '../services/customFrontendSettings.service';
 
 const router = Router();
 
@@ -110,6 +116,10 @@ const ADMIN_SELECT = {
   aiSystemPromptOverride: true,
   aiEligibilityRules: true,
   aiModel: true,
+  customFrontendEnabled: true,
+  customFrontendKeyPreview: true,
+  customFrontendAllowedOrigins: true,
+  customFrontendAllowedRedirects: true,
 } as const;
 
 const ADMIN_DEFAULTS = {
@@ -154,7 +164,15 @@ const ADMIN_DEFAULTS = {
   aiSystemPromptOverride: null,
   aiEligibilityRules: null,
   aiModel: 'gpt-4o',
+  customFrontendEnabled: false,
+  customFrontendKeyPreview: null,
+  customFrontendAllowedOrigins: null,
+  customFrontendAllowedRedirects: null,
 };
+
+function safeStringList(value: unknown): string[] | null {
+  return normalizeStringList(value);
+}
 
 router.get(
   '/settings/admin',
@@ -162,17 +180,32 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const settings = await prisma.tenantSettings.findUnique({
       where: { tenantId: req.tenantId! },
-      select: { ...ADMIN_SELECT, switchboxApiKey: true, documentStorageSecretAccessKey: true, smtpPass: true },
+      select: {
+        ...ADMIN_SELECT,
+        switchboxApiKey: true,
+        documentStorageSecretAccessKey: true,
+        smtpPass: true,
+        customFrontendPublicKeyHash: true,
+      },
     });
-    const base = settings ?? { ...ADMIN_DEFAULTS, switchboxApiKey: null, documentStorageSecretAccessKey: null, smtpPass: null };
-    const { switchboxApiKey, documentStorageSecretAccessKey, smtpPass, ...rest } = base;
+    const base = settings ?? {
+      ...ADMIN_DEFAULTS,
+      switchboxApiKey: null,
+      documentStorageSecretAccessKey: null,
+      smtpPass: null,
+      customFrontendPublicKeyHash: null,
+    };
+    const { switchboxApiKey, documentStorageSecretAccessKey, smtpPass, customFrontendPublicKeyHash, ...rest } = base;
     res.json({
       success: true,
       data: {
         ...rest,
+        customFrontendAllowedOrigins: safeStringList(rest.customFrontendAllowedOrigins),
+        customFrontendAllowedRedirects: safeStringList(rest.customFrontendAllowedRedirects),
         switchboxApiKeyConfigured: Boolean(switchboxApiKey),
         documentStorageSecretConfigured: Boolean(documentStorageSecretAccessKey),
         smtpPassConfigured: Boolean(smtpPass),
+        customFrontendKeyConfigured: Boolean(customFrontendPublicKeyHash),
       },
     });
   })
@@ -204,6 +237,37 @@ const logoUrl = z
     (v) => v === '' || /^https?:\/\//u.test(v) || /^data:image\/(png|jpe?g|webp|svg\+xml);base64,/u.test(v),
     'Logo must be an http(s) URL or a PNG/JPEG/WebP/SVG data URI',
   );
+
+const listInput = (value: unknown) => normalizeStringList(value) ?? value;
+
+const allowedOrigin = z
+  .string()
+  .trim()
+  .max(300)
+  .transform((value) => value.replace(/\/+$/u, ''))
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
+      return (url.protocol === 'https:' || localHttp) && url.origin === value && !url.pathname.replace('/', '');
+    } catch {
+      return false;
+    }
+  }, 'Origin must be scheme + host only, e.g. https://apply.example.com');
+
+const allowedRedirect = z
+  .string()
+  .trim()
+  .max(500)
+  .url()
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname));
+    } catch {
+      return false;
+    }
+  }, 'Redirect URL must be HTTPS, except localhost for development');
 
 const updateSchema = z.object({
   companyName: optionalNullable(z.string().trim().max(120)),
@@ -264,6 +328,20 @@ const updateSchema = z.object({
   aiPersonaName: optionalNullable(z.string().trim().max(80)),
   aiSystemPromptOverride: optionalNullable(z.string().trim().max(5000)),
   aiModel: optionalNullable(z.string().trim().max(120)),
+  // Custom tenant frontend / headless API. The public key is write-only: the
+  // backend hashes it and only returns keyConfigured + keyPreview.
+  customFrontendEnabled: z.boolean().optional(),
+  customFrontendPublicKey: optionalNullable(
+    z
+      .string()
+      .trim()
+      .min(24)
+      .max(240)
+      .regex(CUSTOM_FRONTEND_PUBLIC_KEY_PATTERN, 'Public frontend key must start with pk_test_ or pk_live_'),
+  ),
+  customFrontendClearPublicKey: z.boolean().optional(),
+  customFrontendAllowedOrigins: optionalNullable(z.preprocess(listInput, z.array(allowedOrigin).max(25))),
+  customFrontendAllowedRedirects: optionalNullable(z.preprocess(listInput, z.array(allowedRedirect).max(50))),
 });
 
 // Normalize empty strings to null so the DB stores a real absence of value.
@@ -282,7 +360,31 @@ router.patch(
   validate(updateSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const body = req.body as z.infer<typeof updateSchema>;
-    const data = emptyToNull(body);
+    const data = emptyToNull(body) as Record<string, unknown>;
+
+    const customFrontendPublicKey = typeof data.customFrontendPublicKey === 'string'
+      ? data.customFrontendPublicKey.trim()
+      : '';
+    const clearCustomFrontendPublicKey = data.customFrontendClearPublicKey === true;
+    delete data.customFrontendPublicKey;
+    delete data.customFrontendClearPublicKey;
+
+    if (clearCustomFrontendPublicKey) {
+      data.customFrontendPublicKeyHash = null;
+      data.customFrontendKeyPreview = null;
+    }
+    if (customFrontendPublicKey) {
+      const keyConfig = deriveCustomFrontendPublicKeyConfig(customFrontendPublicKey);
+      data.customFrontendPublicKeyHash = keyConfig.hash;
+      data.customFrontendKeyPreview = keyConfig.preview;
+    }
+    if (data.customFrontendAllowedOrigins === null) {
+      data.customFrontendAllowedOrigins = Prisma.DbNull;
+    }
+    if (data.customFrontendAllowedRedirects === null) {
+      data.customFrontendAllowedRedirects = Prisma.DbNull;
+    }
+
     if (typeof data.documentStorageSecretAccessKey === 'string' && data.documentStorageSecretAccessKey.trim()) {
       data.documentStorageSecretAccessKey = encrypt(data.documentStorageSecretAccessKey.trim());
     } else {
@@ -297,19 +399,28 @@ router.patch(
 
     const updated = await prisma.tenantSettings.upsert({
       where: { tenantId: req.tenantId! },
-      create: { tenantId: req.tenantId!, ...data },
-      update: data,
-      select: { ...ADMIN_SELECT, switchboxApiKey: true, documentStorageSecretAccessKey: true, smtpPass: true },
+      create: { tenantId: req.tenantId!, ...data } as Prisma.TenantSettingsUncheckedCreateInput,
+      update: data as Prisma.TenantSettingsUncheckedUpdateInput,
+      select: {
+        ...ADMIN_SELECT,
+        switchboxApiKey: true,
+        documentStorageSecretAccessKey: true,
+        smtpPass: true,
+        customFrontendPublicKeyHash: true,
+      },
     });
 
-    const { switchboxApiKey, documentStorageSecretAccessKey, smtpPass, ...rest } = updated;
+    const { switchboxApiKey, documentStorageSecretAccessKey, smtpPass, customFrontendPublicKeyHash, ...rest } = updated;
     res.json({
       success: true,
       data: {
         ...rest,
+        customFrontendAllowedOrigins: safeStringList(rest.customFrontendAllowedOrigins),
+        customFrontendAllowedRedirects: safeStringList(rest.customFrontendAllowedRedirects),
         switchboxApiKeyConfigured: Boolean(switchboxApiKey),
         documentStorageSecretConfigured: Boolean(documentStorageSecretAccessKey),
         smtpPassConfigured: Boolean(smtpPass),
+        customFrontendKeyConfigured: Boolean(customFrontendPublicKeyHash),
       },
     });
   })

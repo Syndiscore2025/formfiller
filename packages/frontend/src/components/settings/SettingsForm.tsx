@@ -10,6 +10,7 @@ import { ThemeSection } from './ThemeSection';
 import { IntegrationSection } from './IntegrationSection';
 import { DocumentStorageSection } from './DocumentStorageSection';
 import { EmailNotificationsSection } from './EmailNotificationsSection';
+import { CustomFrontendSection } from './CustomFrontendSection';
 
 export interface AdminSettings {
   companyName: string | null;
@@ -65,6 +66,12 @@ export interface AdminSettings {
   emailInsufficientBanksBody: string | null;
   emailInsufficientBanksIncludeLogo: boolean;
   emailInsufficientBanksIncludeSig: boolean;
+  // Custom tenant frontend / headless API
+  customFrontendEnabled: boolean;
+  customFrontendKeyPreview: string | null;
+  customFrontendKeyConfigured: boolean;
+  customFrontendAllowedOrigins: string[] | null;
+  customFrontendAllowedRedirects: string[] | null;
 }
 
 interface Props {
@@ -85,6 +92,8 @@ export function SettingsForm({ initial, onSaved }: Props) {
   const [apiKey, setApiKey] = useState(''); // write-only; only sent if non-empty
   const [storageSecret, setStorageSecret] = useState(''); // write-only; only sent if non-empty
   const [smtpPass, setSmtpPass] = useState(''); // write-only; only sent if non-empty
+  const [frontendKey, setFrontendKey] = useState(''); // write-only; only sent if non-empty
+  const [clearFrontendKey, setClearFrontendKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +134,7 @@ export function SettingsForm({ initial, onSaved }: Props) {
         switchboxApiKeyConfigured: _ignored,
         documentStorageSecretConfigured: _ignoredStorage,
         smtpPassConfigured: _ignoredSmtp,
+        customFrontendKeyConfigured: _ignoredFrontendKey,
         ...rest
       } = form;
       const payload: Record<string, unknown> = {
@@ -137,6 +147,8 @@ export function SettingsForm({ initial, onSaved }: Props) {
       if (apiKey.trim()) payload.switchboxApiKey = apiKey.trim();
       if (storageSecret.trim()) payload.documentStorageSecretAccessKey = storageSecret.trim();
       if (smtpPass.trim()) payload.smtpPass = smtpPass.trim();
+      if (frontendKey.trim()) payload.customFrontendPublicKey = frontendKey.trim();
+      if (clearFrontendKey) payload.customFrontendClearPublicKey = true;
 
       const res = await api.patch<{ success: boolean; data: AdminSettings }>(
         '/api/tenant/settings/admin',
@@ -147,6 +159,8 @@ export function SettingsForm({ initial, onSaved }: Props) {
       setApiKey('');
       setStorageSecret('');
       setSmtpPass('');
+      setFrontendKey('');
+      setClearFrontendKey(false);
       setSavedMessage('Settings saved.');
       // Apply the saved theme as the active session preference
       if (res.data.theme === 'dark' || res.data.theme === 'light') {
@@ -209,6 +223,15 @@ export function SettingsForm({ initial, onSaved }: Props) {
         update={update}
         apiKey={apiKey}
         setApiKey={setApiKey}
+      />
+
+      <CustomFrontendSection
+        form={form}
+        update={update}
+        frontendKey={frontendKey}
+        setFrontendKey={setFrontendKey}
+        clearFrontendKey={clearFrontendKey}
+        setClearFrontendKey={setClearFrontendKey}
       />
 
       <DocumentStorageSection

@@ -108,6 +108,13 @@ model TenantSettings {
   aiEligibilityRules     Json?
   aiModel                String?
 
+  // ── Custom tenant frontend / headless API ───────────────────────────────────
+  customFrontendEnabled          Boolean @default(false)
+  customFrontendPublicKeyHash    String?
+  customFrontendKeyPreview       String?
+  customFrontendAllowedOrigins   Json?
+  customFrontendAllowedRedirects Json?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

@@ -67,7 +67,7 @@ Tenants are resolved by:
 
 The default local/demo tenant slug is `default`.
 
-Tenant settings include branding, theme, PDF privacy, Switchbox delivery credentials, and document storage credentials.
+Tenant settings include branding, theme, PDF privacy, Switchbox delivery credentials, document storage credentials, and optional custom frontend API access config.
 
 ## 5. Merchant application flow
 
@@ -192,7 +192,7 @@ All paths in the tables below are relative to the backend API base. The backend'
 |---|---|---|---|
 | GET | `/api/tenant/settings` | tenant header | Public-safe branding/theme/privacy settings |
 | GET | `/api/tenant/settings/admin` | bearer JWT | Full admin settings; secrets masked |
-| PATCH | `/api/tenant/settings/admin` | bearer JWT | Update branding/theme/privacy/Switchbox/storage settings |
+| PATCH | `/api/tenant/settings/admin` | bearer JWT | Update branding/theme/privacy/Switchbox/storage/custom-frontend settings |
 
 ### Applications
 
@@ -257,6 +257,7 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 - Tenant scoping is enforced in queries using `tenantId`.
 - Settings secrets are write-only/masked in admin responses.
 - The backend is the FormFiller flow authority: submit/finalize validation is enforced server-side and does not rely on frontend-only checks.
+- Custom tenant frontend access is settings-gated. Public frontend keys are never stored raw; the admin settings API accepts a write-only `customFrontendPublicKey`, stores only `customFrontendPublicKeyHash`, and returns `customFrontendKeyConfigured` plus `customFrontendKeyPreview`.
 
 ### Secret handling
 
@@ -264,6 +265,7 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 - Do not commit real `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, API keys, storage secrets, or Switchbox credentials.
 - Storage secret access keys are encrypted before database storage.
 - Switchbox API key is treated as write-only in settings responses.
+- Custom frontend public keys must be generated/kept by Switchbox or the tenant, entered locally in Postman/admin UI, and never committed. The repository stores only placeholders.
 
 ### Data protection
 
@@ -346,6 +348,9 @@ Real credential values must be transferred outside the repo. The table below doc
 | Spaces/S3 access key ID | recommended | Switchbox | Document storage | `/settings` or password manager |
 | Spaces/S3 secret access key | recommended | Switchbox | Document storage | `/settings` encrypted/write-only |
 | Spaces/S3 bucket name | recommended | Switchbox | Document storage | `/settings` |
+| Custom frontend public key | optional for custom tenant UI | Switchbox/tenant | Browser-safe custom frontend API identification | `/settings` write-only; DB stores hash/preview only |
+| Custom frontend allowed origin(s) | optional for custom tenant UI | Switchbox/tenant | CORS/custom-origin allowlist for Phase C middleware | `/settings` |
+| Custom frontend allowed redirect URL(s) | optional for custom tenant UI | Switchbox/tenant | Completion/return URL allowlist | `/settings` |
 
 ## 12. Postman handoff
 
@@ -360,6 +365,7 @@ The environment file ships with the live DigitalOcean URLs preset for `backend_b
 - Switchbox delivery values: `switchbox_api_url`, `switchbox_api_key`, or the DO fallback env names `CRM_WEBHOOK_URL`, `CRM_API_KEY`
 - Document storage values: `document_storage_*`
 - SMTP values: `smtp_*`
+- Custom frontend values: `custom_frontend_public_key`, `custom_frontend_allowed_origin`, `custom_frontend_allowed_redirect_url`
 - Merchant-flow run values: `merchant_contact_*`, `business_*`, `owner_*`, `annual_revenue`, `amount_requested`, `statement_month`, `sample_base64_pdf`, `sample_signature_png`
 - Platform secrets recorded for ownership tracking: `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `GOOGLE_PLACES_API_KEY`, `OPENAI_API_KEY`, and optional `OPENCORPORATES_API_KEY`
 
@@ -372,6 +378,7 @@ Do not export real current values back into the repository.
 - The final account/package creation in Switchbox happens after bank statement upload finalization, not immediately at signature.
 - If Switchbox needs earlier account creation plus later document upload, implement a two-stage Switchbox integration: privacy-aware account create at signature, then document attach after upload/finalize.
 - Backend submit/finalize validation is now centralized in `applicationValidation.service.ts`; custom or external frontends must satisfy the same required-field rules as the hosted `/apply` UI.
+- Phase B custom frontend settings are present in `TenantSettings`: `customFrontendEnabled`, hashed key storage, key preview, allowed origins, and allowed redirects. Phase C still needs request middleware/CORS enforcement before custom frontend traffic is accepted.
 - `/finalize` now rejects applications with zero bank statement PDFs instead of queueing delivery with an empty bank statement list.
 - Bank statement PDFs always remain part of the Switchbox package regardless of PDF Privacy toggles.
 - Existing previously generated PDFs are not retroactively changed by privacy/layout updates; regenerate/download after changes.
