@@ -271,6 +271,11 @@ export function generateApplicationPdf(
 
   /* ── Electronic Signature Consent ── */
   if (data.signature) {
+    // Try to keep the entire signature section together. If less than 260 pts
+    // remain on the current page, start a fresh page so the block lands cleanly
+    // at the top rather than being split across two pages.
+    ensureSpace(doc, 260);
+
     section(doc, 'Authorizations & Electronic Signature Consent');
     textBox(doc, CONSENT_TEXT);
     ensureSpace(doc, 56);
@@ -286,14 +291,15 @@ export function generateApplicationPdf(
       { label: 'Email (Signer)', value: showContactEmail ? data.signature.signerEmail : undefined },
     ]);
 
-	    const signedDate = fmtEasternDate(data.signature.signedAt);
+    const signedDate = fmtEasternDate(data.signature.signedAt);
 
-    /* Signature image */
-	    const sigX = PAGE_MARGIN;
+    /* Signature image — capture sigY AFTER ensureSpace so it always reflects
+       the correct Y on whichever page we land on. */
+    const sigX = PAGE_MARGIN;
     const sigW = 270;
     const sigH = 60;
-	    const sigY = doc.y;
     ensureSpace(doc, sigH + 28);
+    const sigY = doc.y;
     doc.save().roundedRect(sigX, sigY, sigW, sigH, 8).fillAndStroke('#ffffff', FIELD_BORDER).restore();
     doc.fontSize(7).font('Helvetica-Bold').fillColor('#64748b')
       .text('SIGNATURE', sigX + 10, sigY + 8, { width: sigW - 20 });
