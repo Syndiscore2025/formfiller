@@ -1,10 +1,10 @@
 import express from 'express';
 import helmet from 'helmet';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import compression from 'compression';
-import { config } from './config';
 import { globalLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
+import { isCorsOriginAllowed } from './services/customFrontendAuth.service';
 import authRoutes from './routes/auth.routes';
 import applicationRoutes from './routes/applications.routes';
 import formSectionRoutes from './routes/formSections.routes';
@@ -28,18 +28,18 @@ app.use(helmet({
   },
 }));
 
-// CORS — only allow configured origins
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || config.allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+const baseCorsOptions: Omit<CorsOptions, 'origin'> = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'x-tenant-slug'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'x-tenant-slug', 'x-formfiller-public-key'],
+};
+
+// CORS — allow configured app origins plus tenant-approved custom frontend origins.
+app.use(cors((req, callback) => {
+  const origin = req.header('origin');
+  isCorsOriginAllowed(origin)
+    .then((allowed) => callback(null, { ...baseCorsOptions, origin: allowed }))
+    .catch(() => callback(null, { ...baseCorsOptions, origin: false }));
 }));
 
 app.use(compression());

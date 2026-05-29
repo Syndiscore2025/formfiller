@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
+import { requireCustomFrontendAccess } from '../middleware/customFrontendAuth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
@@ -26,8 +27,8 @@ function isApplicationDocumentTableMissing(error: unknown): boolean {
     || (message.includes('applicationdocument') && message.includes('does not exist'));
 }
 
-// Guest-accessible middleware chain (JWT or x-tenant-slug header)
-const guestAccess = [optionalAuth, requireTenant];
+// Guest-accessible middleware chain (JWT, hosted app origin, or tenant-approved custom frontend key+origin)
+const guestAccess = [optionalAuth, requireTenant, requireCustomFrontendAccess];
 
 const stepSchema = z.object({ currentStep: z.number().int().min(1).max(8) });
 const updateAppSchema = z.object({

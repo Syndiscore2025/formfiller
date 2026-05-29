@@ -3,12 +3,13 @@ import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
+import { requireCustomFrontendAccess } from '../middleware/customFrontendAuth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 
 const router = Router();
-const guestAccess = [optionalAuth, requireTenant];
+const guestAccess = [optionalAuth, requireTenant, requireCustomFrontendAccess];
 
 const eventSchema = z.object({
   events: z.array(

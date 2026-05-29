@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
+import { requireCustomFrontendAccess } from '../middleware/customFrontendAuth';
 import { validate } from '../middleware/validate';
 import { chatLimiter } from '../middleware/rateLimiter';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -9,7 +10,7 @@ import { createError } from '../middleware/errorHandler';
 import { createChatReply, createPostConsentTransitionReply, createPreApplicationChatReply } from '../services/chatAgent.service';
 
 const router = Router();
-const guestAccess = [optionalAuth, requireTenant];
+const guestAccess = [optionalAuth, requireTenant, requireCustomFrontendAccess];
 
 const messageSchema = z.object({
   message: z.string().trim().min(1, 'Message is required').max(1200, 'Message is too long'),

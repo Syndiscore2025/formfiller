@@ -258,6 +258,7 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 - Settings secrets are write-only/masked in admin responses.
 - The backend is the FormFiller flow authority: submit/finalize validation is enforced server-side and does not rely on frontend-only checks.
 - Custom tenant frontend access is settings-gated. Public frontend keys are never stored raw; the admin settings API accepts a write-only `customFrontendPublicKey`, stores only `customFrontendPublicKeyHash`, and returns `customFrontendKeyConfigured` plus `customFrontendKeyPreview`.
+- Custom tenant frontend browser requests from non-FormFiller origins must include both `x-tenant-slug` and `x-formfiller-public-key`. The backend verifies the key hash, `customFrontendEnabled`, and the request `Origin` against `customFrontendAllowedOrigins` before the request reaches the same canonical application/signature/finalize handlers.
 
 ### Secret handling
 
@@ -272,7 +273,7 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 - SSNs are encrypted before storage.
 - Bank statements and signed PDFs should be stored in private object storage for production.
 - Database fallback for PDFs exists but should not be the preferred production mode.
-- CORS is controlled by `ALLOWED_ORIGINS`.
+- CORS allows platform origins from `ALLOWED_ORIGINS` plus tenant-approved custom frontend origins when `customFrontendEnabled` is true.
 - Rate limiting exists on authentication, business lookup, address autocomplete, and bank-help flows.
 
 ### Auditability
@@ -349,7 +350,7 @@ Real credential values must be transferred outside the repo. The table below doc
 | Spaces/S3 secret access key | recommended | Switchbox | Document storage | `/settings` encrypted/write-only |
 | Spaces/S3 bucket name | recommended | Switchbox | Document storage | `/settings` |
 | Custom frontend public key | optional for custom tenant UI | Switchbox/tenant | Browser-safe custom frontend API identification | `/settings` write-only; DB stores hash/preview only |
-| Custom frontend allowed origin(s) | optional for custom tenant UI | Switchbox/tenant | CORS/custom-origin allowlist for Phase C middleware | `/settings` |
+| Custom frontend allowed origin(s) | optional for custom tenant UI | Switchbox/tenant | CORS/custom-origin allowlist for public frontend middleware | `/settings` |
 | Custom frontend allowed redirect URL(s) | optional for custom tenant UI | Switchbox/tenant | Completion/return URL allowlist | `/settings` |
 
 ## 12. Postman handoff
@@ -371,6 +372,14 @@ The environment file ships with the live DigitalOcean URLs preset for `backend_b
 
 The checked-in collection/environment use placeholders so the files remain safe to store and transfer. Switchbox should populate real current values in Postman or its password manager before running production endpoint tests. Do not add private internal admin/export credentials to this Postman handoff.
 
+The collection includes a **Custom Frontend Auth** folder for Phase C checks. After setting the tenant settings in `/api/tenant/settings/admin`, use those requests to verify:
+
+- browser preflight from `custom_frontend_allowed_origin` is accepted;
+- `x-formfiller-public-key` authenticates the custom frontend request;
+- the same origin without `x-formfiller-public-key` is rejected.
+
+All custom frontend implementations must call the existing tenant-scoped endpoints (for example `/api/applications`, `/api/forms/:appId/*`, `/api/signatures/:appId/sign`, `/api/applications/:id/submit`, `/api/applications/:id/finalize`) and must satisfy the same backend validation gates.
+
 Do not export real current values back into the repository.
 
 ## 13. Known operational notes
@@ -378,7 +387,7 @@ Do not export real current values back into the repository.
 - The final account/package creation in Switchbox happens after bank statement upload finalization, not immediately at signature.
 - If Switchbox needs earlier account creation plus later document upload, implement a two-stage Switchbox integration: privacy-aware account create at signature, then document attach after upload/finalize.
 - Backend submit/finalize validation is now centralized in `applicationValidation.service.ts`; custom or external frontends must satisfy the same required-field rules as the hosted `/apply` UI.
-- Phase B custom frontend settings are present in `TenantSettings`: `customFrontendEnabled`, hashed key storage, key preview, allowed origins, and allowed redirects. Phase C still needs request middleware/CORS enforcement before custom frontend traffic is accepted.
+- Phase C custom frontend middleware is present: custom origins are allowed by dynamic CORS only when configured, and custom-origin browser requests must authenticate with `x-formfiller-public-key` before reaching canonical backend handlers.
 - `/finalize` now rejects applications with zero bank statement PDFs instead of queueing delivery with an empty bank statement list.
 - Bank statement PDFs always remain part of the Switchbox package regardless of PDF Privacy toggles.
 - Existing previously generated PDFs are not retroactively changed by privacy/layout updates; regenerate/download after changes.

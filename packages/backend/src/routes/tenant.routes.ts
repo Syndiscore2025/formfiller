@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { optionalAuth, requireAuth, requireTenant, requireSuperAdmin, AuthRequest } from '../middleware/auth';
+import { requireCustomFrontendAccess } from '../middleware/customFrontendAuth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { validate } from '../middleware/validate';
 import { encrypt } from '../utils/encryption';
@@ -61,6 +62,7 @@ router.get(
   '/settings',
   optionalAuth,
   requireTenant,
+  requireCustomFrontendAccess,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const settings = await prisma.tenantSettings.findUnique({
       where: { tenantId: req.tenantId! },

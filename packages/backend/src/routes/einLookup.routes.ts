@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { optionalAuth, requireTenant } from '../middleware/auth';
+import { requireCustomFrontendAccess } from '../middleware/customFrontendAuth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { addressAutocompleteLimiter, einLookupLimiter } from '../middleware/rateLimiter';
@@ -8,7 +9,7 @@ import { lookupByOpenCorporates, BusinessLookupResult } from '../services/busine
 import { autocompleteAddresses, getPlaceAddressDetails, lookupByGooglePlaces } from '../services/googlePlaces.service';
 
 const router = Router();
-const guestAccess = [optionalAuth, requireTenant];
+const guestAccess = [optionalAuth, requireTenant, requireCustomFrontendAccess];
 
 const lookupSchema = z.object({
   businessName: z.string().min(2),

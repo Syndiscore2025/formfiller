@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { optionalAuth, requireTenant, AuthRequest } from '../middleware/auth';
+import { requireCustomFrontendAccess } from '../middleware/customFrontendAuth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
@@ -10,7 +11,7 @@ import { encrypt } from '../utils/encryption';
 import { writeAuditLog } from '../services/auditLog.service';
 
 const router = Router();
-const guestAccess = [optionalAuth, requireTenant];
+const guestAccess = [optionalAuth, requireTenant, requireCustomFrontendAccess];
 
 const businessSchema = z.object({
   legalName: z.string().optional(),
