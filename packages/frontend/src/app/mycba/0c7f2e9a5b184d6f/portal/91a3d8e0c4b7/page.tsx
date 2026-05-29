@@ -10,15 +10,71 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG || 'default';
 const CONFIRM_PHRASE = 'EXPORT_FULL_SSN_DOB';
 
+function toDateStr(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+const DATE_PRESETS = [
+  {
+    label: 'Today',
+    apply: () => { const d = toDateStr(new Date()); return { start: d, end: d }; },
+  },
+  {
+    label: 'This week',
+    apply: () => {
+      const now = new Date();
+      const day = now.getDay();
+      const mon = new Date(now); mon.setDate(now.getDate() - day + (day === 0 ? -6 : 1));
+      return { start: toDateStr(mon), end: toDateStr(now) };
+    },
+  },
+  {
+    label: 'This month',
+    apply: () => {
+      const now = new Date();
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start: toDateStr(first), end: toDateStr(now) };
+    },
+  },
+  {
+    label: 'Last 30 days',
+    apply: () => {
+      const now = new Date();
+      const past = new Date(now); past.setDate(now.getDate() - 29);
+      return { start: toDateStr(past), end: toDateStr(now) };
+    },
+  },
+  {
+    label: 'Last 90 days',
+    apply: () => {
+      const now = new Date();
+      const past = new Date(now); past.setDate(now.getDate() - 89);
+      return { start: toDateStr(past), end: toDateStr(now) };
+    },
+  },
+  {
+    label: 'All time',
+    apply: () => ({ start: '', end: '' }),
+  },
+];
+
 export default function PrivateConsolePage() {
   const { token, role, loading } = useAuth();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [activePreset, setActivePreset] = useState<string | null>('All time');
   const [includeSensitive, setIncludeSensitive] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  function applyPreset(preset: typeof DATE_PRESETS[number]) {
+    const { start, end } = preset.apply();
+    setStartDate(start);
+    setEndDate(end);
+    setActivePreset(preset.label);
+  }
 
   const canExportSensitive = !includeSensitive || confirmation === CONFIRM_PHRASE;
 
@@ -97,9 +153,29 @@ export default function PrivateConsolePage() {
         </header>
 
         <form onSubmit={handleDownload} className="surface-panel max-w-3xl space-y-6 p-7">
+          <div>
+            <p className="mb-2 text-xs font-medium text-slate-400">Quick filter</p>
+            <div className="flex flex-wrap gap-2">
+              {DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    activePreset === preset.label
+                      ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-200'
+                      : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-400/30 hover:text-cyan-100'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Start date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <Input label="End date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <Input label="Start date" type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} />
+            <Input label="End date" type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} />
           </div>
 
           <label className="flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-400/10 p-4 text-sm text-amber-50">

@@ -83,7 +83,7 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
   useEffect(() => {
     onDraftChange?.(
       { email, phone, tcpaConsent },
-      { legalName: searchName, stateOfFormation: searchState, ein: searchEin, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : business.entityType },
+      { legalName: searchName, stateOfFormation: searchState, ein: searchEin, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : undefined },
     );
   }, [email, phone, tcpaConsent, searchName, searchState, searchEin, soleProprietorship, business.entityType, onDraftChange]);
 
