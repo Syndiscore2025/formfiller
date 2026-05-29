@@ -31,6 +31,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
 
   const [ownershipPct, setOwnershipPct] = useState(owner.ownershipPct || '');
   const [ssn, setSsn] = useState(owner.ssn || '');
+  const [isItin, setIsItin] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState(owner.dateOfBirth || '');
   // If user said home=business on Step 2, pre-fill from business address
   const addrFromBiz = homeAddressSameAsBusiness === true;
@@ -46,17 +47,25 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const ssnInputRef = useRef<HTMLInputElement>(null);
+  // Tracks the owner values we last pushed UP via onDraftChange, so the sync-down
+  // effect can ignore prop changes that are just our own draft echoing back. Without
+  // this, browser autofill firing rapid events makes name/address fields flicker.
+  const lastPushedOwnerRef = useRef<Record<string, string>>({});
 
+  // Keep editable local state in sync when the AI/chat updates parent form state,
+  // but ignore our own echoes and never overwrite what the user is actively typing.
   useEffect(() => {
-    setFirstName(owner.firstName || contact.firstName || '');
-    setLastName(owner.lastName || contact.lastName || '');
-    setOwnershipPct(owner.ownershipPct || '');
-    if (owner.streetAddress) setStreetAddress(owner.streetAddress);
-    if (owner.streetAddress2) setStreetAddress2(owner.streetAddress2);
-    if (owner.city) setCity(owner.city);
-    if (owner.state) setState(owner.state);
-    if (owner.zipCode) setZipCode(owner.zipCode);
-  }, [owner.firstName, owner.lastName, owner.ownershipPct, owner.streetAddress, owner.streetAddress2, owner.city, owner.state, owner.zipCode, contact.firstName, contact.lastName]);
+    const pushed = lastPushedOwnerRef.current;
+    const isEcho = (key: string, propVal: string) => pushed[key] !== undefined && pushed[key] === propVal;
+    if (!isEcho('firstName', owner.firstName || '')) setFirstName((prev) => (prev === (owner.firstName || '') ? prev : owner.firstName || ''));
+    if (!isEcho('lastName', owner.lastName || '')) setLastName((prev) => (prev === (owner.lastName || '') ? prev : owner.lastName || ''));
+    if (!isEcho('ownershipPct', owner.ownershipPct || '')) setOwnershipPct((prev) => (prev === (owner.ownershipPct || '') ? prev : owner.ownershipPct || ''));
+    if (owner.streetAddress && !isEcho('streetAddress', owner.streetAddress)) setStreetAddress((prev) => (prev === owner.streetAddress ? prev : owner.streetAddress));
+    if (owner.streetAddress2 && !isEcho('streetAddress2', owner.streetAddress2)) setStreetAddress2((prev) => (prev === owner.streetAddress2 ? prev : owner.streetAddress2));
+    if (owner.city && !isEcho('city', owner.city)) setCity((prev) => (prev === owner.city ? prev : owner.city));
+    if (owner.state && !isEcho('state', owner.state)) setState((prev) => (prev === owner.state ? prev : owner.state));
+    if (owner.zipCode && !isEcho('zipCode', owner.zipCode)) setZipCode((prev) => (prev === owner.zipCode ? prev : owner.zipCode));
+  }, [owner.firstName, owner.lastName, owner.ownershipPct, owner.streetAddress, owner.streetAddress2, owner.city, owner.state, owner.zipCode]);
 
   const pct = Number(ownershipPct);
   const showAdditionalQuestion = !(pct >= 81 && pct <= 100);
@@ -95,6 +104,11 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   }, [showVerification, submitting]);
 
   useEffect(() => {
+    // Remember the raw values we just pushed up so the sync-down effect can tell
+    // our own echo apart from a genuine external (lookup/AI) change and avoid flicker.
+    lastPushedOwnerRef.current = {
+      firstName, lastName, ownershipPct, streetAddress, streetAddress2, city, state, zipCode,
+    };
     onDraftChange?.({
       ownerIndex: owner.ownerIndex ?? 0,
       firstName,
@@ -188,8 +202,10 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const validateVerification = () => {
     const errs: Record<string, string> = {};
     const ssnDigits = ssn.replace(/\D/g, '');
+    const taxIdLabel = isItin ? 'ITIN' : 'SSN';
     if (!ssnDigits) errs.ssn = 'Required';
-    else if (ssnDigits.length !== 9) errs.ssn = 'SSN must be 9 digits';
+    else if (ssnDigits.length !== 9) errs.ssn = `${taxIdLabel} must be 9 digits`;
+    else if (isItin && !ssnDigits.startsWith('9')) errs.ssn = 'ITIN must begin with 9';
     if (!dateOfBirth) errs.dateOfBirth = 'Required';
     else if (!parseIsoDate(dateOfBirth)) errs.dateOfBirth = 'Enter a valid date of birth';
     else if (!isAtLeast18(dateOfBirth)) errs.dateOfBirth = 'Applicant must be at least 18 years old to apply.';
@@ -363,7 +379,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Identity check</p>
                 <h3 id="owner-verification-title" className="mt-2 text-2xl font-semibold text-white">Owner Verification</h3>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
-                  Enter your Social Security Number and Date of Birth to verify your identity before continuing.
+                  Enter your {isItin ? 'ITIN' : 'Social Security Number'} and Date of Birth to verify your identity before continuing.
                 </p>
               </div>
               <button
@@ -383,8 +399,18 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
               For your protection, enter SSN and Date of Birth only in these secure form fields — not in chat.
             </div>
 
+            <label className="flex items-center gap-2 text-sm text-slate-400 select-none cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isItin}
+                onChange={(e) => { setIsItin(e.target.checked); setSsn(''); }}
+                className="h-4 w-4 cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-300"
+              />
+              I don&apos;t have a Social Security Number — I use an ITIN
+            </label>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input ref={ssnInputRef} id="owner_ssn" label="Social Security Number" required placeholder="XXX-XX-XXXX" value={ssn}
+              <Input ref={ssnInputRef} id="owner_ssn" label={isItin ? 'ITIN' : 'Social Security Number'} required placeholder="XXX-XX-XXXX" value={ssn}
                 onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
               <DateField id="owner_date_of_birth" label="Date of Birth" required value={dateOfBirth}
                 onChange={setDateOfBirth} error={errors.dateOfBirth} yearOrder="asc" />

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BusinessInfo, ContactInfo, US_STATES, DataSource } from '@/types/application';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -58,10 +58,16 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
   const [result, setResult] = useState<LookupResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Tracks the contact values we last pushed UP via onDraftChange, so the sync-down
+  // effect can ignore our own draft echoing back. Without this, browser autofill
+  // firing rapid events makes the email/phone fields flicker uncontrollably.
+  const lastPushedContactRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
-    setEmail(contact.email || '');
-    setPhone(contact.phone || '');
+    const pushed = lastPushedContactRef.current;
+    const isEcho = (key: string, propVal: string) => pushed[key] !== undefined && pushed[key] === propVal;
+    if (!isEcho('email', contact.email || '')) setEmail((prev) => (prev === (contact.email || '') ? prev : contact.email || ''));
+    if (!isEcho('phone', contact.phone || '')) setPhone((prev) => (prev === (contact.phone || '') ? prev : contact.phone || ''));
   }, [contact.email, contact.phone]);
 
   // When the AI chat captures verbal TCPA consent, check the box and auto-submit
@@ -81,6 +87,9 @@ export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, toke
   }, [business.legalName, business.stateOfFormation, business.ein, business.entityType]);
 
   useEffect(() => {
+    // Remember the raw values we just pushed up so the sync-down effect can tell
+    // our own echo apart from a genuine external change and avoid flicker.
+    lastPushedContactRef.current = { email, phone };
     onDraftChange?.(
       { email, phone, tcpaConsent },
       { legalName: searchName, stateOfFormation: searchState, ein: searchEin, entityType: soleProprietorship ? 'SOLE_PROPRIETORSHIP' : undefined },
