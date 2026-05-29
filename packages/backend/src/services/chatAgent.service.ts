@@ -75,9 +75,11 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
   });
   const redactedSensitiveInput = safeMessage !== cleanMessage;
   const qualificationSignals = extractQualificationSignals(safeMessage);
+  const chatSessionId = extractChatSessionId(input.clientState);
 
   const userMetadata = {
     source: 'merchant_chat',
+    ...(chatSessionId ? { chatSessionId } : {}),
     redactedSensitiveInput,
     ...(qualificationSignals.length > 0 ? { qualificationSignals } : {}),
   } as unknown as Prisma.InputJsonObject;
@@ -92,7 +94,7 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
     },
   });
 
-  const history = await loadRecentHistory(input.applicationId, input.tenantId);
+  const history = await loadRecentHistory(input.applicationId, input.tenantId, chatSessionId);
   const guardrailEvaluation = evaluateChatGuardrails({
     message: safeMessage,
     nextField,
@@ -127,7 +129,7 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
       applicationId: input.applicationId,
       role: 'assistant',
       content: reply.message,
-      metadata: buildAssistantChatMetadata(nextField, reply.suggestedActions, guardrailEvaluation, qualificationSignals, finalSafety.fundingSafety),
+      metadata: buildAssistantChatMetadata(nextField, reply.suggestedActions, guardrailEvaluation, qualificationSignals, finalSafety.fundingSafety, chatSessionId),
     },
   });
 
@@ -200,6 +202,7 @@ export async function createPostConsentTransitionReply(input: TransitionChatInpu
   const tenantSettings = app.tenant.settings;
   if (tenantSettings && tenantSettings.aiChatEnabled === false) throw new Error('AI chat is not enabled for this tenant.');
 
+  const chatSessionId = extractChatSessionId(input.clientState);
   const nextField = determineNextField(app, input.clientState);
   const guardrailEvaluation = evaluateChatGuardrails({
     message: 'post_tcpa_step2_transition',
@@ -236,7 +239,7 @@ export async function createPostConsentTransitionReply(input: TransitionChatInpu
       applicationId: input.applicationId,
       role: 'assistant',
       content: safeReply.message,
-      metadata: buildAssistantChatMetadata(nextField, safeReply.suggestedActions, guardrailEvaluation, [], finalSafety.fundingSafety),
+      metadata: buildAssistantChatMetadata(nextField, safeReply.suggestedActions, guardrailEvaluation, [], finalSafety.fundingSafety, chatSessionId),
     },
   });
 
@@ -311,18 +314,24 @@ async function loadApplicationContext(applicationId: string, tenantId: string) {
 
 type ApplicationContext = NonNullable<Awaited<ReturnType<typeof loadApplicationContext>>>;
 
-async function loadRecentHistory(applicationId: string, tenantId: string): Promise<Array<{ role: ChatRole; content: string }>> {
+async function loadRecentHistory(applicationId: string, tenantId: string, chatSessionId: string | null): Promise<Array<{ role: ChatRole; content: string }>> {
+  if (!chatSessionId) return [];
+
   const messages = await prisma.chatMessage.findMany({
     where: { applicationId, tenantId, role: { in: ['user', 'assistant'] } },
     orderBy: { createdAt: 'desc' },
-    take: 10,
-    select: { role: true, content: true },
+    take: 30,
+    select: { role: true, content: true, metadata: true },
   });
 
-  return messages.reverse().map((msg) => ({
-    role: msg.role === 'assistant' ? 'assistant' : 'user',
-    content: redactSensitiveChatContent(msg.content),
-  }));
+  return messages
+    .filter((msg) => asRecord(msg.metadata).chatSessionId === chatSessionId)
+    .slice(0, 10)
+    .reverse()
+    .map((msg) => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: redactSensitiveChatContent(msg.content),
+    }));
 }
 
 function hasText(value: unknown): boolean {
@@ -507,6 +516,13 @@ function isStep2ReviewContext(clientState?: unknown): boolean {
   const fieldSources = asRecord(business.fieldSources);
   const hasLookupData = Object.keys(fieldSources).some((key) => !['legalName', 'stateOfFormation', 'ein'].includes(key));
   return currentStep === 2 && hasLookupData;
+}
+
+function extractChatSessionId(clientState?: unknown): string | null {
+  const state = asRecord(clientState);
+  return typeof state.chatSessionId === 'string' && state.chatSessionId.trim()
+    ? state.chatSessionId.trim().slice(0, 100)
+    : null;
 }
 
 function extractClientCurrentStep(clientState?: unknown): number | null {
@@ -702,8 +718,10 @@ function buildAssistantChatMetadata(
   guardrail: GuardrailEvaluation,
   qualificationSignals: ReturnType<typeof extractQualificationSignals>,
   fundingSafety: FundingSafetyResult,
+  chatSessionId?: string | null,
 ): Prisma.InputJsonObject {
   return {
+    ...(chatSessionId ? { chatSessionId } : {}),
     nextField: nextField ? { ...nextField } : null,
     suggestedActions,
     guardrail: buildGuardrailMetadata(guardrail),

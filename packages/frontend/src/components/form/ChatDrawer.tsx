@@ -41,6 +41,7 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
   const [chatStopped, setChatStopped] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const step2GreetedRef = useRef(false);
+  const chatSessionIdRef = useRef(createLocalId());
   // Keep a stable ref to formState so we can read it inside effects without adding it to deps
   const formStateRef = useRef(formState);
   useEffect(() => { formStateRef.current = formState; });
@@ -54,73 +55,54 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
   useEffect(() => {
     if (!open) return;
 
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(PRE_APP_CHAT_KEY);
+    }
+
     if (!applicationId) {
-      setMessages((current) => current.length ? current : loadPreApplicationMessages(introMessage));
+      setMessages((current) => current.length ? current : [introMessage]);
       return;
     }
 
     setError('');
-    api.get<{ success: boolean; data: ChatMessage[] }>(`/api/chat/${applicationId}/history`, token ?? undefined)
-      .then((res) => {
-        if (res.data.length) {
-          // DB has history for this application — use it
-          setMessages(res.data);
-        } else {
-          // No DB history yet (first visit after step 1) — carry over pre-app
-          // conversation from localStorage so it feels continuous, then clear
-          // localStorage so it doesn't bleed into a future new application.
-          const preApp = loadPreApplicationMessages(introMessage);
-          if (typeof window !== 'undefined') {
-            window.localStorage.removeItem(PRE_APP_CHAT_KEY);
-          }
-          // Inject a step-2 greeting only when the TCPA chat transition did not
-          // already give the merchant the same instruction.
-          const pendingPostConsentTransition = typeof window !== 'undefined'
-            && window.localStorage.getItem(POST_CONSENT_TRANSITION_KEY) === 'true';
-          const alreadyTransitioned = preApp.some((msg) => msg.id === 'tcpa-transition');
-          if ((pendingPostConsentTransition || alreadyTransitioned) && !step2GreetedRef.current) {
-            step2GreetedRef.current = true;
-            const baseMessages = preApp.filter((msg) => msg.id !== 'tcpa-transition');
-            api.post<{ success: boolean; data: ChatReply }>(
-              `/api/chat/${applicationId}/post-consent-transition`,
-              { clientState: buildSafeClientState(formStateRef.current, pageContext, null, baseMessages) },
-              token ?? undefined,
-            ).then((transitionRes) => {
-              if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
-              setMessages([...baseMessages, {
-                id: createLocalId(),
-                role: 'assistant',
-                content: transitionRes.data.message,
-                nextField: transitionRes.data.nextField,
-              }]);
-            }).catch(() => {
-              if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
-              setMessages([...baseMessages, {
-                id: createLocalId(),
-                role: 'assistant',
-                content: buildTcpaTransitionMessage(formStateRef.current),
-              }]);
-            });
-          } else if (Object.keys(formStateRef.current.business?.fieldSources || {}).length > 0 && !step2GreetedRef.current) {
-            step2GreetedRef.current = true;
-            const greeting: ChatMessage = {
-              id: createLocalId(),
-              role: 'assistant',
-              content: "I found your business info — take a look at the details on screen and make sure everything is accurate. If anything looks off, hit Edit. Also, don't forget to answer the Home Based Business question at the bottom of the page — just click Yes or No.",
-            };
-            setMessages([...preApp, greeting]);
-          } else {
-            setMessages(preApp);
-          }
-        }
-      })
-      .catch(() => setMessages(loadPreApplicationMessages(introMessage)));
-  }, [open, applicationId, token, introMessage]);
+    const freshMessages = [introMessage];
+    const pendingPostConsentTransition = typeof window !== 'undefined'
+      && window.localStorage.getItem(POST_CONSENT_TRANSITION_KEY) === 'true';
 
-  useEffect(() => {
-    if (applicationId || !messages.length || typeof window === 'undefined') return;
-    window.localStorage.setItem(PRE_APP_CHAT_KEY, JSON.stringify(messages.slice(-20)));
-  }, [applicationId, messages]);
+    if (pendingPostConsentTransition && !step2GreetedRef.current) {
+      step2GreetedRef.current = true;
+      api.post<{ success: boolean; data: ChatReply }>(
+        `/api/chat/${applicationId}/post-consent-transition`,
+        { clientState: buildSafeClientState(formStateRef.current, pageContext, chatSessionIdRef.current, null, freshMessages) },
+        token ?? undefined,
+      ).then((transitionRes) => {
+        if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
+        setMessages([...freshMessages, {
+          id: createLocalId(),
+          role: 'assistant',
+          content: transitionRes.data.message,
+          nextField: transitionRes.data.nextField,
+        }]);
+      }).catch(() => {
+        if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
+        setMessages([...freshMessages, {
+          id: createLocalId(),
+          role: 'assistant',
+          content: buildTcpaTransitionMessage(formStateRef.current),
+        }]);
+      });
+    } else if (Object.keys(formStateRef.current.business?.fieldSources || {}).length > 0 && !step2GreetedRef.current) {
+      step2GreetedRef.current = true;
+      const greeting: ChatMessage = {
+        id: createLocalId(),
+        role: 'assistant',
+        content: "I found your business info — take a look at the details on screen and make sure everything is accurate. If anything looks off, hit Edit. Also, don't forget to answer the Home Based Business question at the bottom of the page — just click Yes or No.",
+      };
+      setMessages([...freshMessages, greeting]);
+    } else {
+      setMessages(freshMessages);
+    }
+  }, [open, applicationId, token, introMessage]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' });
@@ -146,7 +128,6 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
         const next = current;
         if (!applicationId && typeof window !== 'undefined') {
           window.localStorage.setItem(POST_CONSENT_TRANSITION_KEY, 'true');
-          window.localStorage.setItem(PRE_APP_CHAT_KEY, JSON.stringify(next.slice(-20)));
         }
         return next;
       });
@@ -158,7 +139,7 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
     try {
       const res = await api.post<{ success: boolean; data: ChatReply }>(
         applicationId ? `/api/chat/${applicationId}/message` : '/api/chat/message',
-        { message, clientState: buildSafeClientState(formState, pageContext, appliedField, messages) },
+        { message, clientState: buildSafeClientState(formState, pageContext, chatSessionIdRef.current, appliedField, messages) },
         token ?? undefined,
       );
       if (!res.data.suggestedActions.length && !res.data.nextField && isOptOutMessage(res.data.message)) {
@@ -314,16 +295,6 @@ function isKnownIndustry(value: string): boolean {
   return INDUSTRIES.some((industry) => industry.toLowerCase() === lower);
 }
 
-function loadPreApplicationMessages(introMessage: ChatMessage): ChatMessage[] {
-  if (typeof window === 'undefined') return [introMessage];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(PRE_APP_CHAT_KEY) || '[]') as ChatMessage[];
-    return Array.isArray(parsed) && parsed.length ? parsed : [introMessage];
-  } catch {
-    return [introMessage];
-  }
-}
-
 function buildTcpaTransitionMessage(state: FormState): string {
   const fieldSources = state.business?.fieldSources || {};
   const googleFoundDetails = Object.keys(fieldSources).some((key) => !['legalName', 'stateOfFormation', 'ein'].includes(key));
@@ -335,11 +306,12 @@ function buildTcpaTransitionMessage(state: FormState): string {
   return 'Thanks — I checked the consent box and moved you to the next page. I could not confirm all of the business details from lookup, so the next step is to fill in the business information shown on the page.';
 }
 
-function buildSafeClientState(state: FormState, pageContext?: Record<string, unknown> | null, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {
+function buildSafeClientState(state: FormState, pageContext: Record<string, unknown> | null | undefined, chatSessionId: string, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {
   const owner = state.owners[0];
   return {
     applicationId: state.applicationId,
     currentStep: state.currentStep,
+    chatSessionId,
     pageContext: pageContext || undefined,
     appliedField: appliedField || undefined,
     recentAssistantMessages: messages.filter((message) => message.role === 'assistant').slice(-8).map((message) => message.content),
