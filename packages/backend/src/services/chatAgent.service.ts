@@ -375,10 +375,39 @@ const APPLICATION_FLOW_FIELDS: NextField[] = [
   field(6, 'Bank Statements', 'documents.bankStatements', 'Bank Statements', 'Please upload the most recent business bank statement PDFs.'),
 ];
 
+const STEP2_CONFIRM_CONTINUE_FIELD = field(
+  2,
+  'Business Details',
+  'step2.confirmContinue',
+  'Confirm & Continue',
+  'Review the business details shown on this page, answer Home Based Business if it is still unanswered, then click Confirm & Continue. If the page opens missing fields after that, complete only those visible fields.'
+);
+
 function determineNextField(app: ApplicationContext, clientState?: unknown): NextField | null {
   const business = app.business;
   const owner = primaryOwner(app);
-  return APPLICATION_FLOW_FIELDS.find((candidate) => isMissing(candidate.fieldKey, app, business, owner) && !hasClientFieldValue(clientState, candidate.fieldKey)) ?? null;
+  const currentStep = extractClientCurrentStep(clientState) ?? app.currentStep;
+
+  if (isStep2ReviewContext(clientState)) {
+    const homeBased = APPLICATION_FLOW_FIELDS.find((candidate) => candidate.fieldKey === 'application.homeBasedBusiness')!;
+    if (isMissing(homeBased.fieldKey, app, business, owner) && !hasClientFieldValue(clientState, homeBased.fieldKey)) return homeBased;
+    return STEP2_CONFIRM_CONTINUE_FIELD;
+  }
+
+  const currentOrEarlier = APPLICATION_FLOW_FIELDS.find((candidate) => (
+    candidate.step <= currentStep
+    && isMissing(candidate.fieldKey, app, business, owner)
+    && !hasClientFieldValue(clientState, candidate.fieldKey)
+  ));
+  if (currentOrEarlier) return currentOrEarlier;
+
+  if (currentStep === 2) return STEP2_CONFIRM_CONTINUE_FIELD;
+
+  return APPLICATION_FLOW_FIELDS.find((candidate) => (
+    candidate.step === currentStep + 1
+    && isMissing(candidate.fieldKey, app, business, owner)
+    && !hasClientFieldValue(clientState, candidate.fieldKey)
+  )) ?? null;
 }
 
 function field(step: number, stepName: string, fieldKey: string, label: string, question: string): NextField {
@@ -464,8 +493,24 @@ function hasMeaningfulFieldValue(fieldKey: string, value: unknown, state?: Recor
   return hasText(value);
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+function isStep2ReviewContext(clientState?: unknown): boolean {
+  const state = asRecord(clientState);
+  const currentStep = extractClientCurrentStep(clientState);
+  const pageContext = asRecord(state.pageContext);
+  if (pageContext.page === 'step2_business_details') return pageContext.mode === 'review';
+
+  const business = asRecord(state.business);
+  const fieldSources = asRecord(business.fieldSources);
+  const hasLookupData = Object.keys(fieldSources).some((key) => !['legalName', 'stateOfFormation', 'ein'].includes(key));
+  return currentStep === 2 && hasLookupData;
+}
+
 function extractClientCurrentStep(clientState?: unknown): number | null {
-  const state = clientState && typeof clientState === 'object' ? clientState as Record<string, unknown> : {};
+  const state = asRecord(clientState);
   return typeof state.currentStep === 'number' ? state.currentStep : null;
 }
 
@@ -716,8 +761,8 @@ async function requestOpenAiReply(input: {
     'Your only job is to have a real, natural, helpful conversation with the merchant that always moves them closer to finishing and signing this small-business funding application. You write every reply yourself in your own words — never use a templated or canned answer, never reuse the same phrasing twice in a row, and never sound like a script.',
     'Stay strictly limited to small-business financing, this application, document uploads, e-signature, identity verification, and underwriting-readiness. If the merchant goes off-topic, briefly and warmly bring it back to the application without sounding robotic.',
     'Tone: friendly, professional, concise (typically 1–3 short paragraphs), conversational, like a knowledgeable human funding specialist. Acknowledge what the merchant said before guiding them forward. Ask one useful follow-up question at a time. Vary your wording so consecutive replies do not look alike.',
-    'Live progress awareness: before answering, inspect applicationContext.progress. Treat it as the live source of truth, especially when the merchant is filling fields without AI help. Use progress.currentStepName, progress.nextMissingField, and each step’s missingFields/completedFields to know exactly what comes next. Do not ask for a field that progress marks completed.',
-    'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If a step is complete, recognize that and move them to the next step. Immediately after contact consent/TCPA on Step 1, the next move is ALWAYS Step 2 Business Details review — ask the merchant to confirm the business information if lookup populated it, or fill the visible business fields if lookup did not. Do NOT jump to Business Start Date after consent.',
+    'Live progress awareness: before answering, inspect applicationContext.progress and applicationContext.clientState.pageContext. Treat them as the live source of truth, especially when the merchant is filling fields without AI help. Use progress.currentStepName, progress.nextMissingField, and each step’s missingFields/completedFields to know exactly what comes next. Do not ask for a field that progress marks completed.',
+    'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If pageContext says Step 2 is in review mode, do not ask for hidden fields such as Industry yet; guide them to the visible Home Based Business Yes/No question or the Confirm & Continue button. If a step is complete, recognize that and move them to the next visible action. Immediately after contact consent/TCPA on Step 1, the next move is ALWAYS Step 2 Business Details review — ask the merchant to confirm the business information if lookup populated it, or fill the visible business fields if lookup did not. Do NOT jump to Business Start Date after consent.',
     'Post-consent transition: if applicationContext.transition.type is post_tcpa_to_business_details, write exactly one concise transition message. Thank the merchant for consenting, then guide them to Step 2 Business Details. Do not include an icebreaker, weather, local news, sports, or other local-context opener. Do not ask a separate question before the Step 2 instruction.',
     'Field capture flow: if applicationContext.clientState.appliedField is present, you may naturally acknowledge that the answer was captured from chat, then immediately move to the next missing field. If no appliedField is present, do not claim you changed the form — guide them to enter or confirm it in the visible UI.',
     'Hard funding guardrails — ALWAYS:',

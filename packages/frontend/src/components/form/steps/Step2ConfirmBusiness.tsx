@@ -15,6 +15,7 @@ interface Props {
   onNext: (data: BusinessInfo, homeAddressSameAsBusiness: boolean) => Promise<void>;
   onBack: () => void;
   onDraftChange?: (data: Partial<BusinessInfo>, homeAddressSameAsBusiness: boolean | null) => void;
+  onAiPageContextChange?: (context: Record<string, unknown>) => void;
 }
 
 /* Fields the user already typed on Step 1 — these don't count as "lookup data" */
@@ -60,7 +61,7 @@ const FIELD_META: { key: string; label: string; required?: boolean }[] = [
   { key: 'website', label: 'Website' },
 ];
 
-export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: initialHomeAddr, onNext, onBack, onDraftChange }: Props) {
+export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: initialHomeAddr, onNext, onBack, onDraftChange, onAiPageContextChange }: Props) {
   const analytics = useAnalyticsContext();
   const src = business.fieldSources || {};
   const partialBusinessStartYear = getPartialBusinessStartYear(business.businessStartDate);
@@ -201,6 +202,22 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
     lastPushedBusinessRef.current = draft as Record<string, string>;
     onDraftChange?.(draft, homeAddrSameAnswered ? homeAddrSame : null);
   }, [legalName, dba, entityType, industry, stateOfFormation, ein, businessStartDate, businessPhone, website, streetAddress, streetAddress2, city, addrState, zipCode, selectedIndustryCodes, homeAddrSameAnswered, homeAddrSame, onDraftChange]);
+
+  useEffect(() => {
+    const hasBusinessAddr = filledFields.has('streetAddress') || filledFields.has('city') || filledFields.has('state');
+    const mode = hasLookupData && !editing ? 'review' : 'edit';
+    onAiPageContextChange?.({
+      page: 'step2_business_details',
+      mode,
+      visibleFieldKeys: mode === 'review'
+        ? (hasBusinessAddr && !homeAddrSameAnswered ? ['application.homeBasedBusiness'] : [])
+        : missingFields.map((field) => `business.${field.key}`),
+      visibleActions: mode === 'review' ? ['Edit', 'Confirm & Continue'] : ['Continue'],
+      instruction: mode === 'review'
+        ? 'The merchant is viewing the Step 2 review card. Do not ask for hidden missing fields such as Industry until the merchant clicks Confirm & Continue or Edit and those fields appear.'
+        : 'The merchant is editing visible Step 2 fields. Only guide them to fields currently visible in this edit view.',
+    });
+  }, [editing, filledFields, hasLookupData, homeAddrSameAnswered, missingFields, onAiPageContextChange]);
 
   const displayIndustryCodes = useMemo(() => {
     const mapped = getIndustryCodes(normalizeIndustryValue(business.industry) || industry);

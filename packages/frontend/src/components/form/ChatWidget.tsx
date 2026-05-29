@@ -9,12 +9,13 @@ interface Props {
   applicationId: string | null;
   token: string | null;
   formState: FormState;
+  pageContext?: Record<string, unknown> | null;
   onNavigateToField?: (field: { step: number; fieldKey: string }) => void;
   onApplyFieldAnswer?: (field: { step: number; fieldKey: string }, value: string) => boolean;
   autoOpen?: boolean;
 }
 
-export function ChatWidget({ applicationId, token, formState, onNavigateToField, onApplyFieldAnswer, autoOpen }: Props) {
+export function ChatWidget({ applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, autoOpen }: Props) {
   const [open, setOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -43,6 +44,7 @@ export function ChatWidget({ applicationId, token, formState, onNavigateToField,
         applicationId={applicationId}
         token={token}
         formState={formState}
+        pageContext={pageContext}
         onNavigateToField={onNavigateToField}
         onApplyFieldAnswer={onApplyFieldAnswer}
         onClose={() => setOpen(false)}

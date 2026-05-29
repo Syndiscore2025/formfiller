@@ -24,6 +24,7 @@ interface Props {
   applicationId: string | null;
   token: string | null;
   formState: FormState;
+  pageContext?: Record<string, unknown> | null;
   onNavigateToField?: (field: NonNullable<ChatReply['nextField']>) => void;
   onApplyFieldAnswer?: (field: NonNullable<ChatReply['nextField']>, value: string) => boolean;
   onClose: () => void;
@@ -32,7 +33,7 @@ interface Props {
 const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
 const POST_CONSENT_TRANSITION_KEY = 'formfiller.postConsentTransitionPending.v1';
 
-export function ChatDrawer({ open, applicationId, token, formState, onNavigateToField, onApplyFieldAnswer, onClose }: Props) {
+export function ChatDrawer({ open, applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -82,7 +83,7 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
             const baseMessages = preApp.filter((msg) => msg.id !== 'tcpa-transition');
             api.post<{ success: boolean; data: ChatReply }>(
               `/api/chat/${applicationId}/post-consent-transition`,
-              { clientState: buildSafeClientState(formStateRef.current, null, baseMessages) },
+              { clientState: buildSafeClientState(formStateRef.current, pageContext, null, baseMessages) },
               token ?? undefined,
             ).then((transitionRes) => {
               if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
@@ -157,7 +158,7 @@ export function ChatDrawer({ open, applicationId, token, formState, onNavigateTo
     try {
       const res = await api.post<{ success: boolean; data: ChatReply }>(
         applicationId ? `/api/chat/${applicationId}/message` : '/api/chat/message',
-        { message, clientState: buildSafeClientState(formState, appliedField, messages) },
+        { message, clientState: buildSafeClientState(formState, pageContext, appliedField, messages) },
         token ?? undefined,
       );
       if (!res.data.suggestedActions.length && !res.data.nextField && isOptOutMessage(res.data.message)) {
@@ -334,11 +335,12 @@ function buildTcpaTransitionMessage(state: FormState): string {
   return 'Thanks — I checked the consent box and moved you to the next page. I could not confirm all of the business details from lookup, so the next step is to fill in the business information shown on the page.';
 }
 
-function buildSafeClientState(state: FormState, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {
+function buildSafeClientState(state: FormState, pageContext?: Record<string, unknown> | null, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {
   const owner = state.owners[0];
   return {
     applicationId: state.applicationId,
     currentStep: state.currentStep,
+    pageContext: pageContext || undefined,
     appliedField: appliedField || undefined,
     recentAssistantMessages: messages.filter((message) => message.role === 'assistant').slice(-8).map((message) => message.content),
     contact: { hasEmail: Boolean(state.contact.email), hasPhone: Boolean(state.contact.phone), tcpaConsent: state.contact.tcpaConsent },

@@ -87,6 +87,7 @@ export function MultiStepForm({ token }: Props) {
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
   const [uploadedDocumentsCount, setUploadedDocumentsCount] = useState(0);
   const [aiFocusField, setAiFocusField] = useState<string | null>(null);
+  const [aiPageContext, setAiPageContext] = useState<Record<string, unknown> | null>(null);
   // TCPA consent signaled from the AI chat
   const [chatTcpaConsented, setChatTcpaConsented] = useState(false);
   // Auto-open chat when entering step 2 with Google-populated business data
@@ -171,6 +172,10 @@ export function MultiStepForm({ token }: Props) {
   useEffect(() => {
     analytics.trackStep(state.currentStep, 'step_view');
   }, [state.currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (state.currentStep !== 2) setAiPageContext(null);
+  }, [state.currentStep]);
 
   // Flush analytics on tab hide / page close (abandonment detection)
   useEffect(() => {
@@ -473,7 +478,7 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
       </>
     ) : null;
   }
@@ -493,7 +498,7 @@ export function MultiStepForm({ token }: Props) {
         )}
         {state.currentStep === 2 && (
           <Step2ConfirmBusiness business={state.business} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
-            onNext={handleStep2Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep2DraftChange} />
+            onNext={handleStep2Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep2DraftChange} onAiPageContextChange={setAiPageContext} />
         )}
         {state.currentStep === 3 && (
           <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep3DraftChange} />
@@ -518,7 +523,7 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} autoOpen={autoOpenChat} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} autoOpen={autoOpenChat} />
       </div>
     </AnalyticsContext.Provider>
   );
