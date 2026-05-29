@@ -21,11 +21,17 @@ const devAllowedOrigins = process.env.NODE_ENV === 'production'
       'http://127.0.0.1:3003',
     ];
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  jwtSecret: process.env.JWT_SECRET || 'change-in-production',
-  encryptionKey: process.env.ENCRYPTION_KEY || '',
+  jwtSecret: isProduction
+    ? requireEnv('JWT_SECRET')
+    : (process.env.JWT_SECRET || 'dev-jwt-secret-change-me'),
+  encryptionKey: isProduction
+    ? requireEnv('ENCRYPTION_KEY')
+    : (process.env.ENCRYPTION_KEY || ''),
   allowedOrigins: Array.from(new Set([...configuredAllowedOrigins, ...devAllowedOrigins])),
   openCorporatesApiKey: process.env.OPENCORPORATES_API_KEY || '',
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || '',
@@ -34,6 +40,6 @@ export const config = {
   crmWebhookUrl: process.env.CRM_WEBHOOK_URL || '',
   crmApiKey: process.env.CRM_API_KEY || '',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3002',
-  isProduction: process.env.NODE_ENV === 'production',
+  isProduction,
 };
 

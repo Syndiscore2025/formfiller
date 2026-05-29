@@ -391,9 +391,6 @@ async function runDeliveryWithRetry(applicationId: string, tenantId: string): Pr
  * Safe to call multiple times — skips if already sent.
  */
 export async function enqueueCrmDelivery(applicationId: string, tenantId: string): Promise<void> {
-  const existing = await prisma.crmDelivery.findUnique({ where: { applicationId } });
-  if (existing?.status === 'sent') return; // already delivered
-
   // Check if CRM is configured at all
   const settings = await prisma.tenantSettings.findUnique({ where: { tenantId } });
   const hasConfig = Boolean(
@@ -410,14 +407,23 @@ export async function enqueueCrmDelivery(applicationId: string, tenantId: string
     );
   }
 
-  if (!existing) {
-    await prisma.crmDelivery.create({
-      data: {
-        applicationId,
-        status: hasConfig ? 'pending' : 'skipped',
-        lastError: hasConfig ? null : 'CRM not configured for this tenant',
-      },
-    });
+  // Atomic upsert: creates the delivery record if it doesn't exist, no-ops if
+  // it does. Prevents a duplicate-create race when two requests arrive at the
+  // same time (e.g. double-tap of the Finalize button).
+  const record = await prisma.crmDelivery.upsert({
+    where: { applicationId },
+    create: {
+      applicationId,
+      status: hasConfig ? 'pending' : 'skipped',
+      lastError: hasConfig ? null : 'CRM not configured for this tenant',
+    },
+    update: {}, // no-op — preserve existing record
+    select: { status: true },
+  });
+
+  if (record.status === 'sent') {
+    console.log(`[CRM] Already delivered for application ${applicationId} — skipping.`);
+    return;
   }
 
   if (!hasConfig) {

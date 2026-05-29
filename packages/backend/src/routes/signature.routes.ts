@@ -54,27 +54,34 @@ router.post(
     });
     if (!app) throw createError('Application not found', 404);
 
-    const existing = await prisma.signature.findUnique({ where: { applicationId: appId } });
-    if (existing) throw createError('Application already signed', 409);
-
     const now = new Date();
     const ipAddress = req.ip ?? '0.0.0.0';
     const userAgent = req.headers['user-agent'] ?? '';
 
-    await prisma.signature.create({
-      data: {
-        applicationId: appId,
-        signatureData,
-        signerName,
-        signerEmail,
-        ipAddress,
-        userAgent,
-        consentText: CONSENT_TEXT,
-        signedAt: now,
-        marketingConsent,
-        marketingConsentTimestamp: now,
-      },
-    });
+    try {
+      await prisma.signature.create({
+        data: {
+          applicationId: appId,
+          signatureData,
+          signerName,
+          signerEmail,
+          ipAddress,
+          userAgent,
+          consentText: CONSENT_TEXT,
+          signedAt: now,
+          marketingConsent,
+          marketingConsentTimestamp: now,
+        },
+      });
+    } catch (err: unknown) {
+      // Unique-constraint violation: two simultaneous sign requests.
+      // The first one succeeded; treat the second as a clean duplicate.
+      const code = typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code)
+        : '';
+      if (code === 'P2002') throw createError('Application already signed', 409);
+      throw err;
+    }
 
     await writeAuditLog({
       applicationId: appId,

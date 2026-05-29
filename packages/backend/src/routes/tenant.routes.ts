@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { optionalAuth, requireAuth, requireTenant, AuthRequest } from '../middleware/auth';
+import { optionalAuth, requireAuth, requireTenant, requireSuperAdmin, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { validate } from '../middleware/validate';
 import { encrypt } from '../utils/encryption';
@@ -158,8 +158,7 @@ const ADMIN_DEFAULTS = {
 
 router.get(
   '/settings/admin',
-  optionalAuth,
-  requireTenant,
+  requireAuth,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const settings = await prisma.tenantSettings.findUnique({
       where: { tenantId: req.tenantId! },
@@ -278,8 +277,8 @@ function emptyToNull<T extends Record<string, unknown>>(obj: T): T {
 
 router.patch(
   '/settings/admin',
-  optionalAuth,
-  requireTenant,
+  requireAuth,
+  requireSuperAdmin,
   validate(updateSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const body = req.body as z.infer<typeof updateSchema>;

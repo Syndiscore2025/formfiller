@@ -58,7 +58,14 @@ router.post(
   authLimiter,
   validate(registerSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { email, password, tenantSlug, tenantName } = req.body as z.infer<typeof registerSchema>;
+    const { email, password, tenantSlug, tenantName, adminKey } = req.body as z.infer<typeof registerSchema>;
+
+    // In production, ADMIN_REGISTRATION_KEY must be set and must match the request.
+    const registrationKey = process.env.ADMIN_REGISTRATION_KEY;
+    if (process.env.NODE_ENV === 'production') {
+      if (!registrationKey) throw createError('Registration is disabled in this environment', 403);
+      if (!adminKey || adminKey !== registrationKey) throw createError('Invalid admin registration key', 403);
+    }
 
     let tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
 
