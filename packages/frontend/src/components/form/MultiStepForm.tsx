@@ -1,5 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { BankStatementUpload } from './BankStatementUpload';
@@ -442,18 +443,7 @@ export function MultiStepForm({ token }: Props) {
     }
   }, [state.applicationId, token]);
 
-  if (disqualificationMessage) {
-    return (
-      <div className="surface-panel mx-auto max-w-2xl p-8 text-center">
-        <p className="surface-kicker text-amber-200">Application eligibility</p>
-        <h2 className="mt-3 text-2xl font-semibold text-white">Not eligible right now</h2>
-        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">{disqualificationMessage}</p>
-        <p className="mt-5 text-xs text-slate-500">
-          You can return when the business has active revenue and at least 1 month in business.
-        </p>
-      </div>
-    );
-  }
+  const eligibilityOverlay = disqualificationMessage ? <EligibilityDisqualificationOverlay message={disqualificationMessage} /> : null;
 
   if (submittedAt) {
     return state.applicationId ? (
@@ -493,7 +483,8 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
-        {(tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
+        {eligibilityOverlay}
+        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </>
     ) : null;
   }
@@ -540,9 +531,49 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
-        {(tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
+        {eligibilityOverlay}
+        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </div>
     </AnalyticsContext.Provider>
+  );
+}
+
+function EligibilityDisqualificationOverlay({ message }: { message: string }) {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="eligibility-disqualification-title"
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 transition-opacity duration-300 ease-out ${visible ? 'opacity-100' : 'opacity-0'}`}
+      style={{ background: 'rgba(2, 8, 23, 0.78)', backdropFilter: 'blur(5px)' }}
+    >
+      <div className={`w-full max-w-xl transition-all duration-300 ease-out ${visible ? 'translate-y-0 scale-100' : 'translate-y-3 scale-[0.98]'}`}>
+        <div className="owner-verification-card surface-panel-soft border border-amber-300/20 bg-slate-950/95 p-7 text-center shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(251,191,36,0.08)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">Application eligibility</p>
+          <h3 id="eligibility-disqualification-title" className="mt-3 text-2xl font-semibold text-white">Not eligible right now</h3>
+          <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">{message}</p>
+          <p className="mt-5 text-xs text-slate-500">You can return when the business has active revenue and at least 1 month in business.</p>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

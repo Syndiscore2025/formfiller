@@ -731,6 +731,10 @@ function buildSensitiveInfoReply(nextField: NextField | null): ChatReply {
 }
 
 function enforceFinalChatSafety(reply: ChatReply): { reply: ChatReply; fundingSafety: FundingSafetyResult } {
+  if (reply.disqualified) {
+    return { reply: enforceAssistantSafety(reply), fundingSafety: { message: reply.message, replaced: false, issues: [] } };
+  }
+
   const fundingSafety = enforceFundingResponseSafety(reply.message, reply.nextField);
   const safeFundingReply: ChatReply = fundingSafety.replaced
     ? {
