@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { BankStatementUpload } from './BankStatementUpload';
@@ -89,6 +89,8 @@ export function MultiStepForm({ token }: Props) {
   const [uploadedDocumentsCount, setUploadedDocumentsCount] = useState(0);
   const [aiFocusField, setAiFocusField] = useState<string | null>(null);
   const [aiPageContext, setAiPageContext] = useState<Record<string, unknown> | null>(null);
+  const [disqualificationMessage, setDisqualificationMessage] = useState<string | null>(null);
+  const disqualifiedSaveRef = useRef(false);
   // TCPA consent signaled from the AI chat
   const [chatTcpaConsented, setChatTcpaConsented] = useState(false);
   // Stable callback so BankStatementUpload's completion effect isn't torn down
@@ -198,9 +200,15 @@ export function MultiStepForm({ token }: Props) {
 
   const saveSection = useCallback(async (path: string, body: unknown, appId: string): Promise<boolean> => {
     setState((prev) => ({ ...prev, isSaving: true }));
+    disqualifiedSaveRef.current = false;
     try {
-      await api.put(`/api/forms/${appId}/${path}`, body, token ?? undefined);
+      const res = await api.put<{ success: boolean; data?: { disqualified?: boolean; message?: string } }>(`/api/forms/${appId}/${path}`, body, token ?? undefined);
       setState((prev) => ({ ...prev, isSaving: false, lastSaved: new Date().toISOString() }));
+      if (res.data?.disqualified) {
+        disqualifiedSaveRef.current = true;
+        setDisqualificationMessage(res.data.message || 'This application does not meet the minimum requirements right now.');
+        return false;
+      }
       return true;
     } catch (err) {
       console.error('Save error:', err);
@@ -208,6 +216,10 @@ export function MultiStepForm({ token }: Props) {
       return false;
     }
   }, [token]);
+
+  const handleDisqualified = useCallback((message: string) => {
+    setDisqualificationMessage(message || 'This application does not meet the minimum requirements right now.');
+  }, []);
 
   const advanceStep = useCallback(async (nextStep: number) => {
     if (!state.applicationId) return;
@@ -337,6 +349,7 @@ export function MultiStepForm({ token }: Props) {
     setState((prev) => ({ ...prev, business: businessData, homeAddressSameAsBusiness: homeAddrSame }));
     const ok = await saveSection('business', businessData, appId);
     if (!ok) {
+      if (disqualifiedSaveRef.current) return;
       alert('We could not save your business information. Please double-check the form and try again.');
       return;
     }
@@ -428,6 +441,19 @@ export function MultiStepForm({ token }: Props) {
     }
   }, [state.applicationId, token]);
 
+  if (disqualificationMessage) {
+    return (
+      <div className="surface-panel mx-auto max-w-2xl p-8 text-center">
+        <p className="surface-kicker text-amber-200">Application eligibility</p>
+        <h2 className="mt-3 text-2xl font-semibold text-white">Not eligible right now</h2>
+        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">{disqualificationMessage}</p>
+        <p className="mt-5 text-xs text-slate-500">
+          You can return when the business has active revenue and at least 1 month in business.
+        </p>
+      </div>
+    );
+  }
+
   if (submittedAt) {
     return state.applicationId ? (
       <>
@@ -466,7 +492,7 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />
       </>
     ) : null;
   }
@@ -513,7 +539,7 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />
       </div>
     </AnalyticsContext.Provider>
   );

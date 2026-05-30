@@ -9,6 +9,11 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { createError } from '../middleware/errorHandler';
 import { encrypt } from '../utils/encryption';
 import { writeAuditLog } from '../services/auditLog.service';
+import {
+  buildDisqualificationReply,
+  evaluateBusinessStartDateDisqualification,
+  markApplicationDisqualified,
+} from '../services/disqualification.service';
 
 const router = Router();
 const guestAccess = [optionalAuth, requireTenant, requireCustomFrontendAccess];
@@ -115,6 +120,26 @@ router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHa
     update: data,
     create: { applicationId: appId, ...data },
   });
+  const disqualification = evaluateBusinessStartDateDisqualification(normalizedDate);
+  if (disqualification) {
+    await markApplicationDisqualified({
+      applicationId: appId,
+      tenantId: req.tenantId!,
+      result: disqualification,
+      source: 'business_start_date',
+    });
+    await writeAuditLog({ applicationId: appId, action: 'BUSINESS_INFO_SAVED', actor: req.userId, ipAddress: req.ip });
+    res.json({
+      success: true,
+      data: {
+        disqualified: true,
+        code: disqualification.code,
+        reason: disqualification.reason,
+        message: buildDisqualificationReply(disqualification),
+      },
+    });
+    return;
+  }
   await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'BUSINESS_INFO_SAVED', actor: req.userId, ipAddress: req.ip });
   res.json({ success: true });

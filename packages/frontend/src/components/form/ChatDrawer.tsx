@@ -17,6 +17,8 @@ interface ChatReply {
   message: string;
   nextField: { step: number; stepName: string; fieldKey: string; label: string; question: string } | null;
   suggestedActions: string[];
+  disqualified?: boolean;
+  disqualificationCode?: string;
 }
 
 interface Props {
@@ -27,12 +29,13 @@ interface Props {
   pageContext?: Record<string, unknown> | null;
   onNavigateToField?: (field: NonNullable<ChatReply['nextField']>) => void;
   onApplyFieldAnswer?: (field: NonNullable<ChatReply['nextField']>, value: string) => boolean;
+  onDisqualified?: (message: string) => void;
   onClose: () => void;
 }
 
 const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
 
-export function ChatDrawer({ open, applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, onClose }: Props) {
+export function ChatDrawer({ open, applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,6 +102,10 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
       );
       if (!res.data.suggestedActions.length && !res.data.nextField && isOptOutMessage(res.data.message)) {
         setChatStopped(true);
+      }
+      if (res.data.disqualified) {
+        setChatStopped(true);
+        onDisqualified?.(res.data.message);
       }
       setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: res.data.message, nextField: res.data.nextField }]);
     } catch (err) {
@@ -187,6 +194,7 @@ function shouldAutoApplyFieldAnswer(field: NonNullable<ChatReply['nextField']>, 
   const value = rawValue.trim();
   if (!value || looksLikeQuestionOrObjection(value)) return false;
   if (looksLikeHostileOrProfane(value)) return false;
+  if (looksLikeMerchantContextNote(value)) return false;
 
   switch (field.fieldKey) {
     case 'tcpaConsent': {
@@ -203,6 +211,7 @@ function shouldAutoApplyFieldAnswer(field: NonNullable<ChatReply['nextField']>, 
     }
     case 'contact.email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     case 'contact.phone': return value.replace(/[^0-9]/g, '').length >= 10;
+    case 'business.legalName': return looksLikeBusinessNameAnswer(value);
     case 'business.ein': return /^\d{2}-?\d{7}$/.test(value) || /sole propriet/i.test(value);
     case 'business.industry': return isKnownIndustry(value);
     case 'business.businessStartDate': return value.length >= 4 && value.length <= 40;
@@ -216,6 +225,24 @@ function shouldAutoApplyFieldAnswer(field: NonNullable<ChatReply['nextField']>, 
     case 'loanRequest.amountRequested': return value.length <= 80;
     default: return value.length <= 120;
   }
+}
+
+function looksLikeBusinessNameAnswer(value: string): boolean {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  const lower = normalized.toLowerCase();
+  if (normalized.length < 2 || normalized.length > 100) return false;
+  if (/[?!]/.test(normalized)) return false;
+  if (/^(?:i|i'm|im|we|we're|were|my|our)\b/i.test(normalized)) return false;
+  if (/\b(?:have|had|owe|need|want|filed|defaulted|behind|struggling)\b/i.test(lower)) return false;
+  if (/\b(?:irs|lien|tax debt|mca|merchant cash advance|cash advance|position|positions|loan|loans|bankruptcy|collections|overdraft|nsf)\b/i.test(lower)) return false;
+  return /[a-z0-9]/i.test(normalized);
+}
+
+function looksLikeMerchantContextNote(value: string): boolean {
+  const lower = value.toLowerCase().replace(/[^a-z0-9%$ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const startsLikeStatement = /^(?:i|im|i m|i have|i had|i owe|we|we have|we had|my business|our business)\b/.test(lower);
+  const contextKeywords = /\b(?:irs|tax lien|lien|tax debt|mca|merchant cash advance|cash advance|position|positions|bankruptcy|chapter 7|chapter 11|chapter 13|default|defaulted|collections|overdraft|nsf|negative balance|debt|lawsuit|judgment|non citizen|not a citizen|itin only)\b/.test(lower);
+  return startsLikeStatement && contextKeywords;
 }
 
 function looksLikeQuestionOrObjection(value: string): boolean {

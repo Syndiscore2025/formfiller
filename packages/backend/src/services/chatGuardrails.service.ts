@@ -356,6 +356,10 @@ export function extractQualificationSignals(message: string): QualificationSigna
     'citizenship_or_residency_review', 'high_review');
   addSignalIf(signals, lower, /\b(?:bankruptcy|bankrupt|chapter 7|chapter 11|chapter 13|defaulted|collections|tax lien)\b/i,
     'credit_or_legal_review', 'review');
+  addSignalIf(signals, lower, /\b(?:irs lien|lien with the irs|lien from the irs|tax debt|owe the irs|irs debt|tax levy|judgment)\b/i,
+    'tax_or_legal_review', 'review');
+  addSignalIf(signals, lower, /\b(?:multiple mca|mca positions?|merchant cash advance positions?|cash advance positions?|stacked advances?|stacking)\b/i,
+    'existing_mca_positions_review', 'review');
   addSignalIf(signals, lower, /\b(?:negative balance|overdraft|nsf|bounced payment|returned payment)\b/i,
     'bank_activity_review', 'review');
   addSignalIf(signals, lower, /\b(?:cannabis|marijuana|dispensary|gambling|casino|adult entertainment|strip club|firearms|crypto|cryptocurrency)\b/i,

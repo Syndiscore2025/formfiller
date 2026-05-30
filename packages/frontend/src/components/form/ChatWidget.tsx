@@ -12,9 +12,10 @@ interface Props {
   pageContext?: Record<string, unknown> | null;
   onNavigateToField?: (field: { step: number; fieldKey: string }) => void;
   onApplyFieldAnswer?: (field: { step: number; fieldKey: string }, value: string) => boolean;
+  onDisqualified?: (message: string) => void;
 }
 
-export function ChatWidget({ applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer }: Props) {
+export function ChatWidget({ applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified }: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -41,6 +42,7 @@ export function ChatWidget({ applicationId, token, formState, pageContext, onNav
         pageContext={pageContext}
         onNavigateToField={onNavigateToField}
         onApplyFieldAnswer={onApplyFieldAnswer}
+        onDisqualified={onDisqualified}
         onClose={() => setOpen(false)}
       />
     </>,

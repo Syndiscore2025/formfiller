@@ -26,6 +26,8 @@ export interface ApplicationValidationRecord {
   contactEmail: string | null;
   contactPhone: string | null;
   tcpaConsentStep1: boolean;
+  disqualifiedAt?: Date | null;
+  disqualificationReason?: string | null;
   homeBasedBusiness: boolean | null;
   hasAdditionalOwners: boolean | null;
   business: {
@@ -98,6 +100,9 @@ function validateRecord(
   if (!text(app.contactEmail)) addIssue(issues, 'contactEmail', 'Contact email is required.');
   if (digits(app.contactPhone).length < 10) addIssue(issues, 'contactPhone', 'Valid contact phone is required.');
   if (!app.tcpaConsentStep1) addIssue(issues, 'tcpaConsentStep1', 'Step 1 TCPA/contact consent is required.');
+  if (app.disqualifiedAt) {
+    addIssue(issues, 'disqualified', app.disqualificationReason || 'Application does not meet minimum eligibility requirements.');
+  }
 
   const business = app.business;
   if (!business) {
@@ -190,6 +195,8 @@ export async function getApplicationValidationState(
         contactEmail: true,
         contactPhone: true,
         tcpaConsentStep1: true,
+        disqualifiedAt: true,
+        disqualificationReason: true,
         homeBasedBusiness: true,
         hasAdditionalOwners: true,
         business: {

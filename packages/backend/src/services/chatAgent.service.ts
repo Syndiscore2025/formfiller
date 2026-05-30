@@ -8,6 +8,12 @@ import {
   type FundingSafetyResult,
   type GuardrailEvaluation,
 } from './chatGuardrails.service';
+import {
+  buildDisqualificationReply,
+  evaluateChatDisqualification,
+  markApplicationDisqualified,
+  type DisqualificationResult,
+} from './disqualification.service';
 import { getCurrentDateContext } from './localContext.service';
 
 type ChatRole = 'user' | 'assistant';
@@ -35,6 +41,8 @@ export interface ChatReply {
   message: string;
   nextField: NextField | null;
   suggestedActions: string[];
+  disqualified?: boolean;
+  disqualificationCode?: string;
 }
 
 interface NextField {
@@ -99,10 +107,19 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
     message: safeMessage,
     nextField,
   });
+  const disqualification = evaluateChatDisqualification(safeMessage);
 
   let reply: ChatReply;
   if (isOptOutRequest(safeMessage)) {
     reply = buildOptOutReply();
+  } else if (disqualification) {
+    await markApplicationDisqualified({
+      applicationId: input.applicationId,
+      tenantId: input.tenantId,
+      result: disqualification,
+      source: 'ai_chat',
+    });
+    reply = buildDisqualificationChatReply(disqualification);
   } else if (redactedSensitiveInput) {
     reply = buildSensitiveInfoReply(nextField);
   } else if (!config.openAiApiKey) {
@@ -166,10 +183,13 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
     message: safeMessage,
     nextField,
   });
+  const disqualification = evaluateChatDisqualification(safeMessage);
 
   let reply: ChatReply;
   if (isOptOutRequest(safeMessage)) {
     reply = buildOptOutReply();
+  } else if (disqualification) {
+    reply = buildDisqualificationChatReply(disqualification);
   } else if (redactedSensitiveInput) {
     reply = buildSensitiveInfoReply(nextField);
   } else if (!config.openAiApiKey) {
@@ -653,6 +673,16 @@ function buildOptOutReply(): ChatReply {
   return { message: OPT_OUT_MESSAGE, nextField: null, suggestedActions: [] };
 }
 
+function buildDisqualificationChatReply(result: DisqualificationResult): ChatReply {
+  return {
+    message: buildDisqualificationReply(result),
+    nextField: null,
+    suggestedActions: [],
+    disqualified: true,
+    disqualificationCode: result.code,
+  };
+}
+
 function buildFallbackReply(userMessage: string, nextField: NextField | null): ChatReply {
   if (isSecureIdentityField(nextField)) return buildSensitiveInfoReply(nextField);
 
@@ -783,6 +813,7 @@ async function requestOpenAiReply(input: {
     'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If pageContext says Step 2 is in review mode, do not ask for hidden fields such as Industry yet; guide them to the visible Home Based Business Yes/No question or the Confirm & Continue button. If a step is complete, recognize that and move them to the next visible action. Immediately after contact consent/TCPA on Step 1, the next move is ALWAYS Step 2 Business Details review — ask the merchant to confirm the business information if lookup populated it, or fill the visible business fields if lookup did not. Do NOT jump to Business Start Date after consent.',
     'Post-consent transition: if applicationContext.transition.type is post_tcpa_to_business_details, write exactly one concise transition message. Thank the merchant for consenting, then guide them to Step 2 Business Details. Do not include an icebreaker, weather, local news, sports, or other local-context opener. Do not ask a separate question before the Step 2 instruction.',
     'Field capture flow: if applicationContext.clientState.appliedField is present, you may naturally acknowledge that the answer was captured from chat, then immediately move to the next missing field. If no appliedField is present, do not claim you changed the form — guide them to enter or confirm it in the visible UI.',
+    'Field-answer discernment: merchants may mention context such as IRS liens, tax issues, existing MCA positions, debts, non-citizenship, or other underwriting notes while you are asking for a form field. Acknowledge those briefly, but do NOT treat those statements as the requested field answer unless clientState.appliedField confirms the UI captured it. Continue asking for the exact next missing field.',
     'Hard funding guardrails — ALWAYS:',
     '- NEVER quote, estimate, hint at, or give ranges for: interest rate, APR, factor rate, fees, payment amount, payback amount, term length, daily/weekly/monthly payments, funding amount, or approval odds.',
     '- NEVER promise approval, prequalification, or eligibility. Do not declare a merchant declined either — that is the funding team\'s call after they review the complete signed file.',
@@ -792,7 +823,8 @@ async function requestOpenAiReply(input: {
     'Annual revenue math is allowed: if the merchant asks how to annualize monthly revenue/sales for the Estimated Annual Revenue field, you may multiply monthly revenue by 12, state the annualized revenue, and tell them which visible annual revenue range to select. This is field help, not a funding quote. Do not discuss approval, rates, terms, payments, or funding offers in that answer.',
     'EIN rule: EIN is the 9-digit business tax ID on the SS-4 confirmation letter the IRS sent when the business was first registered. It may also appear on business tax returns, payroll records, business bank paperwork, or IRS notices. If the merchant is a sole proprietor without an EIN, do NOT send them to the IRS for a new number or replacement letter (that takes weeks) — tell them to select the Sole Proprietorship option in the form and continue.',
     'Field-help rule: if the merchant asks what a field means, why it is needed, or where to find the info, answer that question first in plain language using the fieldHelpGuidance hint when provided, then guide them to the next missing required field (do NOT push them to optional fields they skipped unless they ask to revisit).',
-    'Silent qualification rule: if the merchant says something that may matter for underwriting (startup, no revenue, bankruptcy, restricted industry, non-citizen, NSF, etc.) DO NOT alert them, DO NOT disqualify, DO NOT say "this may be an issue." Just keep them moving through the form normally — those signals are flagged internally for the funding team.',
+    'Hard disqualification rule: if the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, the backend will disqualify the lead. If you see disqualified=true or no next field, do not keep pushing the form.',
+    'Silent qualification rule: if the merchant says something that may matter for underwriting but is NOT a hard disqualifier (bankruptcy, restricted industry, non-citizen, NSF, etc.) DO NOT alert them, DO NOT disqualify, DO NOT say "this may be an issue." Just keep them moving through the form normally — those signals are flagged internally for the funding team.',
     'Forward motion: every reply (unless the merchant explicitly opts out) ends with either a clear next step toward the next missing field, an invitation to review and sign, or a short follow-up question that moves the file forward.',
     'Opt-out: if the merchant opts out or says stop, acknowledge respectfully and stop pushing the application.',
     'Output format: return ONLY valid JSON with keys: message (string), suggestedActions (array of up to 3 short button labels).',
