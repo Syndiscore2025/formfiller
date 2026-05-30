@@ -57,6 +57,15 @@ export interface OwnerInfo {
   zipCode: string;
 }
 
+export const ESTIMATED_CREDIT_SCORE_OPTIONS = [
+  'Below 550',
+  '550 - 599',
+  '600 - 649',
+  '650 - 699',
+  '700 - 749',
+  '750+',
+] as const;
+
 export interface FinancialInfo {
   annualRevenue: string; // dropdown value
 }

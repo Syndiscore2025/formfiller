@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { OwnerInfo, ContactInfo, BusinessInfo, US_STATES } from '@/types/application';
+import { OwnerInfo, ContactInfo, BusinessInfo, US_STATES, ESTIMATED_CREDIT_SCORE_OPTIONS } from '@/types/application';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
@@ -17,12 +17,13 @@ interface Props {
   homeAddressSameAsBusiness: boolean | null;
   aiFocusField?: string | null;
   onAiFocusHandled?: () => void;
+  showEstimatedCreditScore?: boolean;
   onNext: (owner: OwnerInfo, hasAdditionalOwners: boolean | null, ownerHomeSameAsBusiness: boolean) => void;
   onBack: () => void;
   onDraftChange?: (owner: OwnerInfo, hasAdditionalOwners: boolean | null, ownerHomeSameAsBusiness: boolean) => void;
 }
 
-export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, aiFocusField, onAiFocusHandled, onNext, onBack, onDraftChange }: Props) {
+export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwners: initialHasAdditional, homeAddressSameAsBusiness, aiFocusField, onAiFocusHandled, showEstimatedCreditScore = true, onNext, onBack, onDraftChange }: Props) {
   const analytics = useAnalyticsContext();
   const [firstName, setFirstName] = useState(owner.firstName || contact.firstName || '');
   const [lastName, setLastName] = useState(owner.lastName || contact.lastName || '');
@@ -30,6 +31,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const phone = owner.phone || contact.phone || '';
 
   const [ownershipPct, setOwnershipPct] = useState(owner.ownershipPct || '');
+  const [creditScore, setCreditScore] = useState(owner.creditScore || '');
   const [ssn, setSsn] = useState(owner.ssn || '');
   const [isItin, setIsItin] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState(owner.dateOfBirth || '');
@@ -60,12 +62,13 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     if (!isEcho('firstName', owner.firstName || '')) setFirstName((prev) => (prev === (owner.firstName || '') ? prev : owner.firstName || ''));
     if (!isEcho('lastName', owner.lastName || '')) setLastName((prev) => (prev === (owner.lastName || '') ? prev : owner.lastName || ''));
     if (!isEcho('ownershipPct', owner.ownershipPct || '')) setOwnershipPct((prev) => (prev === (owner.ownershipPct || '') ? prev : owner.ownershipPct || ''));
+    if (!isEcho('creditScore', owner.creditScore || '')) setCreditScore((prev) => (prev === (owner.creditScore || '') ? prev : owner.creditScore || ''));
     if (owner.streetAddress && !isEcho('streetAddress', owner.streetAddress)) setStreetAddress((prev) => (prev === owner.streetAddress ? prev : owner.streetAddress));
     if (owner.streetAddress2 && !isEcho('streetAddress2', owner.streetAddress2)) setStreetAddress2((prev) => (prev === owner.streetAddress2 ? prev : owner.streetAddress2));
     if (owner.city && !isEcho('city', owner.city)) setCity((prev) => (prev === owner.city ? prev : owner.city));
     if (owner.state && !isEcho('state', owner.state)) setState((prev) => (prev === owner.state ? prev : owner.state));
     if (owner.zipCode && !isEcho('zipCode', owner.zipCode)) setZipCode((prev) => (prev === owner.zipCode ? prev : owner.zipCode));
-  }, [owner.firstName, owner.lastName, owner.ownershipPct, owner.streetAddress, owner.streetAddress2, owner.city, owner.state, owner.zipCode]);
+  }, [owner.firstName, owner.lastName, owner.ownershipPct, owner.creditScore, owner.streetAddress, owner.streetAddress2, owner.city, owner.state, owner.zipCode]);
 
   const pct = Number(ownershipPct);
   const showAdditionalQuestion = !(pct >= 81 && pct <= 100);
@@ -107,7 +110,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     // Remember the raw values we just pushed up so the sync-down effect can tell
     // our own echo apart from a genuine external (lookup/AI) change and avoid flicker.
     lastPushedOwnerRef.current = {
-      firstName, lastName, ownershipPct, streetAddress, streetAddress2, city, state, zipCode,
+      firstName, lastName, ownershipPct, creditScore, streetAddress, streetAddress2, city, state, zipCode,
     };
     onDraftChange?.({
       ownerIndex: owner.ownerIndex ?? 0,
@@ -118,14 +121,14 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
       ownershipPct,
       ssn,
       dateOfBirth,
-      creditScore: owner.creditScore || '',
+      creditScore: showEstimatedCreditScore ? creditScore : '',
       streetAddress,
       streetAddress2,
       city,
       state,
       zipCode,
     }, hasAdditional, sameAsBusiness);
-  }, [owner.ownerIndex, owner.creditScore, firstName, lastName, email, phone, ownershipPct, ssn, dateOfBirth, streetAddress, streetAddress2, city, state, zipCode, hasAdditional, sameAsBusiness, onDraftChange]);
+  }, [owner.ownerIndex, showEstimatedCreditScore, creditScore, firstName, lastName, email, phone, ownershipPct, ssn, dateOfBirth, streetAddress, streetAddress2, city, state, zipCode, hasAdditional, sameAsBusiness, onDraftChange]);
 
   const handleSameAsBusinessChange = (checked: boolean) => {
     setSameAsBusiness(checked);
@@ -255,7 +258,8 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
     try {
       const ownerData: OwnerInfo = {
         ownerIndex: 0, firstName: firstName.trim(), lastName: lastName.trim(), email, phone,
-        ownershipPct, ssn: ssn.replace(/\D/g, ''), dateOfBirth, creditScore: '',
+        ownershipPct, ssn: ssn.replace(/\D/g, ''), dateOfBirth,
+        creditScore: showEstimatedCreditScore ? creditScore.trim() : '',
         streetAddress: streetAddress.trim(), streetAddress2: streetAddress2.trim(),
         city: city.trim(), state, zipCode: zipCode.trim(),
       };
@@ -291,9 +295,29 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
             onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
         </div>
 
-        <Input label="Ownership %" required placeholder="e.g., 51" value={ownershipPct}
-          onChange={(e) => setOwnershipPct(e.target.value.replace(/\D/g, '').slice(0, 3))}
-          error={errors.ownershipPct} autoComplete="off" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Ownership %" required placeholder="e.g., 51" value={ownershipPct}
+            onChange={(e) => setOwnershipPct(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            error={errors.ownershipPct} autoComplete="off" />
+          {showEstimatedCreditScore && (
+            <>
+              <Input
+                label="Estimated Credit Score"
+                placeholder="Select or type estimate"
+                value={creditScore}
+                onChange={(e) => setCreditScore(e.target.value.slice(0, 40))}
+                list="estimated-credit-score-options"
+                autoComplete="off"
+                hint="Optional — choose a range or type an estimate."
+              />
+              <datalist id="estimated-credit-score-options">
+                {ESTIMATED_CREDIT_SCORE_OPTIONS.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </div>
 
         {/* Home Address — hidden entirely when user already said "same as business" on Step 2 */}
         {!addrFromBiz && (<>

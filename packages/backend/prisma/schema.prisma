@@ -50,6 +50,7 @@ model TenantSettings {
   pdfShowContactPhone     Boolean @default(true)  /// Include merchant contact phone on PDF
   pdfShowAnnualRevenue    Boolean @default(true)  /// Include estimated annual revenue on PDF
   pdfShowAmountRequested  Boolean @default(true)  /// Include amount requested on PDF
+  showEstimatedCreditScore Boolean @default(true) /// Show estimated credit score on merchant app, PDF, and delivery payload
 
   // ── Post-completion ──────────────────────────────────────────────────────
   websiteUrl          String?  /// Where the merchant is redirected after completing the application

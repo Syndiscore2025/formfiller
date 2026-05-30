@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SaveIndicator } from '@/components/ui/SaveIndicator';
 import { BankStatementUpload } from './BankStatementUpload';
@@ -31,6 +31,7 @@ interface TenantSettings {
   pdfShowContactPhone: boolean;
   pdfShowAnnualRevenue: boolean;
   pdfShowAmountRequested: boolean;
+  showEstimatedCreditScore: boolean;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -90,10 +91,6 @@ export function MultiStepForm({ token }: Props) {
   const [aiPageContext, setAiPageContext] = useState<Record<string, unknown> | null>(null);
   // TCPA consent signaled from the AI chat
   const [chatTcpaConsented, setChatTcpaConsented] = useState(false);
-  // Auto-open chat when entering step 2 with Google-populated business data
-  const [autoOpenChat, setAutoOpenChat] = useState(false);
-  const autoOpenChatFiredRef = useRef(false);
-
   // Stable callback so BankStatementUpload's completion effect isn't torn down
   // on every parent render (which would cancel the 1.2s reveal timer).
   const handleComplete = useCallback(() => {
@@ -154,16 +151,6 @@ export function MultiStepForm({ token }: Props) {
 
   // Apply tenant theme (dark/light). A user override in localStorage wins.
   useTheme(tenantSettings?.theme ?? null);
-
-  // Auto-open the chat once when entering step 2 with Google-populated business data
-  useEffect(() => {
-    if (state.currentStep !== 2 || autoOpenChatFiredRef.current) return;
-    const hasGoogleData = Object.keys(state.business?.fieldSources || {}).length > 0;
-    if (hasGoogleData) {
-      autoOpenChatFiredRef.current = true;
-      setAutoOpenChat(true);
-    }
-  }, [state.currentStep, state.business?.fieldSources]);
 
   // ── Analytics: keystroke tracking, field-level events, abandonment ──
   const analytics = useAnalytics(state.applicationId, token);
@@ -284,7 +271,7 @@ export function MultiStepForm({ token }: Props) {
       'business.legalName', 'business.stateOfFormation', 'business.ein', 'business.entityType', 'business.industry',
       'business.businessStartDate', 'business.streetAddress', 'business.city', 'business.state', 'business.zipCode', 'contact.email', 'contact.phone',
       'application.homeBasedBusiness', 'financial.annualRevenue', 'loanRequest.amountRequested', 'owner.firstName',
-      'owner.lastName', 'owner.ownershipPct', 'owner.streetAddress', 'owner.city', 'owner.state', 'owner.zipCode',
+      'owner.lastName', 'owner.ownershipPct', 'owner.creditScore', 'owner.streetAddress', 'owner.city', 'owner.state', 'owner.zipCode',
     ]);
     if (!supportedFieldKeys.has(field.fieldKey)) return false;
     if (field.fieldKey === 'application.homeBasedBusiness' && homeBasedAnswer === null) return false;
@@ -318,6 +305,7 @@ export function MultiStepForm({ token }: Props) {
         case 'owner.firstName': return { ...prev, currentStep: field.step, owners: [{ ...owner, firstName: value }] };
         case 'owner.lastName': return { ...prev, currentStep: field.step, owners: [{ ...owner, lastName: value }] };
         case 'owner.ownershipPct': return { ...prev, currentStep: field.step, owners: [{ ...owner, ownershipPct: value.replace(/[^0-9.]/g, '') }] };
+        case 'owner.creditScore': return { ...prev, currentStep: field.step, owners: [{ ...owner, creditScore: value.slice(0, 40) }] };
         case 'owner.streetAddress': return { ...prev, currentStep: field.step, owners: [{ ...owner, streetAddress: value }] };
         case 'owner.city': return { ...prev, currentStep: field.step, owners: [{ ...owner, city: value }] };
         case 'owner.state': return { ...prev, currentStep: field.step, owners: [{ ...owner, state: value.toUpperCase() }] };
@@ -507,6 +495,7 @@ export function MultiStepForm({ token }: Props) {
           <Step6OwnerDetails owner={state.owners[0] || {} as OwnerInfo} contact={state.contact} business={state.business}
             hasAdditionalOwners={state.hasAdditionalOwners} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
             aiFocusField={aiFocusField} onAiFocusHandled={() => setAiFocusField(null)}
+            showEstimatedCreditScore={tenantSettings?.showEstimatedCreditScore ?? true}
             onNext={handleStep4Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep4DraftChange} />
           )}
         {state.currentStep === 5 && (
@@ -517,13 +506,14 @@ export function MultiStepForm({ token }: Props) {
               showContactPhone: tenantSettings.pdfShowContactPhone,
               showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
               showAmountRequested: tenantSettings.pdfShowAmountRequested,
+              showEstimatedCreditScore: tenantSettings.showEstimatedCreditScore,
             } : undefined}
             onBack={() => void goBackOneSection()}
             onSubmitted={setSubmittedAt}
             token={token}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} autoOpen={autoOpenChat} />
+        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} />
       </div>
     </AnalyticsContext.Provider>
   );

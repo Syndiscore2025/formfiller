@@ -44,7 +44,7 @@ interface Props {
 }
 
 const TCPA_TEXT =
-  'By clicking "Continue", I consent to be contacted about my funding request via phone, email, or text message. Standard message and data rates may apply. This consent is not required to receive funding.';
+  'By clicking "Continue", I consent to receive calls, text messages, and emails about my business funding request from this platform, its representatives, and participating lending partners. Message and data rates may apply. Consent is not required as a condition of receiving funding, and I can opt out of text messages by replying STOP.';
 
 export function Step1EINLookup({ business, contact, onAutoPopulate, onNext, token, onDraftChange, chatTcpaConsentSignal }: Props) {
   const [email, setEmail] = useState(contact.email || '');

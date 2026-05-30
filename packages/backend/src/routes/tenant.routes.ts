@@ -31,6 +31,7 @@ const PUBLIC_SETTINGS_SELECT = {
   pdfShowContactPhone: true,
   pdfShowAnnualRevenue: true,
   pdfShowAmountRequested: true,
+  showEstimatedCreditScore: true,
 } as const;
 
 const PUBLIC_SETTINGS_DEFAULTS = {
@@ -49,6 +50,7 @@ const PUBLIC_SETTINGS_DEFAULTS = {
   pdfShowContactPhone: true,
   pdfShowAnnualRevenue: true,
   pdfShowAmountRequested: true,
+  showEstimatedCreditScore: true,
 };
 
 /**
@@ -287,6 +289,7 @@ const updateSchema = z.object({
   pdfShowContactPhone: z.boolean().optional(),
   pdfShowAnnualRevenue: z.boolean().optional(),
   pdfShowAmountRequested: z.boolean().optional(),
+  showEstimatedCreditScore: z.boolean().optional(),
   switchboxApiUrl: optionalNullable(urlOrBlank),
   switchboxApiKey: optionalNullable(z.string().trim().max(500)),
   documentStorageProvider: optionalNullable(z.enum(['database', 's3'])),

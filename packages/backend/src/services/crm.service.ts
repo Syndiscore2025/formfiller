@@ -95,6 +95,7 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
   });
 
   const tenantSettings = app.tenant.settings;
+  const showEstimatedCreditScore = tenantSettings?.showEstimatedCreditScore ?? true;
 
   // Generate signed PDF as base64
   let signedApplicationBase64: string | undefined;
@@ -136,6 +137,7 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
             lastName: owner.lastName ?? undefined,
             ssn: ownerSsn,
             ownershipPct: owner.ownershipPct ?? undefined,
+            creditScore: showEstimatedCreditScore ? owner.creditScore ?? undefined : undefined,
             dateOfBirth: owner.dateOfBirth ?? undefined,
             streetAddress: owner.streetAddress ?? undefined,
             city: owner.city ?? undefined,
@@ -168,6 +170,7 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
           showContactPhone: tenantSettings.pdfShowContactPhone,
           showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
           showAmountRequested: tenantSettings.pdfShowAmountRequested,
+          showEstimatedCreditScore,
         } : undefined,
       );
       const chunks: Buffer[] = [];
@@ -293,6 +296,7 @@ async function buildSwitchboxPayload(applicationId: string): Promise<Record<stri
       firstName: o.firstName,
       lastName: o.lastName,
       ownershipPct: o.ownershipPct,
+      creditScore: showEstimatedCreditScore ? o.creditScore : null,
       dateOfBirth: o.dateOfBirth,
       address: { street: o.streetAddress, city: o.city, state: o.state, zip: o.zipCode },
     })),

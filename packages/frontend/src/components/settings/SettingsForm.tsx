@@ -28,6 +28,7 @@ export interface AdminSettings {
   pdfShowContactPhone: boolean;
   pdfShowAnnualRevenue: boolean;
   pdfShowAmountRequested: boolean;
+  showEstimatedCreditScore: boolean;
   switchboxApiUrl: string | null;
   switchboxApiKeyConfigured: boolean;
   documentStorageProvider: string | null;
@@ -76,6 +77,7 @@ export interface AdminSettings {
 
 interface Props {
   initial: AdminSettings;
+  token: string;
   onSaved: (updated: AdminSettings) => void;
 }
 
@@ -87,7 +89,7 @@ function blankIfPlaceholderUrl(value: string | null): string | null {
   return trimmed;
 }
 
-export function SettingsForm({ initial, onSaved }: Props) {
+export function SettingsForm({ initial, token, onSaved }: Props) {
   const [form, setForm] = useState<AdminSettings>(initial);
   const [apiKey, setApiKey] = useState(''); // write-only; only sent if non-empty
   const [storageSecret, setStorageSecret] = useState(''); // write-only; only sent if non-empty
@@ -153,6 +155,7 @@ export function SettingsForm({ initial, onSaved }: Props) {
       const res = await api.patch<{ success: boolean; data: AdminSettings }>(
         '/api/tenant/settings/admin',
         payload,
+        token,
       );
       setForm(res.data);
       onSaved(res.data);
@@ -214,6 +217,12 @@ export function SettingsForm({ initial, onSaved }: Props) {
             onChange={(v) => update('pdfShowAmountRequested', v)}
             label="Show amount requested"
             description="Requested funding amount on the funding request section."
+          />
+          <Toggle
+            checked={form.showEstimatedCreditScore}
+            onChange={(v) => update('showEstimatedCreditScore', v)}
+            label="Show estimated credit score"
+            description="Adds the owner credit score estimate to the merchant app, signed review, PDF, and delivery payload."
           />
         </div>
       </section>

@@ -98,6 +98,7 @@ interface Props {
     showContactPhone?: boolean;
     showAnnualRevenue?: boolean;
     showAmountRequested?: boolean;
+    showEstimatedCreditScore?: boolean;
   };
   onBack: () => void;
   onSubmitted: (signedAt: string) => void;
@@ -332,6 +333,7 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
   const showContactPhone = privacy?.showContactPhone ?? true;
   const showAnnualRevenue = privacy?.showAnnualRevenue ?? true;
   const showAmountRequested = privacy?.showAmountRequested ?? true;
+  const showEstimatedCreditScore = privacy?.showEstimatedCreditScore ?? true;
 
   return (
     <div>
@@ -356,6 +358,7 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
           ['Name', `${owner.firstName} ${owner.lastName}`.trim()],
           ['SSN', fmtSsn(owner.ssn)],
           ['Ownership', owner.ownershipPct ? `${owner.ownershipPct}%` : undefined],
+          ['Estimated Credit Score', showEstimatedCreditScore ? owner.creditScore : undefined],
           ['DOB', fmtDate(owner.dateOfBirth)],
         ]} />}
         {owner && <ReviewSection title="Home Address" rows={[

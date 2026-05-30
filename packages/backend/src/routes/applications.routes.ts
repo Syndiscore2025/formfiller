@@ -411,6 +411,7 @@ router.get(
           companyEmail: true, companyPhone: true, companyAddress: true,
           pdfShowContactEmail: true, pdfShowContactPhone: true,
           pdfShowAnnualRevenue: true, pdfShowAmountRequested: true,
+          showEstimatedCreditScore: true,
         },
       }),
     ]);
@@ -443,6 +444,7 @@ router.get(
       showContactPhone: tenantSettings.pdfShowContactPhone,
       showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
       showAmountRequested: tenantSettings.pdfShowAmountRequested,
+      showEstimatedCreditScore: tenantSettings.showEstimatedCreditScore,
     } : undefined;
 
     const stream = generateApplicationPdf({
@@ -468,6 +470,7 @@ router.get(
         lastName: owner.lastName ?? undefined,
         ssn: ownerSsn,
         ownershipPct: owner.ownershipPct ?? undefined,
+        creditScore: owner.creditScore ?? undefined,
         dateOfBirth: owner.dateOfBirth ?? undefined,
         streetAddress: owner.streetAddress ?? undefined,
         city: owner.city ?? undefined,

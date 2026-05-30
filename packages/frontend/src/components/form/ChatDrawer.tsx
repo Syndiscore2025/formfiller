@@ -31,7 +31,6 @@ interface Props {
 }
 
 const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
-const POST_CONSENT_TRANSITION_KEY = 'formfiller.postConsentTransitionPending.v1';
 
 export function ChatDrawer({ open, applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -40,7 +39,6 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
   const [error, setError] = useState('');
   const [chatStopped, setChatStopped] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const step2GreetedRef = useRef(false);
   const chatSessionIdRef = useRef(createLocalId());
   // Keep a stable ref to formState so we can read it inside effects without adding it to deps
   const formStateRef = useRef(formState);
@@ -65,43 +63,7 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
     }
 
     setError('');
-    const freshMessages = [introMessage];
-    const pendingPostConsentTransition = typeof window !== 'undefined'
-      && window.localStorage.getItem(POST_CONSENT_TRANSITION_KEY) === 'true';
-
-    if (pendingPostConsentTransition && !step2GreetedRef.current) {
-      step2GreetedRef.current = true;
-      api.post<{ success: boolean; data: ChatReply }>(
-        `/api/chat/${applicationId}/post-consent-transition`,
-        { clientState: buildSafeClientState(formStateRef.current, pageContext, chatSessionIdRef.current, null, freshMessages) },
-        token ?? undefined,
-      ).then((transitionRes) => {
-        if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
-        setMessages([...freshMessages, {
-          id: createLocalId(),
-          role: 'assistant',
-          content: transitionRes.data.message,
-          nextField: transitionRes.data.nextField,
-        }]);
-      }).catch(() => {
-        if (typeof window !== 'undefined') window.localStorage.removeItem(POST_CONSENT_TRANSITION_KEY);
-        setMessages([...freshMessages, {
-          id: createLocalId(),
-          role: 'assistant',
-          content: buildTcpaTransitionMessage(formStateRef.current),
-        }]);
-      });
-    } else if (Object.keys(formStateRef.current.business?.fieldSources || {}).length > 0 && !step2GreetedRef.current) {
-      step2GreetedRef.current = true;
-      const greeting: ChatMessage = {
-        id: createLocalId(),
-        role: 'assistant',
-        content: "I found your business info — take a look at the details on screen and make sure everything is accurate. If anything looks off, hit Edit. Also, don't forget to answer the Home Based Business question at the bottom of the page — just click Yes or No.",
-      };
-      setMessages([...freshMessages, greeting]);
-    } else {
-      setMessages(freshMessages);
-    }
+    setMessages([introMessage]);
   }, [open, applicationId, token, introMessage]);
 
   useEffect(() => {
@@ -124,13 +86,6 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
     // Consent is a transition action. Keep it to one clean assistant message
     // instead of calling the API and then also injecting the Step 2 greeting.
     if (appliedField?.fieldKey === 'tcpaConsent' || appliedField?.fieldKey === 'contact.tcpaConsent') {
-      setMessages((current) => {
-        const next = current;
-        if (!applicationId && typeof window !== 'undefined') {
-          window.localStorage.setItem(POST_CONSENT_TRANSITION_KEY, 'true');
-        }
-        return next;
-      });
       return;
     }
 
@@ -293,17 +248,6 @@ function looksLikeHostileOrProfane(value: string): boolean {
 function isKnownIndustry(value: string): boolean {
   const lower = value.trim().toLowerCase();
   return INDUSTRIES.some((industry) => industry.toLowerCase() === lower);
-}
-
-function buildTcpaTransitionMessage(state: FormState): string {
-  const fieldSources = state.business?.fieldSources || {};
-  const googleFoundDetails = Object.keys(fieldSources).some((key) => !['legalName', 'stateOfFormation', 'ein'].includes(key));
-
-  if (googleFoundDetails) {
-    return 'Thanks — I checked the consent box and moved you to the next page. Please review the business information that appeared, make sure everything looks correct, and answer the Home Based Business question with Yes or No.';
-  }
-
-  return 'Thanks — I checked the consent box and moved you to the next page. I could not confirm all of the business details from lookup, so the next step is to fill in the business information shown on the page.';
 }
 
 function buildSafeClientState(state: FormState, pageContext: Record<string, unknown> | null | undefined, chatSessionId: string, appliedField?: { fieldKey: string; value: string } | null, messages: ChatMessage[] = []) {

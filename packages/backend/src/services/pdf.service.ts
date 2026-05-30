@@ -91,7 +91,7 @@ interface ApplicationData {
   };
   owner?: {
     firstName?: string; lastName?: string; ssn?: string;
-    ownershipPct?: string; dateOfBirth?: string;
+    ownershipPct?: string; creditScore?: string; dateOfBirth?: string;
     streetAddress?: string; city?: string; state?: string; zipCode?: string;
   };
   contact?: { email?: string; phone?: string };
@@ -151,6 +151,7 @@ export interface PdfVisibility {
   showContactPhone?: boolean;
   showAnnualRevenue?: boolean;
   showAmountRequested?: boolean;
+  showEstimatedCreditScore?: boolean;
 }
 
 /* ── PDF generation ── */
@@ -172,6 +173,7 @@ const FIELD_GAP = 5;
 const SECTION_COLOR = '#4f46e5';
 const FIELD_BORDER = '#d7dce8';
 const FIELD_BG = '#f8fafc';
+const SIGNATURE_KEEP_TOGETHER_HEIGHT = 170;
 
 export function generateApplicationPdf(
   data: ApplicationData,
@@ -183,6 +185,7 @@ export function generateApplicationPdf(
   const showContactPhone = visibility?.showContactPhone ?? true;
   const showAnnualRevenue = visibility?.showAnnualRevenue ?? true;
   const showAmountRequested = visibility?.showAmountRequested ?? true;
+  const showEstimatedCreditScore = visibility?.showEstimatedCreditScore ?? true;
 
   const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'LETTER', bufferPages: true });
 
@@ -239,16 +242,18 @@ export function generateApplicationPdf(
   if (data.owner) {
     const o = data.owner;
     section(doc, 'Owner / Guarantor Information');
-    fieldGrid(doc, [
+    const ownerFields: FieldDefinition[] = [
       { label: 'Owner Name', value: `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || undefined, span: 2 },
       { label: 'Ownership', value: o.ownershipPct ? `${o.ownershipPct}%` : undefined },
+      ...(showEstimatedCreditScore ? [{ label: 'Estimated Credit Score', value: o.creditScore }] : []),
       { label: 'SSN', value: fmtSsn(o.ssn) },
       { label: 'Date of Birth', value: fmtDate(o.dateOfBirth) },
       { label: 'Home Street Address', value: o.streetAddress, span: 2 },
       { label: 'City', value: o.city },
       { label: 'State', value: o.state },
       { label: 'Zip', value: o.zipCode },
-    ]);
+    ];
+    fieldGrid(doc, ownerFields);
   }
 
   /* ── Contact & Funding ── */
@@ -271,15 +276,16 @@ export function generateApplicationPdf(
 
   /* ── Electronic Signature Consent ── */
   if (data.signature) {
-    // Try to keep the entire signature section together. If less than 260 pts
-    // remain on the current page, start a fresh page so the block lands cleanly
-    // at the top rather than being split across two pages.
-    ensureSpace(doc, 260);
+    // Try to keep the signature section together, but do not waste a mostly
+    // empty first page. The previous 260pt threshold was too conservative and
+    // pushed signatures to page 2 even when the compact block could fit below
+    // Contact & Funding.
+    ensureSpace(doc, SIGNATURE_KEEP_TOGETHER_HEIGHT);
 
     section(doc, 'Authorizations & Electronic Signature Consent');
     textBox(doc, CONSENT_TEXT);
     ensureSpace(doc, 56);
-    doc.fontSize(6.6).font('Helvetica').fillColor('#334155');
+    doc.fontSize(6.2).font('Helvetica').fillColor('#334155');
     ACKNOWLEDGEMENTS.forEach((text) => {
       doc.text(`[x] ${text}`, PAGE_MARGIN + 8, doc.y, { width: RIGHT_MARGIN - PAGE_MARGIN - 16 });
       doc.moveDown(0.08);
@@ -297,8 +303,8 @@ export function generateApplicationPdf(
        the correct Y on whichever page we land on. */
     const sigX = PAGE_MARGIN;
     const sigW = 270;
-    const sigH = 60;
-    ensureSpace(doc, sigH + 28);
+    const sigH = 48;
+    ensureSpace(doc, sigH + 20);
     const sigY = doc.y;
     doc.save().roundedRect(sigX, sigY, sigW, sigH, 8).fillAndStroke('#ffffff', FIELD_BORDER).restore();
     doc.fontSize(7).font('Helvetica-Bold').fillColor('#64748b')
@@ -318,13 +324,13 @@ export function generateApplicationPdf(
         .text(data.signature.signerName, sigX + 12, sigY + 26, { width: sigW - 24 });
     }
 
-    fieldBox(doc, sigX + sigW + FIELD_GAP, sigY, RIGHT_MARGIN - sigX - sigW - FIELD_GAP, 27, 'Date Signed', signedDate);
+    fieldBox(doc, sigX + sigW + FIELD_GAP, sigY, RIGHT_MARGIN - sigX - sigW - FIELD_GAP, 22, 'Date Signed', signedDate);
     fieldBox(
       doc,
       sigX + sigW + FIELD_GAP,
-      sigY + 33,
+      sigY + 26,
       RIGHT_MARGIN - sigX - sigW - FIELD_GAP,
-      27,
+      22,
       'Timestamp',
       fmtEasternTimestamp(data.signature.signedAt) ?? data.signature.signedAt,
     );
@@ -359,7 +365,7 @@ function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], column
 
   const flush = () => {
     if (!row.length) return;
-    const rowHeight = Math.max(...row.map((field) => field.height ?? (field.span && field.span > 1 ? 32 : 28)));
+    const rowHeight = Math.max(...row.map((field) => field.height ?? (field.span && field.span > 1 ? 28 : 24)));
     ensureSpace(doc, rowHeight + FIELD_GAP);
     const y = doc.y;
     row.forEach((field) => fieldBox(doc, field.x, y, field.width, rowHeight, field.label, field.value));
@@ -384,20 +390,20 @@ function fieldGrid(doc: PDFKit.PDFDocument, rawFields: FieldDefinition[], column
 
 function fieldBox(doc: PDFKit.PDFDocument, x: number, y: number, width: number, height: number, label: string, value?: string): void {
   doc.save().roundedRect(x, y, width, height, 5).fillAndStroke(FIELD_BG, FIELD_BORDER).restore();
-  doc.fontSize(5.7).font('Helvetica-Bold').fillColor('#64748b')
-    .text(label.toUpperCase(), x + 6, y + 5, { width: width - 12, lineBreak: false });
+  doc.fontSize(5.4).font('Helvetica-Bold').fillColor('#64748b')
+    .text(label.toUpperCase(), x + 6, y + 4, { width: width - 12, lineBreak: false });
   doc.fontSize(8).font('Helvetica-Bold').fillColor('#0f172a')
-    .text(value || '—', x + 6, y + 16, { width: width - 12, height: height - 18, ellipsis: true });
+    .text(value || '—', x + 6, y + 13, { width: width - 12, height: height - 15, ellipsis: true });
 }
 
 function textBox(doc: PDFKit.PDFDocument, text: string): void {
   const width = RIGHT_MARGIN - PAGE_MARGIN;
-  const height = Math.max(34, doc.fontSize(6.8).heightOfString(text, { width: width - 14 }) + 12);
+  const height = Math.max(30, doc.fontSize(6.3).heightOfString(text, { width: width - 14 }) + 10);
   ensureSpace(doc, height + 5);
   const y = doc.y;
   doc.save().roundedRect(PAGE_MARGIN, y, width, height, 6).fillAndStroke('#eef2ff', '#c7d2fe').restore();
-  doc.fontSize(6.8).font('Helvetica').fillColor('#334155')
-    .text(text, PAGE_MARGIN + 7, y + 6, { width: width - 14 });
+  doc.fontSize(6.3).font('Helvetica').fillColor('#334155')
+    .text(text, PAGE_MARGIN + 7, y + 5, { width: width - 14 });
   doc.y = y + height + 5;
 }
 

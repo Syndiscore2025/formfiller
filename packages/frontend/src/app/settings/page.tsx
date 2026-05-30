@@ -1,10 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { api } from '@/lib/api';
 import { SettingsForm, type AdminSettings } from '@/components/settings/SettingsForm';
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { token, loading } = useAuth();
   const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -12,11 +16,16 @@ export default function SettingsPage() {
   useTheme(settings?.theme ?? null);
 
   useEffect(() => {
+    if (loading) return;
+    if (!token) {
+      router.replace('/login?redirect=/settings');
+      return;
+    }
     api
-      .get<{ success: boolean; data: AdminSettings }>('/api/tenant/settings/admin')
+      .get<{ success: boolean; data: AdminSettings }>('/api/tenant/settings/admin', token)
       .then((res) => setSettings(res.data))
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load settings'));
-  }, []);
+  }, [loading, router, token]);
 
   return (
     <main className="min-h-screen py-10">
@@ -48,9 +57,10 @@ export default function SettingsPage() {
           <p className="text-sm text-slate-400">Loading settings…</p>
         )}
 
-        {settings && (
+        {settings && token && (
           <SettingsForm
             initial={settings}
+            token={token}
             onSaved={(updated) => setSettings(updated)}
           />
         )}
