@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'stream';
-import { generateApplicationPdf } from '../src/services/pdf.service';
+import { PDF_ACKNOWLEDGEMENT_LABEL, PDF_CONSENT_TEXT, generateApplicationPdf } from '../src/services/pdf.service';
 
 async function readAll(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -55,4 +55,11 @@ test('typical signed one-owner application fits on one PDF page', async () => {
   }));
 
   assert.equal(countPdfPages(pdf), 1);
+});
+
+test('PDF signature consent language matches simplified one-checkbox UI', () => {
+  assert.equal(PDF_CONSENT_TEXT.includes('Reply STOP'), false);
+  assert.equal(PDF_CONSENT_TEXT.includes('text messages'), false);
+  assert.equal(PDF_ACKNOWLEDGEMENT_LABEL.includes('electronic signature is legally binding'), true);
+  assert.equal(PDF_ACKNOWLEDGEMENT_LABEL.includes('Reply STOP'), false);
 });

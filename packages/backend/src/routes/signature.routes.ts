@@ -31,9 +31,9 @@ const signatureSchema = z.object({
 });
 
 const CONSENT_TEXT =
-  'By signing this application, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
-  'I authorize verification of business, ownership, identity, bank, revenue, credit, and submitted application information where permitted by law. ' +
-  'This electronic signature is legally binding under the Electronic Signatures in Global and National Commerce Act (ESIGN) and the Uniform Electronic Transactions Act (UETA).';
+  'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
+  'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
+  'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
 router.post(
   '/:appId/sign',

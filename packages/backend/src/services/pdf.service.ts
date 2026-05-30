@@ -156,16 +156,13 @@ export interface PdfVisibility {
 
 /* ── PDF generation ── */
 
-const CONSENT_TEXT =
+export const PDF_CONSENT_TEXT =
   'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
   'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
-  'I consent to be contacted about this funding request by phone, text, and email. Message and data rates may apply. Reply STOP to opt out of text messages or HELP for help. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
-const ACKNOWLEDGEMENTS = [
-  'I reviewed the pre-filled and manually entered application information, certify it is true, accurate, and complete, and authorize verification of my business, ownership, identity, bank, revenue, credit, and submitted application information where permitted by law.',
-  'I consent to use electronic records and signatures, agree my electronic signature is legally binding, and consent to be contacted by phone, text, and email about this request. Reply STOP to opt out of text messages or HELP for help.',
-];
+export const PDF_ACKNOWLEDGEMENT_LABEL =
+  'I reviewed the application, certify the information is true, accurate, and complete, authorize the listed verifications where permitted, and agree this electronic signature is legally binding.';
 
 const PAGE_MARGIN = 30;
 const RIGHT_MARGIN = 582;
@@ -283,13 +280,10 @@ export function generateApplicationPdf(
     ensureSpace(doc, SIGNATURE_KEEP_TOGETHER_HEIGHT);
 
     section(doc, 'Authorizations & Electronic Signature Consent');
-    textBox(doc, CONSENT_TEXT);
-    ensureSpace(doc, 56);
+    textBox(doc, PDF_CONSENT_TEXT);
+    ensureSpace(doc, 24);
     doc.fontSize(6.2).font('Helvetica').fillColor('#334155');
-    ACKNOWLEDGEMENTS.forEach((text) => {
-      doc.text(`[x] ${text}`, PAGE_MARGIN + 8, doc.y, { width: RIGHT_MARGIN - PAGE_MARGIN - 16 });
-      doc.moveDown(0.08);
-    });
+    doc.text(`[x] ${PDF_ACKNOWLEDGEMENT_LABEL}`, PAGE_MARGIN + 8, doc.y, { width: RIGHT_MARGIN - PAGE_MARGIN - 16 });
     doc.moveDown(0.2);
 
     fieldGrid(doc, [
@@ -303,7 +297,7 @@ export function generateApplicationPdf(
        the correct Y on whichever page we land on. */
     const sigX = PAGE_MARGIN;
     const sigW = 270;
-    const sigH = 48;
+    const sigH = 64;
     ensureSpace(doc, sigH + 20);
     const sigY = doc.y;
     doc.save().roundedRect(sigX, sigY, sigW, sigH, 8).fillAndStroke('#ffffff', FIELD_BORDER).restore();
@@ -313,7 +307,7 @@ export function generateApplicationPdf(
       try {
         const b64 = data.signature.signatureData.replace(/^data:image\/png;base64,/, '');
         const imgBuf = Buffer.from(b64, 'base64');
-        doc.image(imgBuf, sigX + 10, sigY + 15, { width: sigW - 20, height: sigH - 23 });
+        doc.image(imgBuf, sigX + 10, sigY + 14, { fit: [sigW - 20, sigH - 18], align: 'center', valign: 'center' });
       } catch {
         // fall back to italic name if image decode fails
         doc.fontSize(20).font('Helvetica-Oblique').fillColor('#1a1a2e')
