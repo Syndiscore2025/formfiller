@@ -358,7 +358,7 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
           ['Name', `${owner.firstName} ${owner.lastName}`.trim()],
           ['SSN', fmtSsn(owner.ssn)],
           ['Ownership', owner.ownershipPct ? `${owner.ownershipPct}%` : undefined],
-          ['Estimated Credit Score', showEstimatedCreditScore ? owner.creditScore : undefined],
+          ['Credit Score', showEstimatedCreditScore ? owner.creditScore : undefined],
           ['DOB', fmtDate(owner.dateOfBirth)],
         ]} />}
         {owner && <ReviewSection title="Home Address" rows={[

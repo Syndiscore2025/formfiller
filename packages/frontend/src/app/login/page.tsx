@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [tenantSlug, setTenantSlug] = useState(process.env.NEXT_PUBLIC_TENANT_SLUG || '');
   const [tenantName, setTenantName] = useState('');
+  const [adminKey, setAdminKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,7 +25,7 @@ export default function LoginPage() {
       if (mode === 'login') {
         await login(email, password, tenantSlug);
       } else {
-        await register(email, password, tenantSlug, tenantName || undefined);
+        await register(email, password, tenantSlug, tenantName || undefined, adminKey || undefined);
       }
       const redirect = new URLSearchParams(window.location.search).get('redirect');
       router.push(redirect || '/apply');
@@ -101,12 +102,23 @@ export default function LoginPage() {
                   hint="Your organization identifier"
                 />
                 {mode === 'register' && (
-                  <Input
-                    label="Organization Name"
-                    value={tenantName}
-                    onChange={(e) => setTenantName(e.target.value)}
-                    hint="Required for new organizations"
-                  />
+                  <>
+                    <Input
+                      label="Organization Name"
+                      value={tenantName}
+                      onChange={(e) => setTenantName(e.target.value)}
+                      hint="Required for new organizations"
+                    />
+                    <Input
+                      label="Admin Registration Key"
+                      required
+                      type="password"
+                      value={adminKey}
+                      onChange={(e) => setAdminKey(e.target.value)}
+                      autoComplete="off"
+                      hint="Required to create an admin workspace."
+                    />
+                  </>
                 )}
 
                 {error && <p className="text-sm text-red-400">{error}</p>}

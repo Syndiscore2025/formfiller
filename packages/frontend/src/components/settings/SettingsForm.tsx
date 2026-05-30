@@ -221,8 +221,8 @@ export function SettingsForm({ initial, token, onSaved }: Props) {
           <Toggle
             checked={form.showEstimatedCreditScore}
             onChange={(v) => update('showEstimatedCreditScore', v)}
-            label="Show estimated credit score"
-            description="Adds the owner credit score estimate to the merchant app, signed review, PDF, and delivery payload."
+            label="Show credit score"
+            description="Adds the owner credit score to the merchant app, signed review, PDF, and delivery payload."
           />
         </div>
       </section>

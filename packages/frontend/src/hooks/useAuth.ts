@@ -37,11 +37,11 @@ export function useAuth() {
   }, []);
 
   const register = useCallback(async (
-    email: string, password: string, tenantSlug: string, tenantName?: string
+    email: string, password: string, tenantSlug: string, tenantName?: string, adminKey?: string
   ) => {
     const res = await api.post<AuthState & { success: boolean }>(
       '/api/auth/register',
-      { email, password, tenantSlug, tenantName }
+      { email, password, tenantSlug, tenantName, adminKey }
     );
     const state: AuthState = { token: res.token, role: res.role, tenantId: res.tenantId };
     localStorage.setItem(AUTH_KEY, JSON.stringify(state));

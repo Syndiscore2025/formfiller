@@ -245,7 +245,7 @@ export function generateApplicationPdf(
     const ownerFields: FieldDefinition[] = [
       { label: 'Owner Name', value: `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || undefined, span: 2 },
       { label: 'Ownership', value: o.ownershipPct ? `${o.ownershipPct}%` : undefined },
-      ...(showEstimatedCreditScore ? [{ label: 'Estimated Credit Score', value: o.creditScore }] : []),
+      ...(showEstimatedCreditScore ? [{ label: 'Credit Score', value: o.creditScore }] : []),
       { label: 'SSN', value: fmtSsn(o.ssn) },
       { label: 'Date of Birth', value: fmtDate(o.dateOfBirth) },
       { label: 'Home Street Address', value: o.streetAddress, span: 2 },

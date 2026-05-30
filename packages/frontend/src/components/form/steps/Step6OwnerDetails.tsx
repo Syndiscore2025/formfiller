@@ -302,13 +302,12 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
           {showEstimatedCreditScore && (
             <>
               <Input
-                label="Estimated Credit Score"
+                label="Credit Score"
                 placeholder="Select or type estimate"
                 value={creditScore}
                 onChange={(e) => setCreditScore(e.target.value.slice(0, 40))}
                 list="estimated-credit-score-options"
                 autoComplete="off"
-                hint="Optional — choose a range or type an estimate."
               />
               <datalist id="estimated-credit-score-options">
                 {ESTIMATED_CREDIT_SCORE_OPTIONS.map((option) => (
@@ -423,19 +422,38 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
               For your protection, enter SSN and Date of Birth only in these secure form fields — not in chat.
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-400 select-none cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isItin}
-                onChange={(e) => { setIsItin(e.target.checked); setSsn(''); }}
-                className="h-4 w-4 cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-300"
-              />
-              I don&apos;t have a Social Security Number — I use an ITIN
-            </label>
-
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input ref={ssnInputRef} id="owner_ssn" label={isItin ? 'ITIN' : 'Social Security Number'} required placeholder="XXX-XX-XXXX" value={ssn}
-                onChange={(e) => setSsn(formatSsn(e.target.value))} error={errors.ssn} autoComplete="off" />
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label htmlFor="owner_ssn" className="text-sm font-semibold text-slate-100">
+                    {isItin ? 'ITIN' : 'Social Security Number'} <span className="text-red-500">*</span>
+                  </label>
+                  <label className="inline-flex cursor-pointer select-none items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-300/30 hover:text-cyan-100">
+                    <input
+                      type="checkbox"
+                      checked={isItin}
+                      onChange={(e) => { setIsItin(e.target.checked); setSsn(''); }}
+                      className="h-3.5 w-3.5 cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-300 accent-cyan-400"
+                    />
+                    Use ITIN instead
+                  </label>
+                </div>
+                <input
+                  ref={ssnInputRef}
+                  id="owner_ssn"
+                  suppressHydrationWarning
+                  placeholder="XXX-XX-XXXX"
+                  value={ssn}
+                  onChange={(e) => setSsn(formatSsn(e.target.value))}
+                  autoComplete="off"
+                  className={cn(
+                    'w-full rounded-xl border bg-slate-950/55 px-3.5 py-3 text-sm text-slate-100 shadow-inner shadow-black/10',
+                    'placeholder:text-slate-500 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40',
+                    errors.ssn ? 'border-red-400/60 focus:ring-red-400/30' : 'border-white/10'
+                  )}
+                />
+                {errors.ssn && <p className="text-xs text-red-600">{errors.ssn}</p>}
+              </div>
               <DateField id="owner_date_of_birth" label="Date of Birth" required value={dateOfBirth}
                 onChange={setDateOfBirth} error={errors.dateOfBirth} yearOrder="asc" />
             </div>

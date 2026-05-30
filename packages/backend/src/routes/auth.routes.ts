@@ -88,7 +88,7 @@ router.post(
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
-      data: { tenantId: tenant.id, email, passwordHash },
+      data: { tenantId: tenant.id, email, passwordHash, role: 'super_admin' },
     });
 
     const token = jwt.sign(
