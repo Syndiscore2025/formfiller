@@ -10,13 +10,13 @@ The product currently supports:
 - Business lookup and address autocomplete enrichment
 - Owner identity collection
 - TCPA/ESIGN/UETA authorization capture
-- Signed application PDF generation, compacted to a two-page packet in normal/full-data cases
+- Signed application PDF generation, compacted so typical signed one-owner applications fit on one page
 - Required bank statement PDF upload flow
-- Tenant admin settings for branding, theme, PDF privacy, Switchbox API delivery, document storage, email notifications, and AI chat agent
+- Tenant admin settings for branding, theme, PDF privacy/application visibility, Switchbox API delivery, document storage, email notifications, custom frontend access, and AI chat agent
 - S3-compatible object storage for bank statements and signed application PDFs
 - CRM/Switchbox delivery queue with retries
 - Privacy-aware redaction in the outbound Switchbox/lender API payload and attached signed PDF
-- AI-powered live application chat assistant (SYNDIBOT) embedded in the merchant form throughout all steps
+- AI-powered live application chat assistant (SYNDIBOT) available from a closed-by-default chat bubble throughout all steps
 
 ## 2. Ownership and repository structure
 
@@ -27,7 +27,7 @@ The product currently supports:
 | Prisma schema | `packages/backend/prisma/schema.prisma` | Database source of truth |
 | AI chat agent | `packages/backend/src/services/chatAgent.service.ts` | OpenAI integration, safety layers, next-field logic |
 | AI guardrails | `packages/backend/src/services/chatGuardrails.service.ts` | Category classification, field help, funding safety |
-| Chat routes | `packages/backend/src/routes/chat.routes.ts` | Pre-app, per-app, and transition chat endpoints |
+| Chat routes | `packages/backend/src/routes/chat.routes.ts` | Pre-app, per-app, history, and legacy transition chat endpoints |
 | Chat UI widget | `packages/frontend/src/components/form/ChatWidget.tsx` | Floating chat bubble + portal mount |
 | Chat UI drawer | `packages/frontend/src/components/form/ChatDrawer.tsx` | Message thread, auto-apply logic, form bridge |
 | Deployment docs | `docs/digital-ocean-deployment-guide.md` | DO deployment procedure |
@@ -67,17 +67,33 @@ Tenants are resolved by:
 
 The default local/demo tenant slug is `default`.
 
-Tenant settings include branding, theme, PDF privacy, Switchbox delivery credentials, document storage credentials, and optional custom frontend API access config.
+Tenant settings include branding, theme, PDF privacy/application visibility, Switchbox delivery credentials, document storage credentials, email notifications, AI chat configuration, and optional custom frontend API access config.
+
+### Tenant admin settings currently available
+
+The `/settings` admin panel and `PATCH /api/tenant/settings/admin` support the following settings groups. Secret values are write-only where noted.
+
+| Settings group | Key fields / behavior | Notes for Switchbox |
+|---|---|---|
+| Branding | `companyName`, `legalBusinessName`, `logoUrl`, `companyEmail`, `companyPhone`, `companyAddress`, `websiteUrl`, `supportEmail` | Controls merchant UI, PDF branding, completion redirect/support fallback. |
+| Theme | `theme`, `accentColor`, `surfaceColor` | Controls dark/light mode and tenant color overrides. |
+| PDF privacy / application visibility | `pdfShowContactEmail`, `pdfShowContactPhone`, `pdfShowAnnualRevenue`, `pdfShowAmountRequested`, `showEstimatedCreditScore` | Applies to Review & Sign/PDF/delivery payload where relevant. `showEstimatedCreditScore` also shows/hides the merchant Credit Score field. |
+| Switchbox delivery | `switchboxApiUrl`, `switchboxApiKey` | Tenant-level delivery endpoint and write-only API key. Missing config marks delivery as `skipped`. |
+| Custom frontend / headless API | `customFrontendEnabled`, write-only `customFrontendPublicKey`, `customFrontendAllowedOrigins`, `customFrontendAllowedRedirects` | Public key is stored only as a SHA-256 hash + preview. Custom origins must also pass `x-formfiller-public-key`. |
+| Document storage | `documentStorageProvider`, `documentStorageEndpoint`, `documentStorageRegion`, `documentStorageBucket`, `documentStoragePrefix`, `documentStorageAccessKeyId`, write-only `documentStorageSecretAccessKey`, `documentStoragePublicBaseUrl` | Supports S3-compatible storage such as DigitalOcean Spaces; DB fallback remains available. |
+| Email / SMTP | `smtpHost`, `smtpPort`, `smtpSecure`, `smtpUser`, write-only `smtpPass`, `smtpFrom`, `smtpFromName` | Used by configured outbound email workflows. |
+| Follow-up email templates | `emailAbandoned*`, `emailNoBanks*`, `emailInsufficientBanks*` | Controls abandoned/no-bank/insufficient-bank statement reminders. |
+| AI chat agent | `aiChatEnabled`, `aiPersonaName`, `aiSystemPromptOverride`, `aiEligibilityRules`, `aiModel` | Disabling AI returns `403` from `/api/chat/*`. |
 
 ## 5. Merchant application flow
 
-1. Merchant opens `/apply`. The AI chat drawer opens automatically and greets the merchant.
-2. Merchant enters contact/business name/state and consents to contact (TCPA). Chat can capture verbal TCPA consent and auto-advance.
+1. Merchant opens `/apply`. The AI chat remains closed by default and is available from the "💬 Need help? Chat now" bubble.
+2. Merchant enters contact/business name/state and consents to contact (TCPA). Current Step 1 consent explicitly covers calls, texts, and emails from the platform, representatives, and participating lending partners.
 3. Backend creates draft application.
 4. Business lookup attempts OpenCorporates and Google Places enrichment.
-5. Merchant confirms/edits business details. Chat greets with a step-specific message.
-6. Merchant selects revenue and requested funding information. Chat guides toward each field.
-7. Merchant enters owner/guarantor information.
+5. Merchant confirms/edits business details. The chat does not auto-open or auto-generate a second message after Step 1 completion.
+6. Merchant selects revenue and requested funding information. If opened, chat can guide toward each field.
+7. Merchant enters owner/guarantor information, including optional Credit Score when enabled by tenant settings. SSN/ITIN and DOB are collected only in the secure owner verification modal.
 8. Merchant reviews authorizations and signs electronically.
 9. Backend verifies completeness before saving the signature, then marks the app `submitted` via `/submit`. `/submit` also rejects incomplete applications even if a frontend tries to skip required sections.
 10. Merchant uploads bank statement PDFs.
@@ -107,7 +123,7 @@ Delivery implementation:
 - `enqueueCrmDelivery(applicationId, tenantId)` creates/updates `CrmDelivery`.
 - `buildSwitchboxPayload(applicationId)` builds the full outbound payload.
 - `generateApplicationPdf(...)` creates the signed PDF attachment with privacy redaction applied.
-- Bank statements are always included regardless of the four PDF privacy toggles.
+- Bank statements are always included regardless of PDF privacy/application visibility toggles.
 - `pushWebhook(...)` posts JSON to the tenant Switchbox endpoint.
 
 Delivery retry policy:
@@ -130,7 +146,7 @@ High-level fields:
 - `submittedAt`
 - `contact`
 - `business`
-- `owners`
+- `owners` including `creditScore` when the tenant setting allows it and the merchant provided a value
 - `financial`
 - `loanRequest`
 - `signature`
@@ -139,7 +155,7 @@ High-level fields:
 
 ### Privacy-aware redaction
 
-When a PDF Privacy toggle is off, the Switchbox JSON payload sends the related value as `null`, and the signed PDF attachment omits the same information.
+When a PDF Privacy/application visibility toggle is off, the Switchbox JSON payload sends the related value as `null`, and the signed PDF attachment omits the same information where applicable.
 
 | Toggle | JSON fields redacted | PDF redaction |
 |---|---|---|
@@ -147,6 +163,7 @@ When a PDF Privacy toggle is off, the Switchbox JSON payload sends the related v
 | Show contact phone off | `contact.phone`, `business.phone` | Contact/business phone omitted |
 | Show annual revenue off | `financial.annualRevenue` | Annual revenue omitted |
 | Show amount requested off | `loanRequest.amountRequested` | Amount requested omitted |
+| Show credit score off | `owners[].creditScore` | Credit Score omitted |
 
 Bank statement files are **not** controlled by these toggles and are still sent to Switchbox.
 
@@ -183,7 +200,7 @@ All paths in the tables below are relative to the backend API base. The backend'
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| POST | `/api/auth/register` | none | Register admin/agent for tenant |
+| POST | `/api/auth/register` | none | Register a tenant admin. In production requires `adminKey`, which must match backend `ADMIN_REGISTRATION_KEY`; successful registration creates a `super_admin` user. |
 | POST | `/api/auth/login` | none | Login and receive JWT |
 
 ### Tenant settings
@@ -232,7 +249,7 @@ All paths in the tables below are relative to the backend API base. The backend'
 |---|---|---|---|
 | POST | `/api/chat/message` | tenant header | Pre-application chat (Step 1, no applicationId yet) |
 | POST | `/api/chat/:appId/message` | tenant header/JWT | Per-application chat message |
-| POST | `/api/chat/:appId/post-consent-transition` | tenant header/JWT | Fires the post-TCPA-consent transition message on step change |
+| POST | `/api/chat/:appId/post-consent-transition` | tenant header/JWT | Legacy/available endpoint for post-TCPA transition messaging; current hosted merchant UI no longer auto-calls it after Step 1. |
 | GET | `/api/chat/:appId/history` | tenant header/JWT | Fetch stored chat message history (up to 100) |
 
 All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chatLimiter`. If `aiChatEnabled` is `false` in tenant settings, all endpoints return `403`.
@@ -253,6 +270,8 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 ### Authentication and authorization
 
 - Admin settings and analytics reporting require JWT bearer auth.
+- Production tenant registration requires `ADMIN_REGISTRATION_KEY`; the key is not public and must be provided through the Create Account form or API `adminKey` field.
+- Valid admin-key registrations create `super_admin` users so they can access and save `/settings`.
 - Merchant flow uses tenant slug + application IDs for guest continuation.
 - Tenant scoping is enforced in queries using `tenantId`.
 - Settings secrets are write-only/masked in admin responses.
@@ -267,6 +286,7 @@ All chat endpoints require `x-tenant-slug` header. All are rate-limited by `chat
 - Storage secret access keys are encrypted before database storage.
 - Switchbox API key is treated as write-only in settings responses.
 - Custom frontend public keys must be generated/kept by Switchbox or the tenant, entered locally in Postman/admin UI, and never committed. The repository stores only placeholders.
+- The admin registration key must be transferred/stored outside the repository. Do not paste it into tickets, docs, screenshots, or chat transcripts.
 
 ### Data protection
 
@@ -301,7 +321,7 @@ Implemented support:
 Implemented support:
 
 - Step 1 contact consent
-- Consent language covering phone, email, and text contact
+- Consent language covering phone, email, and text contact by the platform/representatives and participating lending partners
 - Marketing/contact consent timestamp
 - Consent text preserved in signature record/PDF
 
@@ -337,6 +357,7 @@ Real credential values must be transferred outside the repo. The table below doc
 | Managed Postgres `DATABASE_URL` | yes | Switchbox/DO | Backend env | DO App Platform encrypted env |
 | `JWT_SECRET` | yes | Switchbox | Backend auth | DO encrypted env |
 | `ENCRYPTION_KEY` | yes | Switchbox | SSN/storage-secret encryption | DO encrypted env |
+| `ADMIN_REGISTRATION_KEY` | yes for production registration | Switchbox | Create Account/admin workspace registration | DO encrypted env and Switchbox password manager |
 | `ALLOWED_ORIGINS` | yes | Switchbox | CORS | DO env |
 | OpenCorporates API key | optional | Switchbox | Business lookup | DO encrypted env |
 | Google Places API key | **yes for address autocomplete** | Switchbox | Address autocomplete | DO encrypted env |
@@ -360,15 +381,22 @@ Files:
 - `docs/formfiller.postman_collection.json`
 - `docs/formfiller.postman_environment.json`
 
+These are intentionally two separate Postman exports, not duplicate reports:
+
+- The **collection** contains the request folders, URLs, bodies, and test scripts.
+- The **environment** contains local placeholders/current values for tenant data and secrets.
+
+Switchbox should import both into Postman. Keeping them separate is recommended because it prevents real secrets/current values from being embedded in the reusable collection. Combining them into collection-level variables is technically possible, but it is less safe for handoff and future commits.
+
 The environment file ships with the live DigitalOcean URLs preset for `backend_base_url`/`frontend_base_url`, plus `backend_base_url_local`/`frontend_base_url_local` for local development. Before use, Switchbox should import it and set local/current values for:
 
-- Tenant/admin values: `tenant_slug`, `tenant_name`, `admin_email`, `admin_password`, `auth_token`
+- Tenant/admin values: `tenant_slug`, `tenant_name`, `admin_email`, `admin_password`, `admin_registration_key`, `auth_token`
 - Switchbox delivery values: `switchbox_api_url`, `switchbox_api_key`, or the DO fallback env names `CRM_WEBHOOK_URL`, `CRM_API_KEY`
 - Document storage values: `document_storage_*`
 - SMTP values: `smtp_*`
 - Custom frontend values: `custom_frontend_public_key`, `custom_frontend_allowed_origin`, `custom_frontend_allowed_redirect_url`
-- Merchant-flow run values: `merchant_contact_*`, `business_*`, `owner_*`, `annual_revenue`, `amount_requested`, `statement_month`, `sample_base64_pdf`, `sample_signature_png`
-- Platform secrets recorded for ownership tracking: `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `GOOGLE_PLACES_API_KEY`, `OPENAI_API_KEY`, and optional `OPENCORPORATES_API_KEY`
+- Merchant-flow run values: `merchant_contact_*`, `business_*`, `owner_*`, `owner_credit_score`, `annual_revenue`, `amount_requested`, `statement_month`, `sample_base64_pdf`, `sample_signature_png`
+- Platform secrets recorded for ownership tracking: `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `ADMIN_REGISTRATION_KEY`, `GOOGLE_PLACES_API_KEY`, `OPENAI_API_KEY`, and optional `OPENCORPORATES_API_KEY`
 
 The checked-in collection/environment use placeholders so the files remain safe to store and transfer. Switchbox should populate real current values in Postman or its password manager before running production endpoint tests. Do not add private internal admin/export credentials to this Postman handoff.
 
@@ -391,22 +419,25 @@ Do not export real current values back into the repository.
 - `/finalize` now rejects applications with zero bank statement PDFs instead of queueing delivery with an empty bank statement list.
 - Bank statement PDFs always remain part of the Switchbox package regardless of PDF Privacy toggles.
 - Existing previously generated PDFs are not retroactively changed by privacy/layout updates; regenerate/download after changes.
-- Current signed PDF output is designed to fit in two pages under normal full-data conditions.
+- Current signed PDF output is compacted so a typical signed one-owner application fits on one page; larger/full-data applications may still spill when content requires it.
+- Credit Score is optional and tenant-configurable. When disabled, it is hidden from the merchant form, Review & Sign, PDF, and Switchbox payload.
+- Admin registration now requires `ADMIN_REGISTRATION_KEY` in production and creates `super_admin` users for settings access.
 - Production backend env now includes `OPENAI_API_KEY` and `GOOGLE_PLACES_API_KEY` as encrypted DigitalOcean secrets, so live AI chat and Google Places address autocomplete are enabled.
-- Live smoke checks on 2026-05-29 confirmed backend health, Google Places autocomplete, and OpenAI chat responses.
+- Live smoke checks on 2026-05-30 confirmed backend health, frontend `/login` and `/settings`, tenant settings with `showEstimatedCreditScore`, and custom-origin public-key enforcement.
 
 ## 14. Immediate next steps / remaining validation
 
 1. Enter real Switchbox endpoint/API key in `/settings`.
 2. Enter real storage bucket credentials in `/settings`.
 3. Optionally configure AI persona name and system prompt override in `/settings`.
-4. Run full application smoke test including the AI chat flow.
+4. Run full application smoke test including optional AI chat opened manually from the chat bubble.
 5. Verify `/submit` rejects unsigned/incomplete applications and accepts only complete signed applications.
 6. Verify `/finalize` rejects zero-bank-statement applications and accepts after at least one PDF upload.
 7. Verify Switchbox receives JSON payload, signed PDF, and bank statements.
-8. Verify privacy toggles redaction with all toggles off.
+8. Verify privacy/application visibility toggles redaction with all toggles off, including Credit Score.
 9. Confirm `CrmDelivery.status = sent` and external account ID mapping.
-10. Production URLs are recorded in Section 8 (Live deployment URLs); update resource names and credential owner references as ownership transfers.
+10. Confirm Switchbox owns/stores `ADMIN_REGISTRATION_KEY` and can create a new `super_admin` account when needed.
+11. Production URLs are recorded in Section 8 (Live deployment URLs); update resource names and credential owner references as ownership transfers.
 
 ---
 
@@ -414,7 +445,7 @@ Do not export real current values back into the repository.
 
 ### Overview
 
-The AI chat assistant is embedded in the merchant form from the moment `/apply` loads. It auto-opens on page load and remains accessible via the "💬 Need help? Chat now" bubble after being closed. The drawer uses a scrollbar-hidden overflow area so the UI stays clean.
+The AI chat assistant is embedded in the merchant form but stays closed by default. Merchants open it manually from the "💬 Need help? Chat now" bubble. The first assistant intro message appears when the drawer is opened. The drawer uses a scrollbar-hidden overflow area so the UI stays clean.
 
 The assistant's core job is to:
 
@@ -430,8 +461,7 @@ Merchant browser
         └── ChatDrawer.tsx    Message thread, auto-apply bridge, form state reader
               │
               ├── POST /api/chat/message                  (pre-application, Step 1)
-              ├── POST /api/chat/:appId/message           (Steps 2–5)
-              └── POST /api/chat/:appId/post-consent-transition  (TCPA → Step 2 handoff)
+              └── POST /api/chat/:appId/message           (Steps 2–5)
 
 Backend
   └── chat.routes.ts
@@ -443,9 +473,9 @@ Backend
 
 | Step | Behavior |
 |---|---|
-| Step 1 (pre-application) | Intro message on load. Chat answers questions, can capture verbal TCPA consent and auto-advance the form. Uses `POST /api/chat/message` (no appId yet). |
-| Step 1 → Step 2 transition | `POST /api/chat/:appId/post-consent-transition` fires after TCPA consent. Tells merchant to review business details and answer Home Based Business. |
-| Step 2 (business details) | If Google/lookup data was found, chat greets with a data-review message. During the Step 2 review card, the AI is constrained to visible actions: answer Home Based Business if needed, then click Confirm & Continue. It must not jump to hidden missing fields like Industry until the form switches into edit/missing-field mode. |
+| Step 1 (pre-application) | Chat stays closed until opened. When opened, it shows the intro message and can answer questions. Uses `POST /api/chat/message` (no appId yet). |
+| Step 1 → Step 2 transition | The hosted UI no longer auto-opens chat or auto-generates a second assistant message after Step 1 completion. |
+| Step 2 (business details) | Chat remains manually opened only. During the Step 2 review card, the AI is constrained to visible actions: answer Home Based Business if needed, then click Confirm & Continue. It must not jump to hidden missing fields like Industry until the form switches into edit/missing-field mode. |
 | Steps 3–5 | AI reads `nextField` from server and asks targeted questions per field. Auto-applies simple answers directly into form state. |
 
 ### Refresh/session behavior
@@ -576,5 +606,5 @@ CREATE TABLE "ChatMessage" (
 | `chatGuardrails.service.ts` | `evaluateChatGuardrails`, `enforceFundingResponseSafety`, `extractQualificationSignals`, category classification, field help guidance, funding safety patterns |
 | `chat.routes.ts` | Express router for all four chat endpoints with rate limiting and tenant guard |
 | `ChatDrawer.tsx` | Message rendering, auto-apply bridge, `shouldAutoApplyFieldAnswer`, hostile message detection, industry validation, fresh visible chat sessions on refresh |
-| `ChatWidget.tsx` | Portal mount, open/close state (starts open on load), `autoOpen` prop for step transitions |
+| `ChatWidget.tsx` | Portal mount and open/close state; starts closed by default |
 | `MultiStepForm.tsx` | `handleChatFieldAnswer`, `handleChatNavigateToField`, `handleAutoPopulate`, Step 2 page-context handoff, phone normalization, hostile input guard |
