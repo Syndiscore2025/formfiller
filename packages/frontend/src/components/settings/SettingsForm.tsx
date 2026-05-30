@@ -73,6 +73,12 @@ export interface AdminSettings {
   customFrontendKeyConfigured: boolean;
   customFrontendAllowedOrigins: string[] | null;
   customFrontendAllowedRedirects: string[] | null;
+  // AI chat agent
+  aiChatEnabled: boolean;
+  aiPersonaName: string | null;
+  aiSystemPromptOverride: string | null;
+  aiEligibilityRules: unknown | null;
+  aiModel: string | null;
 }
 
 interface Props {
@@ -137,6 +143,7 @@ export function SettingsForm({ initial, token, onSaved }: Props) {
         documentStorageSecretConfigured: _ignoredStorage,
         smtpPassConfigured: _ignoredSmtp,
         customFrontendKeyConfigured: _ignoredFrontendKey,
+        aiEligibilityRules: _ignoredAiEligibilityRules,
         ...rest
       } = form;
       const payload: Record<string, unknown> = {
@@ -249,6 +256,52 @@ export function SettingsForm({ initial, token, onSaved }: Props) {
         storageSecret={storageSecret}
         setStorageSecret={setStorageSecret}
       />
+
+      <section className="surface-panel p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">AI Funding Assistant</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Control the live chat assistant shown to merchants during the application.
+        </p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Toggle
+            checked={form.aiChatEnabled}
+            onChange={(v) => update('aiChatEnabled', v)}
+            label="Enable AI chat"
+            description="When off, merchants cannot use the live application chat assistant."
+          />
+          <Input
+            label="Assistant name"
+            value={form.aiPersonaName ?? ''}
+            onChange={handleField('aiPersonaName')}
+            placeholder="Funding Assistant"
+            hint="This is the name/persona the AI uses in chat."
+          />
+          <Input
+            label="AI model"
+            value={form.aiModel ?? ''}
+            onChange={handleField('aiModel')}
+            placeholder="gpt-4o"
+            hint="Leave as configured unless Switchbox instructs otherwise."
+          />
+          <div className="sm:col-span-2">
+            <label htmlFor="ai_system_prompt_override" className="text-sm font-semibold text-slate-100">
+              System prompt override
+            </label>
+            <textarea
+              id="ai_system_prompt_override"
+              value={form.aiSystemPromptOverride ?? ''}
+              onChange={(e) => update('aiSystemPromptOverride', e.target.value)}
+              rows={5}
+              placeholder="Optional tenant-specific assistant instructions. Leave blank to use the platform default."
+              className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/55 px-3.5 py-3 text-sm text-slate-100 shadow-inner shadow-black/10 placeholder:text-slate-500 focus:border-cyan-300/40 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Optional. Use this for tenant-specific tone or instructions; core compliance and disqualification guardrails still apply.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <EmailNotificationsSection
         form={form}
