@@ -108,6 +108,7 @@ model TenantSettings {
   aiSystemPromptOverride String?
   aiEligibilityRules     Json?
   aiModel                String?
+  eligibilityDisqualificationEnabled Boolean @default(true)
 
   // ── Custom tenant frontend / headless API ───────────────────────────────────
   customFrontendEnabled          Boolean @default(false)

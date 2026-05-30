@@ -107,7 +107,8 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
     message: safeMessage,
     nextField,
   });
-  const disqualification = evaluateChatDisqualification(safeMessage);
+  const eligibilityDisqualificationEnabled = tenantSettings?.eligibilityDisqualificationEnabled ?? true;
+  const disqualification = eligibilityDisqualificationEnabled ? evaluateChatDisqualification(safeMessage) : null;
 
   let reply: ChatReply;
   if (isOptOutRequest(safeMessage)) {
@@ -133,6 +134,7 @@ export async function createChatReply(input: ChatMessageInput): Promise<ChatRepl
       history,
       personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
       systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
+      eligibilityDisqualificationEnabled,
       model: resolveOpenAiChatModel(tenantSettings?.aiModel),
     });
   }
@@ -165,6 +167,7 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
           aiPersonaName: true,
           aiSystemPromptOverride: true,
           aiModel: true,
+          eligibilityDisqualificationEnabled: true,
         },
       },
     },
@@ -183,7 +186,8 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
     message: safeMessage,
     nextField,
   });
-  const disqualification = evaluateChatDisqualification(safeMessage);
+  const eligibilityDisqualificationEnabled = tenantSettings?.eligibilityDisqualificationEnabled ?? true;
+  const disqualification = eligibilityDisqualificationEnabled ? evaluateChatDisqualification(safeMessage) : null;
 
   let reply: ChatReply;
   if (isOptOutRequest(safeMessage)) {
@@ -202,12 +206,14 @@ export async function createPreApplicationChatReply(input: PreApplicationChatInp
       appContext: {
         stage: 'pre_application',
         currentDate: getCurrentDateContext(),
+        eligibilityDisqualificationEnabled,
         instruction: 'The merchant has not saved the first form card yet. Be conversational and helpful. Do not repeat the same generic menu. If they provide a name or business name, acknowledge it naturally and guide them to the next required Step 1 field. After TCPA/contact consent is captured, do not ask for Business Start Date; the next instruction is to review/confirm the Business Details page if lookup found data, or fill the visible business fields if lookup did not.',
         clientState: safeClientState,
       },
       history: [],
       personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
       systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
+      eligibilityDisqualificationEnabled,
       model: resolveOpenAiChatModel(tenantSettings?.aiModel),
     });
   }
@@ -246,6 +252,7 @@ export async function createPostConsentTransitionReply(input: TransitionChatInpu
         history: [],
         personaName: tenantSettings?.aiPersonaName || FALLBACK_PERSONA,
         systemPromptOverride: tenantSettings?.aiSystemPromptOverride || undefined,
+        eligibilityDisqualificationEnabled: tenantSettings?.eligibilityDisqualificationEnabled ?? true,
         model: resolveOpenAiChatModel(tenantSettings?.aiModel),
       })
     : buildPostConsentFallbackReply(nextField);
@@ -311,6 +318,7 @@ async function loadApplicationContext(applicationId: string, tenantId: string) {
               aiSystemPromptOverride: true,
               aiEligibilityRules: true,
               aiModel: true,
+              eligibilityDisqualificationEnabled: true,
               companyName: true,
             },
           },
@@ -600,6 +608,7 @@ function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unkn
     finalized: Boolean(app.finalizedAt),
     disqualified: Boolean(app.disqualifiedAt),
     disqualificationReason: app.disqualificationReason ? 'configured_reason_present' : null,
+    eligibilityDisqualificationEnabled: app.tenant.settings?.eligibilityDisqualificationEnabled ?? true,
     contact: {
       hasEmail: hasText(app.contactEmail),
       hasPhone: hasText(app.contactPhone),
@@ -800,6 +809,7 @@ async function requestOpenAiReply(input: {
   history: Array<{ role: ChatRole; content: string }>;
   personaName: string;
   systemPromptOverride?: string;
+  eligibilityDisqualificationEnabled: boolean;
   model: string;
 }): Promise<ChatReply> {
   const dateContext = getCurrentDateContext();
@@ -823,7 +833,9 @@ async function requestOpenAiReply(input: {
     'Annual revenue math is allowed: if the merchant asks how to annualize monthly revenue/sales for the Estimated Annual Revenue field, you may multiply monthly revenue by 12, state the annualized revenue, and tell them which visible annual revenue range to select. This is field help, not a funding quote. Do not discuss approval, rates, terms, payments, or funding offers in that answer.',
     'EIN rule: EIN is the 9-digit business tax ID on the SS-4 confirmation letter the IRS sent when the business was first registered. It may also appear on business tax returns, payroll records, business bank paperwork, or IRS notices. If the merchant is a sole proprietor without an EIN, do NOT send them to the IRS for a new number or replacement letter (that takes weeks) — tell them to select the Sole Proprietorship option in the form and continue.',
     'Field-help rule: if the merchant asks what a field means, why it is needed, or where to find the info, answer that question first in plain language using the fieldHelpGuidance hint when provided, then guide them to the next missing required field (do NOT push them to optional fields they skipped unless they ask to revisit).',
-    'Hard disqualification rule: if the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, the backend will disqualify the lead. If you see disqualified=true or no next field, do not keep pushing the form.',
+    input.eligibilityDisqualificationEnabled
+      ? 'Hard disqualification rule: if the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, the backend will disqualify the lead. If you see disqualified=true or no next field, do not keep pushing the form.'
+      : 'Eligibility disqualification is disabled for this tenant. If the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, acknowledge briefly and keep them moving through the application for alternate products. Do not tell them they are disqualified.',
     'Silent qualification rule: if the merchant says something that may matter for underwriting but is NOT a hard disqualifier (bankruptcy, restricted industry, non-citizen, NSF, etc.) DO NOT alert them, DO NOT disqualify, DO NOT say "this may be an issue." Just keep them moving through the form normally — those signals are flagged internally for the funding team.',
     'Forward motion: every reply (unless the merchant explicitly opts out) ends with either a clear next step toward the next missing field, an invitation to review and sign, or a short follow-up question that moves the file forward.',
     'Opt-out: if the merchant opts out or says stop, acknowledge respectfully and stop pushing the application.',

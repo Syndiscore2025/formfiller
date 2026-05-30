@@ -32,6 +32,7 @@ const PUBLIC_SETTINGS_SELECT = {
   pdfShowAnnualRevenue: true,
   pdfShowAmountRequested: true,
   showEstimatedCreditScore: true,
+  aiChatEnabled: true,
 } as const;
 
 const PUBLIC_SETTINGS_DEFAULTS = {
@@ -51,6 +52,7 @@ const PUBLIC_SETTINGS_DEFAULTS = {
   pdfShowAnnualRevenue: true,
   pdfShowAmountRequested: true,
   showEstimatedCreditScore: true,
+  aiChatEnabled: true,
 };
 
 /**
@@ -120,6 +122,7 @@ const ADMIN_SELECT = {
   aiSystemPromptOverride: true,
   aiEligibilityRules: true,
   aiModel: true,
+  eligibilityDisqualificationEnabled: true,
   customFrontendEnabled: true,
   customFrontendKeyPreview: true,
   customFrontendAllowedOrigins: true,
@@ -168,6 +171,7 @@ const ADMIN_DEFAULTS = {
   aiSystemPromptOverride: null,
   aiEligibilityRules: null,
   aiModel: 'gpt-4o',
+  eligibilityDisqualificationEnabled: true,
   customFrontendEnabled: false,
   customFrontendKeyPreview: null,
   customFrontendAllowedOrigins: null,
@@ -333,6 +337,7 @@ const updateSchema = z.object({
   aiPersonaName: optionalNullable(z.string().trim().max(80)),
   aiSystemPromptOverride: optionalNullable(z.string().trim().max(5000)),
   aiModel: optionalNullable(z.string().trim().max(120)),
+  eligibilityDisqualificationEnabled: z.boolean().optional(),
   // Custom tenant frontend / headless API. The public key is write-only: the
   // backend hashes it and only returns keyConfigured + keyPreview.
   customFrontendEnabled: z.boolean().optional(),

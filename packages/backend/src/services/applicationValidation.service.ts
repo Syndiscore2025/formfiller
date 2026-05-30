@@ -56,6 +56,7 @@ export interface ApplicationValidationRecord {
   financial: { annualRevenue: string | null } | null;
   loanRequest: { amountRequested: string | null } | null;
   signature: { id: string } | null;
+  tenant?: { settings: { eligibilityDisqualificationEnabled: boolean } | null } | null;
 }
 
 function text(value: string | null | undefined): string {
@@ -100,7 +101,8 @@ function validateRecord(
   if (!text(app.contactEmail)) addIssue(issues, 'contactEmail', 'Contact email is required.');
   if (digits(app.contactPhone).length < 10) addIssue(issues, 'contactPhone', 'Valid contact phone is required.');
   if (!app.tcpaConsentStep1) addIssue(issues, 'tcpaConsentStep1', 'Step 1 TCPA/contact consent is required.');
-  if (app.disqualifiedAt) {
+  const eligibilityDisqualificationEnabled = app.tenant?.settings?.eligibilityDisqualificationEnabled ?? true;
+  if (eligibilityDisqualificationEnabled && app.disqualifiedAt) {
     addIssue(issues, 'disqualified', app.disqualificationReason || 'Application does not meet minimum eligibility requirements.');
   }
 
@@ -230,6 +232,7 @@ export async function getApplicationValidationState(
         financial: { select: { annualRevenue: true } },
         loanRequest: { select: { amountRequested: true } },
         signature: { select: { id: true } },
+        tenant: { select: { settings: { select: { eligibilityDisqualificationEnabled: true } } } },
       },
     }),
     prisma.applicationDocument.count({

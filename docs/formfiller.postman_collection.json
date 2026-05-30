@@ -14,6 +14,7 @@
     { "key": "tenant_name", "value": "SET_TENANT_NAME" },
     { "key": "admin_email", "value": "SET_ADMIN_EMAIL" },
     { "key": "admin_password", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
+    { "key": "admin_registration_key", "value": "REPLACE_LOCALLY_DO_NOT_COMMIT" },
     { "key": "application_id", "value": "PASTE_CREATED_APPLICATION_ID" },
     { "key": "place_id", "value": "PASTE_GOOGLE_PLACE_ID" },
     { "key": "auth_token", "value": "PASTE_JWT_LOCALLY_DO_NOT_COMMIT" },
@@ -60,6 +61,7 @@
     { "key": "owner_ownership_pct", "value": "SET_OWNER_OWNERSHIP_PERCENT" },
     { "key": "owner_ssn", "value": "SET_OWNER_9_DIGIT_SSN_OR_ITIN_IN_CURRENT_VALUE" },
     { "key": "owner_date_of_birth", "value": "SET_OWNER_DOB_YYYY_MM_DD" },
+    { "key": "owner_credit_score", "value": "SET_OWNER_CREDIT_SCORE_OR_RANGE" },
     { "key": "owner_street_address", "value": "SET_OWNER_STREET_ADDRESS" },
     { "key": "owner_street_address2", "value": "SET_OWNER_STREET_ADDRESS2_OR_EMPTY" },
     { "key": "owner_city", "value": "SET_OWNER_CITY" },
@@ -68,6 +70,8 @@
     { "key": "annual_revenue", "value": "SET_ANNUAL_REVENUE_RANGE" },
     { "key": "amount_requested", "value": "SET_AMOUNT_REQUESTED_RANGE" },
     { "key": "funding_urgency", "value": "SET_FUNDING_URGENCY" },
+    { "key": "recent_business_start_date", "value": "SET_DATE_LESS_THAN_1_MONTH_AGO_YYYY_MM_DD" },
+    { "key": "disqualification_test_message", "value": "we have no revenue yet" },
     { "key": "statement_month", "value": "SET_STATEMENT_MONTH_YYYY_MM" },
     { "key": "statement_file_name", "value": "SET_BANK_STATEMENT_FILE_NAME" },
     { "key": "bank_name", "value": "SET_BANK_NAME" },
@@ -156,7 +160,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"companyName\": \"{{tenant_name}}\",\n  \"legalBusinessName\": \"{{tenant_name}}\",\n  \"logoUrl\": null,\n  \"companyEmail\": \"{{smtp_from}}\",\n  \"companyPhone\": \"{{business_phone}}\",\n  \"companyAddress\": \"{{business_street_address}}, {{business_city}}, {{business_state}} {{business_zip}}\",\n  \"websiteUrl\": \"{{business_website}}\",\n  \"supportEmail\": \"{{smtp_from}}\",\n  \"theme\": \"dark\",\n  \"accentColor\": \"#0284c7\",\n  \"surfaceColor\": \"#ffffff\",\n  \"pdfShowContactEmail\": true,\n  \"pdfShowContactPhone\": true,\n  \"pdfShowAnnualRevenue\": true,\n  \"pdfShowAmountRequested\": true,\n  \"showEstimatedCreditScore\": true,\n  \"switchboxApiUrl\": \"{{switchbox_api_url}}\",\n  \"switchboxApiKey\": \"{{switchbox_api_key}}\",\n  \"documentStorageProvider\": \"{{document_storage_provider}}\",\n  \"documentStorageEndpoint\": \"{{document_storage_endpoint}}\",\n  \"documentStorageRegion\": \"{{document_storage_region}}\",\n  \"documentStorageBucket\": \"{{document_storage_bucket}}\",\n  \"documentStoragePrefix\": \"{{document_storage_prefix}}\",\n  \"documentStorageAccessKeyId\": \"{{document_storage_access_key_id}}\",\n  \"documentStorageSecretAccessKey\": \"{{document_storage_secret_access_key}}\",\n  \"documentStoragePublicBaseUrl\": \"{{document_storage_public_base_url}}\",\n  \"smtpHost\": \"{{smtp_host}}\",\n  \"smtpPort\": 587,\n  \"smtpSecure\": false,\n  \"smtpUser\": \"{{smtp_user}}\",\n  \"smtpPass\": \"{{smtp_pass}}\",\n  \"smtpFrom\": \"{{smtp_from}}\",\n  \"smtpFromName\": \"{{smtp_from_name}}\",\n  \"emailAbandonedEnabled\": true,\n  \"emailAbandonedDelayMinutes\": 1440,\n  \"emailAbandonedSubject\": \"Complete your funding application\",\n  \"emailAbandonedBody\": \"Hi {firstName},\\n\\nYou started a funding application but haven't finished it yet. Complete it here: {applicationUrl}\",\n  \"emailAbandonedIncludeLogo\": true,\n  \"emailAbandonedIncludeSig\": true,\n  \"emailNoBanksEnabled\": true,\n  \"emailNoBanksSubject\": \"Don't forget to upload your bank statements\",\n  \"emailNoBanksBody\": \"Hi {firstName},\\n\\nYour application has been received but we still need your bank statements. Upload them here: {applicationUrl}\",\n  \"emailNoBanksIncludeLogo\": true,\n  \"emailNoBanksIncludeSig\": true,\n  \"emailInsufficientBanksEnabled\": true,\n  \"emailMinBankStatements\": 3,\n  \"emailInsufficientBanksSubject\": \"We need more bank statements to process your application\",\n  \"emailInsufficientBanksBody\": \"Hi {firstName},\\n\\nWe received {uploadedCount} of the {requiredCount} requested bank statements. Upload more here: {applicationUrl}\",\n  \"emailInsufficientBanksIncludeLogo\": true,\n  \"emailInsufficientBanksIncludeSig\": true,\n  \"aiChatEnabled\": true,\n  \"aiPersonaName\": \"Funding Assistant\",\n  \"aiSystemPromptOverride\": null,\n  \"aiModel\": \"gpt-4o\",\n  \"customFrontendEnabled\": true,\n  \"customFrontendPublicKey\": \"{{custom_frontend_public_key}}\",\n  \"customFrontendAllowedOrigins\": [\"{{custom_frontend_allowed_origin}}\"],\n  \"customFrontendAllowedRedirects\": [\"{{custom_frontend_allowed_redirect_url}}\"]\n}"
+              "raw": "{\n  \"companyName\": \"{{tenant_name}}\",\n  \"legalBusinessName\": \"{{tenant_name}}\",\n  \"logoUrl\": null,\n  \"companyEmail\": \"{{smtp_from}}\",\n  \"companyPhone\": \"{{business_phone}}\",\n  \"companyAddress\": \"{{business_street_address}}, {{business_city}}, {{business_state}} {{business_zip}}\",\n  \"websiteUrl\": \"{{business_website}}\",\n  \"supportEmail\": \"{{smtp_from}}\",\n  \"theme\": \"dark\",\n  \"accentColor\": \"#0284c7\",\n  \"surfaceColor\": \"#ffffff\",\n  \"pdfShowContactEmail\": true,\n  \"pdfShowContactPhone\": true,\n  \"pdfShowAnnualRevenue\": true,\n  \"pdfShowAmountRequested\": true,\n  \"showEstimatedCreditScore\": true,\n  \"switchboxApiUrl\": \"{{switchbox_api_url}}\",\n  \"switchboxApiKey\": \"{{switchbox_api_key}}\",\n  \"documentStorageProvider\": \"{{document_storage_provider}}\",\n  \"documentStorageEndpoint\": \"{{document_storage_endpoint}}\",\n  \"documentStorageRegion\": \"{{document_storage_region}}\",\n  \"documentStorageBucket\": \"{{document_storage_bucket}}\",\n  \"documentStoragePrefix\": \"{{document_storage_prefix}}\",\n  \"documentStorageAccessKeyId\": \"{{document_storage_access_key_id}}\",\n  \"documentStorageSecretAccessKey\": \"{{document_storage_secret_access_key}}\",\n  \"documentStoragePublicBaseUrl\": \"{{document_storage_public_base_url}}\",\n  \"smtpHost\": \"{{smtp_host}}\",\n  \"smtpPort\": 587,\n  \"smtpSecure\": false,\n  \"smtpUser\": \"{{smtp_user}}\",\n  \"smtpPass\": \"{{smtp_pass}}\",\n  \"smtpFrom\": \"{{smtp_from}}\",\n  \"smtpFromName\": \"{{smtp_from_name}}\",\n  \"emailAbandonedEnabled\": true,\n  \"emailAbandonedDelayMinutes\": 1440,\n  \"emailAbandonedSubject\": \"Complete your funding application\",\n  \"emailAbandonedBody\": \"Hi {firstName},\\n\\nYou started a funding application but haven't finished it yet. Complete it here: {applicationUrl}\",\n  \"emailAbandonedIncludeLogo\": true,\n  \"emailAbandonedIncludeSig\": true,\n  \"emailNoBanksEnabled\": true,\n  \"emailNoBanksSubject\": \"Don't forget to upload your bank statements\",\n  \"emailNoBanksBody\": \"Hi {firstName},\\n\\nYour application has been received but we still need your bank statements. Upload them here: {applicationUrl}\",\n  \"emailNoBanksIncludeLogo\": true,\n  \"emailNoBanksIncludeSig\": true,\n  \"emailInsufficientBanksEnabled\": true,\n  \"emailMinBankStatements\": 3,\n  \"emailInsufficientBanksSubject\": \"We need more bank statements to process your application\",\n  \"emailInsufficientBanksBody\": \"Hi {firstName},\\n\\nWe received {uploadedCount} of the {requiredCount} requested bank statements. Upload more here: {applicationUrl}\",\n  \"emailInsufficientBanksIncludeLogo\": true,\n  \"emailInsufficientBanksIncludeSig\": true,\n  \"aiChatEnabled\": true,\n  \"aiPersonaName\": \"Funding Assistant\",\n  \"aiSystemPromptOverride\": null,\n  \"aiModel\": \"gpt-4o\",\n  \"eligibilityDisqualificationEnabled\": {{eligibility_disqualification_enabled}},\n  \"customFrontendEnabled\": true,\n  \"customFrontendPublicKey\": \"{{custom_frontend_public_key}}\",\n  \"customFrontendAllowedOrigins\": [\"{{custom_frontend_allowed_origin}}\"],\n  \"customFrontendAllowedRedirects\": [\"{{custom_frontend_allowed_redirect_url}}\"]\n}"
             },
             "url": "{{backend_base_url}}/api/tenant/settings/admin"
           }
@@ -391,6 +395,90 @@
               "raw": "{\n  \"clientState\": {\n    \"currentStep\": 2\n  }\n}"
             },
             "url": "{{backend_base_url}}/api/chat/{{application_id}}/post-consent-transition"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Eligibility / Disqualification Tests",
+      "item": [
+        {
+          "name": "PATCH /api/tenant/settings/admin - enable disqualification",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"eligibilityDisqualificationEnabled\": true\n}" },
+            "url": "{{backend_base_url}}/api/tenant/settings/admin"
+          }
+        },
+        {
+          "name": "POST /api/chat/message - no revenue disqualification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"{{disqualification_test_message}}\",\n  \"clientState\": {\n    \"currentStep\": 1\n  }\n}"
+            },
+            "url": "{{backend_base_url}}/api/chat/message"
+          }
+        },
+        {
+          "name": "POST /api/chat/:appId/message - no revenue disqualification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"{{disqualification_test_message}}\",\n  \"clientState\": {\n    \"currentStep\": 2\n  }\n}"
+            },
+            "url": "{{backend_base_url}}/api/chat/{{application_id}}/message"
+          }
+        },
+        {
+          "name": "PUT /api/forms/:appId/business - less than 1 month disqualification",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"legalName\": \"{{business_legal_name}}\",\n  \"dba\": \"{{business_dba}}\",\n  \"entityType\": \"{{business_entity_type}}\",\n  \"industry\": \"{{business_industry}}\",\n  \"stateOfFormation\": \"{{business_state_of_formation}}\",\n  \"ein\": \"{{business_ein}}\",\n  \"businessStartDate\": \"{{recent_business_start_date}}\",\n  \"phone\": \"{{business_phone}}\",\n  \"website\": \"{{business_website}}\",\n  \"streetAddress\": \"{{business_street_address}}\",\n  \"streetAddress2\": \"{{business_street_address2}}\",\n  \"city\": \"{{business_city}}\",\n  \"state\": \"{{business_state}}\",\n  \"zipCode\": \"{{business_zip}}\"\n}"
+            },
+            "url": "{{backend_base_url}}/api/forms/{{application_id}}/business"
+          }
+        },
+        {
+          "name": "POST /api/applications/:id/submit - expect blocked after disqualification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-tenant-slug", "value": "{{tenant_slug}}" }],
+            "url": "{{backend_base_url}}/api/applications/{{application_id}}/submit"
+          }
+        },
+        {
+          "name": "PATCH /api/tenant/settings/admin - disable disqualification for alternate products",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" },
+              { "key": "x-tenant-slug", "value": "{{tenant_slug}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"eligibilityDisqualificationEnabled\": false\n}" },
+            "url": "{{backend_base_url}}/api/tenant/settings/admin"
           }
         }
       ]

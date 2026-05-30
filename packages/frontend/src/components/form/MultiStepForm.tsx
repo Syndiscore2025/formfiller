@@ -32,6 +32,7 @@ interface TenantSettings {
   pdfShowAnnualRevenue: boolean;
   pdfShowAmountRequested: boolean;
   showEstimatedCreditScore: boolean;
+  aiChatEnabled: boolean;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -492,7 +493,7 @@ export function MultiStepForm({ token }: Props) {
             onClose={handleCloseComplete}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />
+        {(tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </>
     ) : null;
   }
@@ -539,7 +540,7 @@ export function MultiStepForm({ token }: Props) {
             token={token}
           />
         )}
-        <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />
+        {(tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </div>
     </AnalyticsContext.Provider>
   );

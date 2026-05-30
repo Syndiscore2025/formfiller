@@ -115,3 +115,14 @@ test('submit validation rejects disqualified applications', () => {
   assert.equal(state.ready, false);
   assert.equal(state.issues[0]?.field, 'disqualified');
 });
+
+test('submit validation ignores disqualification when tenant setting is disabled', () => {
+  const record = completeRecord();
+  record.disqualifiedAt = new Date('2026-05-30T00:00:00Z');
+  record.disqualificationReason = 'Business has less than 1 month in business.';
+  record.tenant = { settings: { eligibilityDisqualificationEnabled: false } };
+
+  const state = validateApplicationRecord(record, 1, { requireSignature: true });
+  assert.equal(state.ready, true);
+  assert.deepEqual(state.issues, []);
+});

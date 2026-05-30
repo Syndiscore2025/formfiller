@@ -79,6 +79,7 @@ export interface AdminSettings {
   aiSystemPromptOverride: string | null;
   aiEligibilityRules: unknown | null;
   aiModel: string | null;
+  eligibilityDisqualificationEnabled: boolean;
 }
 
 interface Props {
@@ -269,6 +270,12 @@ export function SettingsForm({ initial, token, onSaved }: Props) {
             onChange={(v) => update('aiChatEnabled', v)}
             label="Enable AI chat"
             description="When off, merchants cannot use the live application chat assistant."
+          />
+          <Toggle
+            checked={form.eligibilityDisqualificationEnabled}
+            onChange={(v) => update('eligibilityDisqualificationEnabled', v)}
+            label="Enable eligibility disqualification"
+            description="When on, no revenue, pre-revenue/startup, or less than 1 month in business stops the application. Turn off to let merchants continue for other products."
           />
           <Input
             label="Assistant name"

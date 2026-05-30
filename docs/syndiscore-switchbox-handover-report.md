@@ -83,7 +83,7 @@ The `/settings` admin panel and `PATCH /api/tenant/settings/admin` support the f
 | Document storage | `documentStorageProvider`, `documentStorageEndpoint`, `documentStorageRegion`, `documentStorageBucket`, `documentStoragePrefix`, `documentStorageAccessKeyId`, write-only `documentStorageSecretAccessKey`, `documentStoragePublicBaseUrl` | Supports S3-compatible storage such as DigitalOcean Spaces; DB fallback remains available. |
 | Email / SMTP | `smtpHost`, `smtpPort`, `smtpSecure`, `smtpUser`, write-only `smtpPass`, `smtpFrom`, `smtpFromName` | Used by configured outbound email workflows. |
 | Follow-up email templates | `emailAbandoned*`, `emailNoBanks*`, `emailInsufficientBanks*` | Controls abandoned/no-bank/insufficient-bank statement reminders. |
-| AI chat agent | `aiChatEnabled`, `aiPersonaName`, `aiSystemPromptOverride`, `aiEligibilityRules`, `aiModel` | Disabling AI returns `403` from `/api/chat/*`. |
+| AI chat agent / eligibility | `aiChatEnabled`, `aiPersonaName`, `aiSystemPromptOverride`, `aiEligibilityRules`, `aiModel`, `eligibilityDisqualificationEnabled` | Disabling AI returns `403` from `/api/chat/*`. Turning off eligibility disqualification lets merchants continue even if they state no revenue, startup/pre-revenue, or less than 1 month in business. |
 
 ## 5. Merchant application flow
 
@@ -406,6 +406,13 @@ The collection includes a **Custom Frontend Auth** folder for Phase C checks. Af
 - `x-formfiller-public-key` authenticates the custom frontend request;
 - the same origin without `x-formfiller-public-key` is rejected.
 
+The collection also includes an **Eligibility / Disqualification Tests** folder for the current hard-stop rules. Use it to verify:
+
+- no-revenue/pre-revenue/startup chat statements return a disqualification response while `eligibilityDisqualificationEnabled` is on;
+- business start dates under 1 month old return `data.disqualified = true` while the setting is on;
+- submit is blocked after disqualification;
+- brokers can turn `eligibilityDisqualificationEnabled` off in settings when they want merchants to continue for alternate products.
+
 All custom frontend implementations must call the existing tenant-scoped endpoints (for example `/api/applications`, `/api/forms/:appId/*`, `/api/signatures/:appId/sign`, `/api/applications/:id/submit`, `/api/applications/:id/finalize`) and must satisfy the same backend validation gates.
 
 Do not export real current values back into the repository.
@@ -421,6 +428,7 @@ Do not export real current values back into the repository.
 - Existing previously generated PDFs are not retroactively changed by privacy/layout updates; regenerate/download after changes.
 - Current signed PDF output is compacted so a typical signed one-owner application fits on one page; larger/full-data applications may still spill when content requires it.
 - Credit Score is optional and tenant-configurable. When disabled, it is hidden from the merchant form, Review & Sign, PDF, and Switchbox payload.
+- Eligibility disqualification is tenant-configurable. Default is on; brokers can disable it in `/settings` if they want no-revenue/startup merchants to continue for alternate products.
 - Admin registration now requires `ADMIN_REGISTRATION_KEY` in production and creates `super_admin` users for settings access.
 - Production backend env now includes `OPENAI_API_KEY` and `GOOGLE_PLACES_API_KEY` as encrypted DigitalOcean secrets, so live AI chat and Google Places address autocomplete are enabled.
 - Live smoke checks on 2026-05-30 confirmed backend health, frontend `/login` and `/settings`, tenant settings with `showEstimatedCreditScore`, and custom-origin public-key enforcement.
@@ -565,6 +573,7 @@ AI chat settings live in `TenantSettings` and are configurable at `/settings` (a
 | System prompt override | `aiSystemPromptOverride` | `null` | Replaces the entire default SYNDIBOT system prompt. Max 5,000 chars. |
 | Eligibility rules | `aiEligibilityRules` | `null` | Reserved JSONB field for future rule-based qualification |
 | OpenAI model | `aiModel` | `"gpt-4o"` | Any OpenAI chat model string. Falls back to `gpt-4o` if null. |
+| Eligibility disqualification | `eligibilityDisqualificationEnabled` | `true` | If `true`, no revenue, startup/pre-revenue, and less than 1 month in business stop the application. If `false`, those merchants can continue. |
 
 If `OPENAI_API_KEY` is not set in the environment, the backend falls back to a canned static reply instead of calling OpenAI. The flow still works end-to-end; the assistant just gives generic guidance. In the current DigitalOcean production backend, `OPENAI_API_KEY` is configured as an encrypted secret.
 

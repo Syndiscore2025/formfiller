@@ -120,7 +120,12 @@ router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHa
     update: data,
     create: { applicationId: appId, ...data },
   });
-  const disqualification = evaluateBusinessStartDateDisqualification(normalizedDate);
+  const tenantSettings = await prisma.tenantSettings.findUnique({
+    where: { tenantId: req.tenantId! },
+    select: { eligibilityDisqualificationEnabled: true },
+  });
+  const eligibilityDisqualificationEnabled = tenantSettings?.eligibilityDisqualificationEnabled ?? true;
+  const disqualification = eligibilityDisqualificationEnabled ? evaluateBusinessStartDateDisqualification(businessStartDate) : null;
   if (disqualification) {
     await markApplicationDisqualified({
       applicationId: appId,
