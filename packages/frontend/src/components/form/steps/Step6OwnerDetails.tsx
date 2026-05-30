@@ -33,7 +33,6 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const [ownershipPct, setOwnershipPct] = useState(owner.ownershipPct || '');
   const [creditScore, setCreditScore] = useState(owner.creditScore || '');
   const [ssn, setSsn] = useState(owner.ssn || '');
-  const [isItin, setIsItin] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState(owner.dateOfBirth || '');
   // If user said home=business on Step 2, pre-fill from business address
   const addrFromBiz = homeAddressSameAsBusiness === true;
@@ -205,10 +204,8 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
   const validateVerification = () => {
     const errs: Record<string, string> = {};
     const ssnDigits = ssn.replace(/\D/g, '');
-    const taxIdLabel = isItin ? 'ITIN' : 'SSN';
     if (!ssnDigits) errs.ssn = 'Required';
-    else if (ssnDigits.length !== 9) errs.ssn = `${taxIdLabel} must be 9 digits`;
-    else if (isItin && !ssnDigits.startsWith('9')) errs.ssn = 'ITIN must begin with 9';
+    else if (ssnDigits.length !== 9) errs.ssn = 'SSN must be 9 digits';
     if (!dateOfBirth) errs.dateOfBirth = 'Required';
     else if (!parseIsoDate(dateOfBirth)) errs.dateOfBirth = 'Enter a valid date of birth';
     else if (!isAtLeast18(dateOfBirth)) errs.dateOfBirth = 'Applicant must be at least 18 years old to apply.';
@@ -402,7 +399,7 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Identity check</p>
                 <h3 id="owner-verification-title" className="mt-2 text-2xl font-semibold text-white">Owner Verification</h3>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
-                  Enter your {isItin ? 'ITIN' : 'Social Security Number'} and Date of Birth to verify your identity before continuing.
+                  Enter your Social Security Number and Date of Birth to verify your identity before continuing.
                 </p>
               </div>
               <button
@@ -418,26 +415,11 @@ export function Step6OwnerDetails({ owner, contact, business, hasAdditionalOwner
               </button>
             </div>
 
-            <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-50">
-              For your protection, enter SSN and Date of Birth only in these secure form fields — not in chat.
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label htmlFor="owner_ssn" className="text-sm font-semibold text-slate-100">
-                    {isItin ? 'ITIN' : 'Social Security Number'} <span className="text-red-500">*</span>
-                  </label>
-                  <label className="inline-flex cursor-pointer select-none items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-300/30 hover:text-cyan-100">
-                    <input
-                      type="checkbox"
-                      checked={isItin}
-                      onChange={(e) => { setIsItin(e.target.checked); setSsn(''); }}
-                      className="h-3.5 w-3.5 cursor-pointer rounded border-white/20 bg-slate-950 text-cyan-300 accent-cyan-400"
-                    />
-                    Use ITIN instead
-                  </label>
-                </div>
+                <label htmlFor="owner_ssn" className="text-sm font-semibold text-slate-100">
+                  Social Security Number <span className="text-red-500">*</span>
+                </label>
                 <input
                   ref={ssnInputRef}
                   id="owner_ssn"

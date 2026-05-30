@@ -69,27 +69,10 @@ function calculateTimeInBusiness(v?: string): string | undefined {
 const CONSENT_TEXT =
   'By signing below, I certify that all pre-filled and manually entered information has been reviewed and is true, accurate, and complete. ' +
   'I authorize verification of business, identity, ownership, bank, revenue, and application information, including soft credit and business credit checks where permitted. ' +
-  'I consent to be contacted about this funding request by phone, text, and email. Message and data rates may apply. Reply STOP to opt out of text messages or HELP for help. ' +
   'This electronic signature is legally binding under the ESIGN Act and UETA.';
 
-const ACKNOWLEDGEMENTS = [
-  {
-    id: 'applicationAuthorization',
-    label:
-      'I reviewed the pre-filled and manually entered application information, certify it is true, accurate, and complete, and authorize verification of my business, ownership, identity, bank, revenue, credit, and submitted application information where permitted by law.',
-  },
-  {
-    id: 'esignCommunication',
-    label:
-      'I consent to use electronic records and signatures, agree my electronic signature is legally binding, and consent to be contacted by phone, text, and email about this request. Reply STOP to opt out of text messages or HELP for help.',
-  },
-] as const;
-
-type AcknowledgementId = (typeof ACKNOWLEDGEMENTS)[number]['id'];
-
-function initialAcknowledgements(): Record<AcknowledgementId, boolean> {
-  return ACKNOWLEDGEMENTS.reduce((acc, item) => ({ ...acc, [item.id]: false }), {} as Record<AcknowledgementId, boolean>);
-}
+const ACKNOWLEDGEMENT_LABEL =
+  'I reviewed the application, certify the information is true, accurate, and complete, authorize the listed verifications where permitted, and agree this electronic signature is legally binding.';
 
 interface Props {
   state: FormState;
@@ -132,18 +115,13 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
   const [signerName, setSignerName] = useState(`${owner?.firstName || state.contact.firstName} ${owner?.lastName || state.contact.lastName}`.trim());
   const [signerEmail, setSignerEmail] = useState(owner?.email || state.contact.email || '');
   const [dateSigned, setDateSigned] = useState(todayLocal);
-  const [acknowledgements, setAcknowledgements] = useState<Record<AcknowledgementId, boolean>>(initialAcknowledgements);
+  const [authorizationAcknowledged, setAuthorizationAcknowledged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureMode, setSignatureMode] = useState<'auto' | 'drawn' | 'cleared'>('auto');
   const drawingRef = useRef<{ isDrawing: boolean; last?: { x: number; y: number } }>({ isDrawing: false });
-  const allAcknowledged = ACKNOWLEDGEMENTS.every((item) => acknowledgements[item.id]);
-
-  const toggleAcknowledgement = (id: AcknowledgementId) => {
-    setAcknowledgements((current) => ({ ...current, [id]: !current[id] }));
-  };
 
   /** Format dateSigned (YYYY-MM-DD) to user-friendly MM/DD/YYYY for display */
   const dateSignedDisplay = useMemo(() => {
@@ -286,7 +264,7 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
     const effectiveSignerEmail = signerEmail || owner?.email || state.contact.email || '';
     if (!signerName.trim()) { setError('Please enter your full name.'); return; }
     if (!/^\S+@\S+\.\S+$/.test(effectiveSignerEmail)) { setError('Please enter a valid email.'); return; }
-    if (!allAcknowledged) { setError('Please review and check each authorization before signing.'); return; }
+    if (!authorizationAcknowledged) { setError('Please review and check the authorization before signing.'); return; }
     if (!state.applicationId) { setError('Session error. Please refresh.'); return; }
     if (!hasSignature) {
       // If we're in auto mode and the name exists, generate the typed signature on-demand.
@@ -309,8 +287,8 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
           signerName,
           signerEmail: effectiveSignerEmail,
           consentAcknowledged: true,
-          applicationAuthorizationAcknowledged: acknowledgements.applicationAuthorization,
-          esignAndCommunicationConsent: acknowledgements.esignCommunication,
+          applicationAuthorizationAcknowledged: authorizationAcknowledged,
+          esignAndCommunicationConsent: authorizationAcknowledged,
           marketingConsent: true,
         },
         token ?? undefined
@@ -380,19 +358,15 @@ export function Step8ReviewSign({ state, privacy, onBack, onSubmitted, token }: 
       <div className="consent-panel mb-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] p-4">
         <h3 className="mb-2 text-sm font-semibold text-cyan-100">Authorizations & Electronic Signature Consent</h3>
         <p className="mb-4 text-xs leading-relaxed text-slate-300">{CONSENT_TEXT}</p>
-        <div className="space-y-3">
-          {ACKNOWLEDGEMENTS.map((item) => (
-            <label key={item.id} className="consent-row flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
-              <input
-                type="checkbox"
-                checked={acknowledgements[item.id]}
-                onChange={() => toggleAcknowledgement(item.id)}
-                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-300 accent-cyan-400 focus:ring-cyan-300"
-              />
-              <span className="text-xs leading-5 text-slate-300">{item.label}</span>
-            </label>
-          ))}
-        </div>
+        <label className="consent-row flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={authorizationAcknowledged}
+            onChange={() => setAuthorizationAcknowledged((current) => !current)}
+            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-300 accent-cyan-400 focus:ring-cyan-300"
+          />
+          <span className="text-xs leading-5 text-slate-300">{ACKNOWLEDGEMENT_LABEL}</span>
+        </label>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
