@@ -484,92 +484,93 @@ export function MultiStepForm({ token }: Props) {
     : null;
   const exitPrompt = showExitPrompt ? <ExitIntentPrompt onContinue={handleDismissExitPrompt} /> : null;
 
-  if (submittedAt) {
-    return state.applicationId ? (
-      <>
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="w-full max-w-2xl">
-            {/* Bank statements is intentionally not a visible step in the bar
-                (would deter merchants from finishing). Before final submit we
-                sit on "Review & Sign" with sub-progress walking 80% → 97%.
-                Once /finalize succeeds (hasFinalized=true) we jump past the
-                last visible step so all five circles show ✓ and the bar fills
-                to 100% — and stays there even after the overlay is dismissed. */}
-            <ProgressBar
-              currentStep={hasFinalized ? 6 : 5}
-              subProgress={hasFinalized ? 0 : Math.min(uploadedDocumentsCount / 4, 1) * 0.85}
-            />
-          </div>
-          <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-            <span aria-hidden="true">✓</span> {hasFinalized ? 'Application submitted' : 'Application signed'}
-          </span>
-        </div>
-        <BankStatementUpload
-          applicationId={state.applicationId}
-          submittedAt={submittedAt}
-          token={token}
-          pdfDownloading={pdfDownloading}
-          onDownloadPdf={handleDownloadPdf}
-          onComplete={handleComplete}
-          onDocumentsCountChange={handleDocumentsCountChange}
-        />
-        {isComplete && (
-          <CompletionOverlay
-            ownerFirstName={state.contact.firstName || undefined}
-            companyName={tenantSettings?.companyName ?? null}
-            websiteUrl={tenantSettings?.websiteUrl ?? null}
-            supportEmail={tenantSettings?.supportEmail ?? null}
-            onClose={handleCloseComplete}
-          />
-        )}
-        {eligibilityOverlay}
-        {!disqualificationMessage && exitPrompt}
-        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
-      </>
-    ) : null;
-  }
-
+  // Single return tree: the signed (bank statements) view and the step form
+  // swap inside it while the ChatWidget keeps one stable position. This is
+  // what keeps the chat drawer mounted (and open, with its transcript) across
+  // the sign transition instead of unmounting and remounting closed.
   return (
     <AnalyticsContext.Provider value={analytics}>
       <div>
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="w-full max-w-2xl">
-            <ProgressBar currentStep={state.currentStep} />
-          </div>
-          <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
-        </div>
+        {submittedAt ? (state.applicationId ? (
+          <>
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="w-full max-w-2xl">
+                {/* Bank statements is intentionally not a visible step in the bar
+                    (would deter merchants from finishing). Before final submit we
+                    sit on "Review & Sign" with sub-progress walking 80% → 97%.
+                    Once /finalize succeeds (hasFinalized=true) we jump past the
+                    last visible step so all five circles show ✓ and the bar fills
+                    to 100% — and stays there even after the overlay is dismissed. */}
+                <ProgressBar
+                  currentStep={hasFinalized ? 6 : 5}
+                  subProgress={hasFinalized ? 0 : Math.min(uploadedDocumentsCount / 4, 1) * 0.85}
+                />
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                <span aria-hidden="true">✓</span> {hasFinalized ? 'Application submitted' : 'Application signed'}
+              </span>
+            </div>
+            <BankStatementUpload
+              applicationId={state.applicationId}
+              submittedAt={submittedAt}
+              token={token}
+              pdfDownloading={pdfDownloading}
+              onDownloadPdf={handleDownloadPdf}
+              onComplete={handleComplete}
+              onDocumentsCountChange={handleDocumentsCountChange}
+            />
+            {isComplete && (
+              <CompletionOverlay
+                ownerFirstName={state.contact.firstName || undefined}
+                companyName={tenantSettings?.companyName ?? null}
+                websiteUrl={tenantSettings?.websiteUrl ?? null}
+                supportEmail={tenantSettings?.supportEmail ?? null}
+                onClose={handleCloseComplete}
+              />
+            )}
+          </>
+        ) : null) : (
+          <>
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="w-full max-w-2xl">
+                <ProgressBar currentStep={state.currentStep} />
+              </div>
+              <SaveIndicator isSaving={state.isSaving} lastSaved={state.lastSaved} />
+            </div>
 
-        {state.currentStep === 1 && (
-          <Step1EINLookup business={state.business} contact={state.contact} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} onDraftChange={handleStep1DraftChange} chatTcpaConsentSignal={chatTcpaConsented} />
-        )}
-        {state.currentStep === 2 && (
-          <Step2ConfirmBusiness business={state.business} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
-            onNext={handleStep2Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep2DraftChange} onAiPageContextChange={setAiPageContext} />
-        )}
-        {state.currentStep === 3 && (
-          <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep3DraftChange} />
-        )}
-        {state.currentStep === 4 && (
-          <Step6OwnerDetails owner={state.owners[0] || {} as OwnerInfo} contact={state.contact} business={state.business}
-            hasAdditionalOwners={state.hasAdditionalOwners} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
-            aiFocusField={aiFocusField} onAiFocusHandled={() => setAiFocusField(null)}
-            showEstimatedCreditScore={tenantSettings?.showEstimatedCreditScore ?? true}
-            onNext={handleStep4Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep4DraftChange} />
-          )}
-        {state.currentStep === 5 && (
-          <Step8ReviewSign
-            state={state}
-            privacy={tenantSettings ? {
-              showContactEmail: tenantSettings.pdfShowContactEmail,
-              showContactPhone: tenantSettings.pdfShowContactPhone,
-              showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
-              showAmountRequested: tenantSettings.pdfShowAmountRequested,
-              showEstimatedCreditScore: tenantSettings.showEstimatedCreditScore,
-            } : undefined}
-            onBack={() => void goBackOneSection()}
-            onSubmitted={setSubmittedAt}
-            token={token}
-          />
+            {state.currentStep === 1 && (
+              <Step1EINLookup business={state.business} contact={state.contact} onAutoPopulate={handleAutoPopulate} onNext={handleStep1Next} token={token} onDraftChange={handleStep1DraftChange} chatTcpaConsentSignal={chatTcpaConsented} />
+            )}
+            {state.currentStep === 2 && (
+              <Step2ConfirmBusiness business={state.business} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
+                onNext={handleStep2Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep2DraftChange} onAiPageContextChange={setAiPageContext} />
+            )}
+            {state.currentStep === 3 && (
+              <Step4Revenue financial={state.financial} loanRequest={state.loanRequest} onNext={handleStep3Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep3DraftChange} />
+            )}
+            {state.currentStep === 4 && (
+              <Step6OwnerDetails owner={state.owners[0] || {} as OwnerInfo} contact={state.contact} business={state.business}
+                hasAdditionalOwners={state.hasAdditionalOwners} homeAddressSameAsBusiness={state.homeAddressSameAsBusiness}
+                aiFocusField={aiFocusField} onAiFocusHandled={() => setAiFocusField(null)}
+                showEstimatedCreditScore={tenantSettings?.showEstimatedCreditScore ?? true}
+                onNext={handleStep4Next} onBack={() => void goBackOneSection()} onDraftChange={handleStep4DraftChange} />
+              )}
+            {state.currentStep === 5 && (
+              <Step8ReviewSign
+                state={state}
+                privacy={tenantSettings ? {
+                  showContactEmail: tenantSettings.pdfShowContactEmail,
+                  showContactPhone: tenantSettings.pdfShowContactPhone,
+                  showAnnualRevenue: tenantSettings.pdfShowAnnualRevenue,
+                  showAmountRequested: tenantSettings.pdfShowAmountRequested,
+                  showEstimatedCreditScore: tenantSettings.showEstimatedCreditScore,
+                } : undefined}
+                onBack={() => void goBackOneSection()}
+                onSubmitted={setSubmittedAt}
+                token={token}
+              />
+            )}
+          </>
         )}
         {eligibilityOverlay}
         {!disqualificationMessage && exitPrompt}
