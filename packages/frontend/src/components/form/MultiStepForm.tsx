@@ -664,18 +664,18 @@ function ExitIntentPrompt({ onContinue }: { onContinue: () => void }) {
       onClick={onContinue}
     >
       <div
-        className={`w-full max-w-md transition-all duration-300 ease-out ${visible ? 'translate-y-0 scale-100' : 'translate-y-3 scale-[0.98]'}`}
+        className={`w-full max-w-2xl transition-all duration-300 ease-out ${visible ? 'translate-y-0 scale-100' : 'translate-y-3 scale-[0.98]'}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="owner-verification-card surface-panel-soft border border-sky-300/20 bg-slate-950/95 p-7 text-center shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(56,189,248,0.08)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-200">Before you go</p>
-          <h3 id="exit-intent-title" className="mt-3 text-2xl font-semibold text-white">Wait — did you want to finish your application?</h3>
-          <p className="mt-4 text-sm leading-6 text-slate-300">Your progress is saved, and it only takes a couple more minutes to complete. Pick up right where you left off.</p>
-          <div className="mt-6 flex justify-center">
+        <div className="owner-verification-card surface-panel-soft border border-sky-300/20 bg-slate-950/95 p-10 text-center shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(56,189,248,0.08)]">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-200">Before you go</p>
+          <h3 id="exit-intent-title" className="mt-4 text-3xl font-semibold text-white sm:text-4xl">Wait! Did you want to finish your application?</h3>
+          <p className="mt-5 text-base leading-7 text-slate-300">Your progress is saved, and it only takes a couple more minutes to complete. Pick up right where you left off.</p>
+          <div className="mt-8 flex justify-center">
             <button
               type="button"
               onClick={onContinue}
-              className="rounded-lg bg-sky-400 px-6 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-sky-300"
+              className="rounded-lg bg-sky-400 px-8 py-3.5 text-base font-semibold text-slate-950 transition-colors hover:bg-sky-300"
             >
               Finish my application
             </button>

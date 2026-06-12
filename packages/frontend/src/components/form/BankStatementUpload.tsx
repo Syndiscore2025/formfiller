@@ -299,7 +299,7 @@ export function BankStatementUpload({
             <span aria-hidden="true">✨</span> Final Step
           </div>
           <h2 className="mb-2 text-2xl font-bold text-white">
-            You&apos;re almost done — just upload your 4 most recent bank statements
+            You&apos;re almost done! Just upload your 4 most recent bank statements
           </h2>
           <p className="max-w-3xl text-sm leading-6 text-slate-300">
             This is the last thing we need. Please upload the last 4 completed monthly bank statement PDFs for your primary business account and we&apos;ll take it from there.
@@ -320,7 +320,7 @@ export function BankStatementUpload({
             <div>
               <h3 className="text-lg font-semibold text-white">Bank statement PDFs</h3>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
-                Upload statements here. Once a file is uploaded, it appears in this same list — no duplicate received section.
+                Upload statements here. Once a file is uploaded, it appears in this same list, so there is no duplicate received section.
               </p>
             </div>
 

@@ -192,7 +192,7 @@ const FIELD_HELP: Record<string, FieldHelpEntry> = {
   'loanRequest.amountRequested': {
     aliases: ['funding needed', 'amount requested', 'funding amount', 'how much funding', 'amount looking for'],
     topic: 'Funding amount requested',
-    guidance: 'Whatever amount the merchant is seeking. This is not a quote or approval — it just tells the team what the merchant is asking for.',
+    guidance: 'Whatever amount the merchant is seeking. This is not a quote or approval; it just tells the team what the merchant is asking for.',
   },
   'owner.firstName': {
     aliases: ['owner first name', 'first name', 'primary owner name'],
@@ -266,13 +266,13 @@ const CATEGORY_GUIDANCE: Record<Exclude<GuardrailCategory, 'field_help'>, string
   credit:
     'Merchant is asking about credit / FICO / score / hard or soft pull. Do NOT quote a minimum score or rule them in or out. Explain credit is one of several factors and that the team needs the complete file to evaluate fairly. Then ask the next missing field.',
   documents_bank:
-    'Merchant is asking about bank statements, uploads, PDFs, Plaid, or documents. Explain that bank statements verify business activity for review, that PDFs from online banking are preferred over screenshots, and that uploads happen in the secure documents area inside the application — not in chat. Then push toward finishing or signing.',
+    'Merchant is asking about bank statements, uploads, PDFs, Plaid, or documents. Explain that bank statements verify business activity for review, that PDFs from online banking are preferred over screenshots, and that uploads happen in the secure documents area inside the application, not in chat. Then push toward finishing or signing.',
   process_timeline:
     'Merchant is asking how long, when, or what happens next. Explain that after a complete signed application + requested documents are in, the funding team reviews the file. Do NOT promise specific timelines, days, or amounts. Then ask the next missing field.',
   trust_security:
     'Merchant is asking if this is legit / safe / private / secure / who you are. Reassure briefly and professionally: data goes only into the secure form fields (not chat), sensitive identity info should never be typed in chat, and you are here to guide them through the application. Then steer them back to the next missing field.',
   application_help:
-    'Merchant wants general help with the application or a field. Offer to walk them through the next missing item one step at a time, in plain language. Never claim you filled or changed fields — they confirm entries in the form UI.',
+    'Merchant wants general help with the application or a field. Offer to walk them through the next missing item one step at a time, in plain language. Never claim you filled or changed fields; they confirm entries in the form UI.',
   signing:
     'Merchant is asking about signing / e-signature / authorization. Tell them to review the application first, then e-sign when everything looks accurate. Signing is what moves the completed file into review.',
   competitor_comparison:

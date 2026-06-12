@@ -95,7 +95,7 @@ async function sendMail(
   includeSig: boolean,
 ): Promise<void> {
   if (!settings.smtpHost || !settings.smtpFrom) {
-    throw new Error('SMTP not configured — set smtpHost and smtpFrom in tenant settings.');
+    throw new Error('SMTP not configured. Set smtpHost and smtpFrom in tenant settings.');
   }
   const transporter = createTransporter(settings);
   const html = buildHtml({ body, settings, includeLogo, includeSig });

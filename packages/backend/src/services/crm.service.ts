@@ -69,7 +69,7 @@ async function pushWebhook(url: string, apiKey: string, payload: unknown): Promi
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Switchbox webhook failed: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`);
+    throw new Error(`Switchbox webhook failed: ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ''}`);
   }
   try {
     const json = await res.json() as Record<string, unknown>;

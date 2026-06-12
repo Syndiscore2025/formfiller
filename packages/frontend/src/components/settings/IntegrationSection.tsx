@@ -68,7 +68,7 @@ export function IntegrationSection({ form, update, apiKey, setApiKey }: Props) {
             When the merchant submits the application, we POST a JSON payload containing the
             structured application data, the signed PDF (base64), and any uploaded bank statements
             to your endpoint. Failed deliveries are retried automatically and visible in the
-            CrmDelivery log. Privacy toggles above are honored — fields you have hidden from the
+            CrmDelivery log. Privacy toggles above are honored: fields you have hidden from the
             PDF are also omitted from the JSON payload.
           </p>
         </div>

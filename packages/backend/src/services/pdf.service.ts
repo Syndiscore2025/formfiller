@@ -186,7 +186,7 @@ export function generateApplicationPdf(
 
   const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'LETTER', bufferPages: true });
 
-  const headerTitle = tenant?.companyName ? `${tenant.companyName} — Business Funding Application` : 'Business Funding Application';
+  const headerTitle = tenant?.companyName ? `${tenant.companyName} Business Funding Application` : 'Business Funding Application';
   const headerSub = tenant?.legalBusinessName ?? 'Signed merchant application packet';
 
   /* ── Header ── */
@@ -387,7 +387,7 @@ function fieldBox(doc: PDFKit.PDFDocument, x: number, y: number, width: number, 
   doc.fontSize(5.4).font('Helvetica-Bold').fillColor('#64748b')
     .text(label.toUpperCase(), x + 6, y + 4, { width: width - 12, lineBreak: false });
   doc.fontSize(8).font('Helvetica-Bold').fillColor('#0f172a')
-    .text(value || '—', x + 6, y + 13, { width: width - 12, height: height - 15, ellipsis: true });
+    .text(value || '-', x + 6, y + 13, { width: width - 12, height: height - 15, ellipsis: true });
 }
 
 function textBox(doc: PDFKit.PDFDocument, text: string): void {

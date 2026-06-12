@@ -613,7 +613,7 @@ export function Step2ConfirmBusiness({ business, homeAddressSameAsBusiness: init
               {show('stateOfFormation') && <Select label="State of Formation" required value={stateOfFormation}
                 options={[...US_STATES]}
                 onChange={(e) => setStateOfFormation(e.target.value)} error={errors.stateOfFormation} />}
-              {show('ein') && <Input label="EIN" required={!isSoleProp} placeholder={isSoleProp ? 'N/A — Sole Proprietorship' : 'XX-XXXXXXX'} value={isSoleProp ? '' : ein}
+              {show('ein') && <Input label="EIN" required={!isSoleProp} placeholder={isSoleProp ? 'N/A (Sole Proprietorship)' : 'XX-XXXXXXX'} value={isSoleProp ? '' : ein}
                 onChange={(e) => setEin(formatEinInput(e.target.value))} error={errors.ein}
                 autoComplete="off" disabled={isSoleProp} />}
             </div>

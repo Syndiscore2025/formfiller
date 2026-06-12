@@ -40,15 +40,15 @@ const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
 // the application. Keyed by step number; the bank-statements page (post-sign)
 // has its own message below. Each page is announced at most once per session.
 const STEP_GUIDE_MESSAGES: Record<number, string> = {
-  1: 'You\'re on Get Started. Enter your name, email, and mobile number, then your EIN or legal business name so we can look up your business details. Ask me here if you get stuck on anything.',
-  2: 'You\'re on Business Details. Please confirm the information we found — if anything looks off, click the Edit button to fix it. Also answer whether this is a home-based business before continuing.',
-  3: 'You\'re on Revenue & Funding. Choose your approximate annual revenue and how much funding you\'re looking for. If you\'re unsure which range fits, ask me.',
-  4: 'You\'re on Owner Details. Fill in the primary owner\'s information. For security, enter SSN and date of birth only in the secure form fields — never in this chat.',
-  5: 'You\'re on Review & Sign. Double-check everything on screen, then check the authorization box and sign to submit. Happy to answer any questions before you sign.',
+  1: 'Welcome! Let\'s get you started. Enter your name, email, and mobile number, then your EIN or legal business name and we\'ll look up your business details for you. I\'m right here if you have any questions along the way.',
+  2: 'Great start! Next, take a quick look at the business details we found. If anything looks off, just click the Edit button to fix it. One quick question to answer before continuing: is this a home-based business?',
+  3: 'You\'re doing great! Now let\'s talk numbers. Pick your approximate annual revenue and how much funding you\'re looking for. Not sure which range fits? Just ask me.',
+  4: 'Almost there! Next up is the owner\'s information. Quick security note: enter SSN and date of birth only in the secure form fields, never in this chat.',
+  5: 'Home stretch! Give everything a quick once-over, then check the authorization box and sign. Happy to answer any last questions before you sign.',
 };
 
 const BANK_UPLOAD_GUIDE_MESSAGE =
-  'Last step — upload your business bank statements as PDFs, then click Submit Application to finish. If you have questions about which statements to upload, ask me here.';
+  'You did it! Just one last step: upload your business bank statements as PDFs, then click Submit Application to wrap things up. If you have questions about which statements to upload, ask away.';
 
 export function ChatDrawer({ open, applicationId, token, formState, submittedAt, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,7 +65,7 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
   const introMessage = useMemo<ChatMessage>(() => ({
     id: 'intro',
     role: 'assistant',
-    content: 'Hi — I’ll follow along as you complete the application. If you get stuck, ask me what to do next and I’ll guide you to the exact field or button without slowing you down.',
+    content: 'Hi there! I\'ll be right here with you while you complete the application. If you ever get stuck, just ask and I\'ll point you to the exact field or button you need.',
   }), []);
 
   useEffect(() => {
@@ -189,7 +189,7 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
               </span>
             </h2>
             <p className="mt-2 max-w-sm text-xs leading-5 text-slate-400">
-              For security, identity details like SSN and DOB belong only in the secure form fields — not chat.
+              For security, identity details like SSN and DOB belong only in the secure form fields, not chat.
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300 hover:bg-white/[0.06]">
