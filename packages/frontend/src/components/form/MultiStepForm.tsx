@@ -121,10 +121,12 @@ export function MultiStepForm({ token }: Props) {
     lastSaved: null,
   });
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
-  // True while we check localStorage for an in-progress application and
-  // rehydrate it from the backend. The form renders a brief loading state
-  // instead of Step 1 so a returning merchant never sees a blank restart.
+  // True while we check localStorage for an in-progress application.
   const [restoring, setRestoring] = useState(true);
+  // When a saved draft is found we hold it here and ask the visitor whether
+  // they want to continue (their app) or start fresh (new person / new attempt).
+  // Null means no saved app was found, or the visitor already answered.
+  const [resumeCandidate, setResumeCandidate] = useState<ResumedApplication | null>(null);
   // Overlay visibility (can be toggled off via the close button).
   const [isComplete, setIsComplete] = useState(false);
   // Sticky finalization flag — flipped true once POST /finalize succeeds and
@@ -213,6 +215,99 @@ export function MultiStepForm({ token }: Props) {
   // read from the tenant-scoped localStorage key and the draft is fetched
   // from the backend (tenant isolation is enforced server-side via the
   // x-tenant-slug header on every request).
+  // Rehydrates form state from a fetched draft. Called either immediately
+  // (no stored name — nothing to confirm) or after the visitor confirms they
+  // want to resume their own application.
+  const applyResumedApplication = useCallback((app: ResumedApplication) => {
+    const contact: ContactInfo = {
+      firstName: str(app.contactFirstName),
+      lastName: str(app.contactLastName),
+      email: str(app.contactEmail),
+      phone: normalizeUsPhoneDigits(str(app.contactPhone)),
+      tcpaConsent: Boolean(app.tcpaConsentStep1),
+    };
+
+    const business: BusinessInfo = {
+      ...EMPTY_BUSINESS,
+      ...(app.business ? {
+        legalName: str(app.business.legalName),
+        dba: str(app.business.dba),
+        entityType: str(app.business.entityType) as BusinessInfo['entityType'],
+        industry: str(app.business.industry),
+        stateOfFormation: str(app.business.stateOfFormation),
+        ein: str(app.business.ein),
+        businessStartDate: str(app.business.businessStartDate).slice(0, 10),
+        phone: normalizeUsPhoneDigits(str(app.business.phone)),
+        website: str(app.business.website),
+        streetAddress: str(app.business.streetAddress),
+        streetAddress2: str(app.business.streetAddress2),
+        city: str(app.business.city),
+        state: str(app.business.state),
+        zipCode: str(app.business.zipCode),
+        sicCode: str(app.business.sicCode),
+        naicsCode: str(app.business.naicsCode),
+      } : {}),
+    };
+
+    // SSN is stored encrypted server-side and never sent back to the
+    // browser, so it rehydrates empty and the merchant re-enters it if
+    // they revisit Owner Details.
+    const owners: OwnerInfo[] = (app.owners || []).map((owner, index) => ({
+      ownerIndex: index,
+      firstName: str(owner.firstName),
+      lastName: str(owner.lastName),
+      email: str(owner.email) || contact.email,
+      phone: normalizeUsPhoneDigits(str(owner.phone)) || contact.phone,
+      ownershipPct: str(owner.ownershipPct),
+      ssn: '',
+      dateOfBirth: str(owner.dateOfBirth).slice(0, 10),
+      creditScore: str(owner.creditScore),
+      streetAddress: str(owner.streetAddress),
+      streetAddress2: str(owner.streetAddress2),
+      city: str(owner.city),
+      state: str(owner.state),
+      zipCode: str(owner.zipCode),
+    }));
+    if (owners.length === 0 && app.currentStep > 1) {
+      owners.push({
+        ownerIndex: 0, firstName: '', lastName: '', email: contact.email, phone: contact.phone,
+        ownershipPct: '', ssn: '', dateOfBirth: '', creditScore: '',
+        streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',
+      });
+    }
+
+    setState((prev) => ({
+      ...prev,
+      applicationId: app.id,
+      currentStep: Math.min(Math.max(Number(app.currentStep) || 1, 1), 5),
+      contact,
+      business,
+      owners,
+      financial: { annualRevenue: str(app.financial?.annualRevenue) },
+      loanRequest: { amountRequested: str(app.loanRequest?.amountRequested), urgency: str(app.loanRequest?.urgency) },
+      hasAdditionalOwners: app.hasAdditionalOwners,
+      homeAddressSameAsBusiness: app.homeBasedBusiness,
+      ownerHomeSameAsBusiness: app.ownerHomeSameAsBusiness,
+    }));
+
+    // Already signed: resume straight to the bank-statements screen.
+    if (app.signature?.signedAt) setSubmittedAt(app.signature.signedAt);
+  }, []);
+
+  // Visitor confirmed they want to resume their own application.
+  const handleConfirmResume = useCallback(() => {
+    if (resumeCandidate) applyResumedApplication(resumeCandidate);
+    setResumeCandidate(null);
+    setRestoring(false);
+  }, [resumeCandidate, applyResumedApplication]);
+
+  // Visitor chose "Start a new application" — discard the stored session.
+  const handleDeclineResume = useCallback(() => {
+    clearStoredApplicationId();
+    setResumeCandidate(null);
+    setRestoring(false);
+  }, []);
+
   useEffect(() => {
     const storedId = readStoredApplicationId();
     if (!storedId) { setRestoring(false); return; }
@@ -225,88 +320,40 @@ export function MultiStepForm({ token }: Props) {
         // Finished or disqualified applications are not resumable.
         if (!app || app.finalizedAt || app.disqualifiedAt) { clearStoredApplicationId(); return; }
 
-        const contact: ContactInfo = {
-          firstName: str(app.contactFirstName),
-          lastName: str(app.contactLastName),
-          email: str(app.contactEmail),
-          phone: normalizeUsPhoneDigits(str(app.contactPhone)),
-          tcpaConsent: Boolean(app.tcpaConsentStep1),
-        };
-
-        const business: BusinessInfo = {
-          ...EMPTY_BUSINESS,
-          ...(app.business ? {
-            legalName: str(app.business.legalName),
-            dba: str(app.business.dba),
-            entityType: str(app.business.entityType) as BusinessInfo['entityType'],
-            industry: str(app.business.industry),
-            stateOfFormation: str(app.business.stateOfFormation),
-            ein: str(app.business.ein),
-            businessStartDate: str(app.business.businessStartDate).slice(0, 10),
-            phone: normalizeUsPhoneDigits(str(app.business.phone)),
-            website: str(app.business.website),
-            streetAddress: str(app.business.streetAddress),
-            streetAddress2: str(app.business.streetAddress2),
-            city: str(app.business.city),
-            state: str(app.business.state),
-            zipCode: str(app.business.zipCode),
-            sicCode: str(app.business.sicCode),
-            naicsCode: str(app.business.naicsCode),
-          } : {}),
-        };
-
-        // SSN is stored encrypted server-side and never sent back to the
-        // browser, so it rehydrates empty and the merchant re-enters it if
-        // they revisit Owner Details.
-        const owners: OwnerInfo[] = (app.owners || []).map((owner, index) => ({
-          ownerIndex: index,
-          firstName: str(owner.firstName),
-          lastName: str(owner.lastName),
-          email: str(owner.email) || contact.email,
-          phone: normalizeUsPhoneDigits(str(owner.phone)) || contact.phone,
-          ownershipPct: str(owner.ownershipPct),
-          ssn: '',
-          dateOfBirth: str(owner.dateOfBirth).slice(0, 10),
-          creditScore: str(owner.creditScore),
-          streetAddress: str(owner.streetAddress),
-          streetAddress2: str(owner.streetAddress2),
-          city: str(owner.city),
-          state: str(owner.state),
-          zipCode: str(owner.zipCode),
-        }));
-        if (owners.length === 0 && app.currentStep > 1) {
-          owners.push({
-            ownerIndex: 0, firstName: '', lastName: '', email: contact.email, phone: contact.phone,
-            ownershipPct: '', ssn: '', dateOfBirth: '', creditScore: '',
-            streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',
-          });
-        }
-
-        setState((prev) => ({
-          ...prev,
-          applicationId: app.id,
-          currentStep: Math.min(Math.max(Number(app.currentStep) || 1, 1), 5),
-          contact,
-          business,
-          owners,
-          financial: { annualRevenue: str(app.financial?.annualRevenue) },
-          loanRequest: { amountRequested: str(app.loanRequest?.amountRequested), urgency: str(app.loanRequest?.urgency) },
-          hasAdditionalOwners: app.hasAdditionalOwners,
-          homeAddressSameAsBusiness: app.homeBasedBusiness,
-          ownerHomeSameAsBusiness: app.ownerHomeSameAsBusiness,
-        }));
-
-        // Already signed: resume straight to the bank-statements screen.
-        if (app.signature?.signedAt) setSubmittedAt(app.signature.signedAt);
+        // Show the resume prompt so the visitor can confirm this is their
+        // application before we rehydrate. A new person on the same device can
+        // choose "Start a new application" to get a clean form instead.
+        setResumeCandidate(app);
       })
       .catch(() => {
         // Not found (e.g., different tenant's id or deleted draft): start fresh.
         clearStoredApplicationId();
       })
-      .finally(() => { if (!cancelled) setRestoring(false); });
+      .finally(() => {
+        // If a candidate was found, keep restoring=true until the visitor
+        // answers the prompt (handleConfirmResume / handleDeclineResume).
+        // If no candidate, drop out of the restoring state now.
+        if (!cancelled) {
+          setRestoring((prev) => {
+            // resumeCandidate state update is async, so read the flag from
+            // closure: if storedId existed but the fetch failed we get here
+            // with prev=true and no candidate — safe to clear.
+            return prev ? false : prev;
+          });
+        }
+      });
 
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once a resume candidate is set (fetch succeeded), leave restoring=true
+  // so the prompt renders. Once it's cleared (answered), exit restoring.
+  useEffect(() => {
+    if (resumeCandidate !== null) {
+      // Keep restoring true — the prompt is the "loading" replacement.
+      setRestoring(true);
+    }
+  }, [resumeCandidate]);
 
   // ── Analytics: keystroke tracking, field-level events, abandonment ──
   const analytics = useAnalytics(state.applicationId, token);
@@ -642,10 +689,42 @@ export function MultiStepForm({ token }: Props) {
     <AnalyticsContext.Provider value={analytics}>
       <div>
         {restoring ? (
-          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
-            <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" aria-hidden="true" />
-            <p className="text-sm text-slate-400">Checking for a saved application...</p>
-          </div>
+          resumeCandidate ? (
+            /* Ask the visitor to confirm this is their application before
+               rehydrating. A new person on the same device can start fresh. */
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-6 px-4 text-center">
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-3xl" aria-hidden="true">👋</span>
+                <h2 className="text-lg font-semibold text-white">
+                  Welcome back{resumeCandidate.contactFirstName ? `, ${resumeCandidate.contactFirstName}` : ''}!
+                </h2>
+                <p className="max-w-sm text-sm text-slate-400">
+                  We found an application in progress for this device. Would you like to pick up where you left off?
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleConfirmResume}
+                  className="rounded-lg bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Yes, continue my application
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeclineResume}
+                  className="rounded-lg border border-slate-600 px-6 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-slate-400 hover:text-white"
+                >
+                  No, start a new application
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+              <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" aria-hidden="true" />
+              <p className="text-sm text-slate-400">Checking for a saved application...</p>
+            </div>
+          )
         ) : submittedAt ? (state.applicationId ? (
           <>
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
