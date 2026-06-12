@@ -74,14 +74,14 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
     const typing = messages.find((m) => m.typewriterTarget !== undefined);
     if (!typing) return;
     const target = typing.typewriterTarget!;
-    const nextLen = Math.min(typing.content.length + 3, target.length);
+    const nextLen = Math.min(typing.content.length + 2, target.length);
     const timer = setTimeout(() => {
       setMessages((prev) => prev.map((m) => {
         if (m.id !== typing.id) return m;
         const done = nextLen >= target.length;
         return { ...m, content: target.slice(0, nextLen), typewriterTarget: done ? undefined : target };
       }));
-    }, 20);
+    }, 28);
     return () => clearTimeout(timer);
   }, [messages]);
 
@@ -132,7 +132,7 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
         setChatStopped(true);
         onDisqualified?.(res.data.message);
       }
-      setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: res.data.message, nextField: res.data.nextField }]);
+      postTypewriter(res.data.message, { nextField: res.data.nextField });
     }).catch(() => {
       // Non-fatal: the merchant can keep chatting normally.
     }).finally(() => {
@@ -205,7 +205,7 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
         setChatStopped(true);
         onDisqualified?.(res.data.message);
       }
-      setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: res.data.message, nextField: res.data.nextField }]);
+      postTypewriter(res.data.message, { nextField: res.data.nextField });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to send message.');
     } finally {
