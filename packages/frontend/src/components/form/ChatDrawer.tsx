@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { INDUSTRIES, type FormState } from '@/types/application';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -40,7 +40,7 @@ const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
 // the application. Keyed by step number; the bank-statements page (post-sign)
 // has its own message below. Each page is announced at most once per session.
 const STEP_GUIDE_MESSAGES: Record<number, string> = {
-  1: 'Welcome! Let\'s get you started. Enter your name, email, and mobile number, then your EIN or legal business name and we\'ll look up your business details for you. I\'m right here if you have any questions along the way.',
+  1: 'Hi there! I\'ll be right here with you while you complete the application. Let\'s get you started: enter your name, email, and mobile number, then your EIN or legal business name and we\'ll look up your business details for you. If you ever get stuck, just ask and I\'ll point you to the exact field or button you need.',
   2: 'Great start! Next, take a quick look at the business details we found. If anything looks off, just click the Edit button to fix it. One quick question to answer before continuing: is this a home-based business?',
   3: 'You\'re doing great! Now let\'s talk numbers. Pick your approximate annual revenue and how much funding you\'re looking for. Not sure which range fits? Just ask me.',
   4: 'Almost there! Next up is the owner\'s information. Quick security note: enter SSN and date of birth only in the secure form fields, never in this chat.',
@@ -62,24 +62,13 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
   const formStateRef = useRef(formState);
   useEffect(() => { formStateRef.current = formState; });
 
-  const introMessage = useMemo<ChatMessage>(() => ({
-    id: 'intro',
-    role: 'assistant',
-    content: 'Hi there! I\'ll be right here with you while you complete the application. If you ever get stuck, just ask and I\'ll point you to the exact field or button you need.',
-  }), []);
-
   useEffect(() => {
     if (!open) return;
 
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(PRE_APP_CHAT_KEY);
     }
-
-    // Seed the intro only when the conversation is empty. Never wipe existing
-    // history — the chat must persist across the Step 1 → Step 2 transition
-    // (when the applicationId is first created) and all later step changes.
-    setMessages((current) => current.length ? current : [introMessage]);
-  }, [open, introMessage]);
+  }, [open]);
 
   // Pages already announced in chat (once per session). The Step 2 AI
   // transition below claims 'step-2' so the static fallback never duplicates it.
