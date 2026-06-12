@@ -51,7 +51,7 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
     id: 'intro',
     role: 'assistant',
     content: 'Hi — I’ll follow along as you complete the application. If you get stuck, ask me what to do next and I’ll guide you to the exact field or button without slowing you down.',
-  }), [applicationId]);
+  }), []);
 
   useEffect(() => {
     if (!open) return;
@@ -60,14 +60,40 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
       window.localStorage.removeItem(PRE_APP_CHAT_KEY);
     }
 
-    if (!applicationId) {
-      setMessages((current) => current.length ? current : [introMessage]);
-      return;
-    }
+    // Seed the intro only when the conversation is empty. Never wipe existing
+    // history — the chat must persist across the Step 1 → Step 2 transition
+    // (when the applicationId is first created) and all later step changes.
+    setMessages((current) => current.length ? current : [introMessage]);
+  }, [open, introMessage]);
 
-    setError('');
-    setMessages([introMessage]);
-  }, [open, applicationId, token, introMessage]);
+  // When the application is created and the merchant lands on Step 2
+  // (Confirm Business), inject one assistant transition message that asks them
+  // to confirm the lookup results, use Edit if anything is off, and answer the
+  // home-based business question — but only if the chat was already in use.
+  const transitionRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!open || !applicationId || transitionRequestedRef.current) return;
+    if (formState.currentStep !== 2) return;
+    if (!messages.some((message) => message.role === 'user')) return;
+    transitionRequestedRef.current = true;
+
+    setLoading(true);
+    api.post<{ success: boolean; data: ChatReply }>(
+      `/api/chat/${applicationId}/post-consent-transition`,
+      { clientState: buildSafeClientState(formStateRef.current, pageContext, chatSessionIdRef.current, null, messages) },
+      token ?? undefined,
+    ).then((res) => {
+      if (res.data.disqualified) {
+        setChatStopped(true);
+        onDisqualified?.(res.data.message);
+      }
+      setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: res.data.message, nextField: res.data.nextField }]);
+    }).catch(() => {
+      // Non-fatal: the merchant can keep chatting normally.
+    }).finally(() => {
+      setLoading(false);
+    });
+  }, [open, applicationId, formState.currentStep, messages, pageContext, token, onDisqualified]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' });

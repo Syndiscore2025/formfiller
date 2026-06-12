@@ -239,7 +239,7 @@ export async function createPostConsentTransitionReply(input: TransitionChatInpu
     ...buildSafeApplicationSummary(app, input.clientState),
     transition: {
       type: 'post_tcpa_to_business_details',
-      instruction: 'Write ONE concise assistant message. Thank the merchant for consenting. Then tell them the next step is Business Details: confirm the business information on screen if lookup populated it; otherwise fill in the visible business details. If Business Start Date is visible/missing, mention it as part of Step 2, not Revenue & Funding. Do not include an icebreaker, weather, local news, sports, or other local-context opener.',
+      instruction: 'Write ONE concise assistant message. Thank the merchant for consenting. Then tell them the next step is Business Details: ask them to confirm the business information on screen if lookup populated it, and let them know they can click the Edit button if anything looks off; otherwise fill in the visible business details. Also ask them to confirm whether this is a home-based business if that question is still unanswered. If Business Start Date is visible/missing, mention it as part of Step 2, not Revenue & Funding. Do not include an icebreaker, weather, local news, sports, or other local-context opener.',
     },
   };
 
@@ -709,7 +709,9 @@ function buildFallbackReply(userMessage: string, nextField: NextField | null): C
 function buildPostConsentFallbackReply(nextField: NextField | null): ChatReply {
   const next = nextField?.fieldKey === 'business.businessStartDate'
     ? 'I checked the consent box and moved you forward. Please review the business details on screen, then enter the Business Start Date before continuing.'
-    : 'I checked the consent box and moved you forward. Please review the business details on screen and confirm anything Google found. If something is missing, fill in the visible business fields before continuing.';
+    : nextField?.fieldKey === 'application.homeBasedBusiness'
+      ? 'You\'re on Business Details now. Please confirm the information we found — if anything looks off, use the Edit button to fix it. Also, is this a home-based business? Answer Yes or No on screen (or tell me here).'
+      : 'You\'re on Business Details now. Please review the information on screen and confirm anything we found. If something looks off, click Edit to correct it, then Confirm & Continue.';
 
   return {
     message: next,
@@ -825,7 +827,7 @@ async function requestOpenAiReply(input: {
     'Tone: friendly, professional, concise (typically 1–3 short paragraphs), conversational, like a knowledgeable human funding specialist. Acknowledge what the merchant said before guiding them forward. Ask one useful follow-up question at a time. Vary your wording so consecutive replies do not look alike.',
     'Live progress awareness: before answering, inspect applicationContext.progress and applicationContext.clientState.pageContext. Treat them as the live source of truth, especially when the merchant is filling fields without AI help. Use progress.currentStepName, progress.nextMissingField, and each step’s missingFields/completedFields to know exactly what comes next. Do not ask for a field that progress marks completed.',
     'Conversation flow: respond like a human following along with the form. First briefly acknowledge what just happened or where they are; then give one clear next move. If they ask “what next?”, answer from progress.nextMissingField. If pageContext says Step 2 is in review mode, do not ask for hidden fields such as Industry yet; guide them to the visible Home Based Business Yes/No question or the Confirm & Continue button. If a step is complete, recognize that and move them to the next visible action. Immediately after contact consent/TCPA on Step 1, the next move is ALWAYS Step 2 Business Details review — ask the merchant to confirm the business information if lookup populated it, or fill the visible business fields if lookup did not. Do NOT jump to Business Start Date after consent.',
-    'Post-consent transition: if applicationContext.transition.type is post_tcpa_to_business_details, write exactly one concise transition message. Thank the merchant for consenting, then guide them to Step 2 Business Details. Do not include an icebreaker, weather, local news, sports, or other local-context opener. Do not ask a separate question before the Step 2 instruction.',
+    'Post-consent transition: if applicationContext.transition.type is post_tcpa_to_business_details, write exactly one concise transition message. Thank the merchant for consenting, then guide them to Step 2 Business Details: ask them to confirm the info on screen, mention the Edit button if anything is off, and ask the home-based business question if still unanswered. Do not include an icebreaker, weather, local news, sports, or other local-context opener.',
     'Field capture flow: if applicationContext.clientState.appliedField is present, you may naturally acknowledge that the answer was captured from chat, then immediately move to the next missing field. If no appliedField is present, do not claim you changed the form — guide them to enter or confirm it in the visible UI.',
     'Field-answer discernment: merchants may mention context such as IRS liens, tax issues, existing MCA positions, debts, non-citizenship, or other underwriting notes while you are asking for a form field. Acknowledge those briefly, but do NOT treat those statements as the requested field answer unless clientState.appliedField confirms the UI captured it. Continue asking for the exact next missing field.',
     'Hard funding guardrails — ALWAYS:',
