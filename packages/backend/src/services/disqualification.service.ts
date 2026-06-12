@@ -14,6 +14,13 @@ export interface DisqualificationResult {
 
 export const MIN_BUSINESS_AGE_MONTHS = 1;
 
+const CHAT_TIB_REASON = 'Merchant stated time in business is under 1 month.';
+const START_DATE_TIB_REASON = 'Business start date indicates less than 1 month in business.';
+
+// Reasons that can be cured by correcting the business start date. Used to
+// requalify an application when a corrected date passes the minimum check.
+export const TIME_IN_BUSINESS_DISQUALIFICATION_REASONS = [CHAT_TIB_REASON, START_DATE_TIB_REASON];
+
 const MINIMUM_MESSAGE =
   'At this time, this application does not meet the minimum requirements. The business needs active revenue and at least 1 month in business before moving forward. Please come back once those requirements are met.';
 
@@ -44,7 +51,7 @@ export function evaluateChatDisqualification(message: string): DisqualificationR
   if (/\b(?:0|zero)\s*(?:months?|mos?)\b/i.test(lower) || /\b(?:less than|under)\s*(?:1|one)\s*month\b/i.test(lower) || /\bnot even\s*(?:1|one|a)\s*month\b/i.test(lower)) {
     return {
       code: 'insufficient_time_in_business',
-      reason: 'Merchant stated time in business is under 1 month.',
+      reason: CHAT_TIB_REASON,
       merchantMessage: 'Thanks for clarifying. Because the business has been operating for less than 1 month, we cannot continue this funding application right now.',
     };
   }
@@ -63,7 +70,7 @@ export function evaluateBusinessStartDateDisqualification(value: Date | string |
 
   return {
     code: 'insufficient_time_in_business',
-    reason: 'Business start date indicates less than 1 month in business.',
+    reason: START_DATE_TIB_REASON,
     merchantMessage: 'Based on the business start date, the business has been operating for less than 1 month.',
   };
 }
@@ -98,4 +105,33 @@ export async function markApplicationDisqualified(params: {
       details: { code: params.result.code, source: params.source },
     });
   }
+}
+
+export async function clearTimeInBusinessDisqualification(params: {
+  applicationId: string;
+  tenantId: string;
+}): Promise<boolean> {
+  const updated = await prisma.application.updateMany({
+    where: {
+      id: params.applicationId,
+      tenantId: params.tenantId,
+      disqualifiedAt: { not: null },
+      disqualificationReason: { in: TIME_IN_BUSINESS_DISQUALIFICATION_REASONS },
+    },
+    data: {
+      status: 'draft',
+      disqualifiedAt: null,
+      disqualificationReason: null,
+      lastActivityAt: new Date(),
+    },
+  });
+
+  if (updated.count > 0) {
+    await writeAuditLog({
+      applicationId: params.applicationId,
+      action: 'APPLICATION_REQUALIFIED',
+      details: { source: 'business_start_date_corrected' },
+    });
+  }
+  return updated.count > 0;
 }

@@ -93,6 +93,10 @@ export function MultiStepForm({ token }: Props) {
   const [aiPageContext, setAiPageContext] = useState<Record<string, unknown> | null>(null);
   const [disqualificationMessage, setDisqualificationMessage] = useState<string | null>(null);
   const disqualifiedSaveRef = useRef(false);
+  // Exit-intent prompt — shown once per session when the pointer leaves toward
+  // the top of the window (browser tab / close button) mid-application.
+  const [showExitPrompt, setShowExitPrompt] = useState(false);
+  const exitPromptShownRef = useRef(false);
   // TCPA consent signaled from the AI chat
   const [chatTcpaConsented, setChatTcpaConsented] = useState(false);
   // Stable callback so BankStatementUpload's completion effect isn't torn down
@@ -222,6 +226,19 @@ export function MultiStepForm({ token }: Props) {
   const handleDisqualified = useCallback((message: string) => {
     setDisqualificationMessage(message || 'This application does not meet the minimum requirements right now.');
   }, []);
+
+  // The merchant entered something incorrectly (e.g., business start date) and
+  // wants to fix it: dismiss the overlay and return to Business Details. The
+  // application stays disqualified in the backend until a corrected start date
+  // is saved and passes the minimum time-in-business check.
+  const handleEditAfterDisqualification = useCallback(() => {
+    setDisqualificationMessage(null);
+    setState((prev) => ({ ...prev, currentStep: prev.applicationId ? 2 : prev.currentStep }));
+    if (state.applicationId) {
+      api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: 2 }, token ?? undefined)
+        .catch((err) => console.warn('Unable to sync step after disqualification edit:', err));
+    }
+  }, [state.applicationId, token]);
 
   const advanceStep = useCallback(async (nextStep: number) => {
     if (!state.applicationId) return;
@@ -443,7 +460,29 @@ export function MultiStepForm({ token }: Props) {
     }
   }, [state.applicationId, token]);
 
-  const eligibilityOverlay = disqualificationMessage ? <EligibilityDisqualificationOverlay message={disqualificationMessage} /> : null;
+  // Exit-intent: when the pointer leaves through the top of the viewport
+  // (toward the tab bar / close button) mid-application, show a one-time
+  // "finish your application" prompt.
+  useEffect(() => {
+    const handleMouseOut = (event: MouseEvent) => {
+      if (event.relatedTarget) return; // still inside the page
+      if (event.clientY > 24) return; // only when heading toward the top chrome
+      if (exitPromptShownRef.current) return;
+      if (!state.applicationId || hasFinalized || disqualificationMessage) return;
+      exitPromptShownRef.current = true;
+      setShowExitPrompt(true);
+    };
+    document.addEventListener('mouseout', handleMouseOut);
+    return () => document.removeEventListener('mouseout', handleMouseOut);
+  }, [state.applicationId, hasFinalized, disqualificationMessage]);
+
+  const handleDismissExitPrompt = useCallback(() => setShowExitPrompt(false), []);
+
+  const homeUrl = tenantSettings?.websiteUrl || '/';
+  const eligibilityOverlay = disqualificationMessage
+    ? <EligibilityDisqualificationOverlay message={disqualificationMessage} homeUrl={homeUrl} onEdit={handleEditAfterDisqualification} />
+    : null;
+  const exitPrompt = showExitPrompt ? <ExitIntentPrompt onContinue={handleDismissExitPrompt} /> : null;
 
   if (submittedAt) {
     return state.applicationId ? (
@@ -484,7 +523,8 @@ export function MultiStepForm({ token }: Props) {
           />
         )}
         {eligibilityOverlay}
-        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
+        {!disqualificationMessage && exitPrompt}
+        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </>
     ) : null;
   }
@@ -532,13 +572,14 @@ export function MultiStepForm({ token }: Props) {
           />
         )}
         {eligibilityOverlay}
-        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
+        {!disqualificationMessage && exitPrompt}
+        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </div>
     </AnalyticsContext.Provider>
   );
 }
 
-function EligibilityDisqualificationOverlay({ message }: { message: string }) {
+function EligibilityDisqualificationOverlay({ message, homeUrl, onEdit }: { message: string; homeUrl: string; onEdit: () => void }) {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
 
@@ -570,6 +611,75 @@ function EligibilityDisqualificationOverlay({ message }: { message: string }) {
           <h3 id="eligibility-disqualification-title" className="mt-3 text-2xl font-semibold text-white">Not eligible right now</h3>
           <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">{message}</p>
           <p className="mt-5 text-xs text-slate-500">You can return when the business has active revenue and at least 1 month in business.</p>
+          <p className="mt-4 text-xs text-slate-400">Entered something incorrectly? You can go back and fix it.</p>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-300"
+            >
+              Edit my information
+            </button>
+            <a
+              href={homeUrl}
+              className="rounded-lg border border-slate-600 px-5 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-400 hover:text-white"
+            >
+              Return to home page
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ExitIntentPrompt({ onContinue }: { onContinue: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onContinue();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onContinue]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="exit-intent-title"
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 transition-opacity duration-300 ease-out ${visible ? 'opacity-100' : 'opacity-0'}`}
+      style={{ background: 'rgba(2, 8, 23, 0.78)', backdropFilter: 'blur(5px)' }}
+      onClick={onContinue}
+    >
+      <div
+        className={`w-full max-w-md transition-all duration-300 ease-out ${visible ? 'translate-y-0 scale-100' : 'translate-y-3 scale-[0.98]'}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="owner-verification-card surface-panel-soft border border-sky-300/20 bg-slate-950/95 p-7 text-center shadow-[0_24px_90px_rgba(2,12,27,0.72),0_0_0_1px_rgba(56,189,248,0.08)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-200">Before you go</p>
+          <h3 id="exit-intent-title" className="mt-3 text-2xl font-semibold text-white">Wait — did you want to finish your application?</h3>
+          <p className="mt-4 text-sm leading-6 text-slate-300">Your progress is saved, and it only takes a couple more minutes to complete. Pick up right where you left off.</p>
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={onContinue}
+              className="rounded-lg bg-sky-400 px-6 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-sky-300"
+            >
+              Finish my application
+            </button>
+          </div>
         </div>
       </div>
     </div>,

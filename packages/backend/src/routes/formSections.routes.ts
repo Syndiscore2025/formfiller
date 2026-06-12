@@ -11,6 +11,7 @@ import { encrypt } from '../utils/encryption';
 import { writeAuditLog } from '../services/auditLog.service';
 import {
   buildDisqualificationReply,
+  clearTimeInBusinessDisqualification,
   evaluateBusinessStartDateDisqualification,
   markApplicationDisqualified,
 } from '../services/disqualification.service';
@@ -125,7 +126,8 @@ router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHa
     select: { eligibilityDisqualificationEnabled: true },
   });
   const eligibilityDisqualificationEnabled = tenantSettings?.eligibilityDisqualificationEnabled ?? true;
-  const disqualification = eligibilityDisqualificationEnabled ? evaluateBusinessStartDateDisqualification(businessStartDate) : null;
+  const startDateEvaluation = evaluateBusinessStartDateDisqualification(businessStartDate);
+  const disqualification = eligibilityDisqualificationEnabled ? startDateEvaluation : null;
   if (disqualification) {
     await markApplicationDisqualified({
       applicationId: appId,
@@ -144,6 +146,12 @@ router.put('/:appId/business', ...guestAccess, validate(businessSchema), asyncHa
       },
     });
     return;
+  }
+  // A corrected start date that now passes the minimum time-in-business check
+  // requalifies an application previously disqualified for time in business,
+  // so it can proceed to submission and rep alerts resume normally.
+  if (normalizedDate && !startDateEvaluation) {
+    await clearTimeInBusinessDisqualification({ applicationId: appId, tenantId: req.tenantId! });
   }
   await prisma.application.updateMany({ where: { id: appId, tenantId: req.tenantId! }, data: { lastActivityAt: new Date() } });
   await writeAuditLog({ applicationId: appId, action: 'BUSINESS_INFO_SAVED', actor: req.userId, ipAddress: req.ip });
