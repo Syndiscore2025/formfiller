@@ -26,6 +26,7 @@ interface Props {
   applicationId: string | null;
   token: string | null;
   formState: FormState;
+  submittedAt?: string | null;
   pageContext?: Record<string, unknown> | null;
   onNavigateToField?: (field: NonNullable<ChatReply['nextField']>) => void;
   onApplyFieldAnswer?: (field: NonNullable<ChatReply['nextField']>, value: string) => boolean;
@@ -35,7 +36,21 @@ interface Props {
 
 const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
 
-export function ChatDrawer({ open, applicationId, token, formState, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, onClose }: Props) {
+// Static per-page guidance posted into the chat as the merchant moves through
+// the application. Keyed by step number; the bank-statements page (post-sign)
+// has its own message below. Each page is announced at most once per session.
+const STEP_GUIDE_MESSAGES: Record<number, string> = {
+  1: 'You\'re on Get Started. Enter your name, email, and mobile number, then your EIN or legal business name so we can look up your business details. Ask me here if you get stuck on anything.',
+  2: 'You\'re on Business Details. Please confirm the information we found — if anything looks off, click the Edit button to fix it. Also answer whether this is a home-based business before continuing.',
+  3: 'You\'re on Revenue & Funding. Choose your approximate annual revenue and how much funding you\'re looking for. If you\'re unsure which range fits, ask me.',
+  4: 'You\'re on Owner Details. Fill in the primary owner\'s information. For security, enter SSN and date of birth only in the secure form fields — never in this chat.',
+  5: 'You\'re on Review & Sign. Double-check everything on screen, then check the authorization box and sign to submit. Happy to answer any questions before you sign.',
+};
+
+const BANK_UPLOAD_GUIDE_MESSAGE =
+  'Last step — upload your business bank statements as PDFs, then click Submit Application to finish. If you have questions about which statements to upload, ask me here.';
+
+export function ChatDrawer({ open, applicationId, token, formState, submittedAt, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -66,6 +81,10 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
     setMessages((current) => current.length ? current : [introMessage]);
   }, [open, introMessage]);
 
+  // Pages already announced in chat (once per session). The Step 2 AI
+  // transition below claims 'step-2' so the static fallback never duplicates it.
+  const announcedPagesRef = useRef<Set<string>>(new Set());
+
   // When the application is created and the merchant lands on Step 2
   // (Confirm Business), inject one assistant transition message that asks them
   // to confirm the lookup results, use Edit if anything is off, and answer the
@@ -74,8 +93,10 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
   useEffect(() => {
     if (!open || !applicationId || transitionRequestedRef.current) return;
     if (formState.currentStep !== 2) return;
+    if (announcedPagesRef.current.has('step-2')) return;
     if (!messages.some((message) => message.role === 'user')) return;
     transitionRequestedRef.current = true;
+    announcedPagesRef.current.add('step-2');
 
     setLoading(true);
     api.post<{ success: boolean; data: ChatReply }>(
@@ -94,6 +115,19 @@ export function ChatDrawer({ open, applicationId, token, formState, pageContext,
       setLoading(false);
     });
   }, [open, applicationId, formState.currentStep, messages, pageContext, token, onDisqualified]);
+
+  // Follow the merchant: whenever they land on a new page with the chat open
+  // (or open the chat mid-application), post that page's static guidance once.
+  // Runs after the Step 2 AI transition effect so it never double-announces.
+  useEffect(() => {
+    if (!open || chatStopped) return;
+    const pageKey = submittedAt ? 'bank-upload' : `step-${formState.currentStep}`;
+    if (announcedPagesRef.current.has(pageKey)) return;
+    const guide = submittedAt ? BANK_UPLOAD_GUIDE_MESSAGE : STEP_GUIDE_MESSAGES[formState.currentStep];
+    if (!guide) return;
+    announcedPagesRef.current.add(pageKey);
+    setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: guide }]);
+  }, [open, chatStopped, submittedAt, formState.currentStep]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' });
