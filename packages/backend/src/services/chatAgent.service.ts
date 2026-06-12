@@ -12,6 +12,7 @@ import {
   buildDisqualificationReply,
   evaluateChatDisqualification,
   markApplicationDisqualified,
+  TIME_IN_BUSINESS_DISQUALIFICATION_REASONS,
   type DisqualificationResult,
 } from './disqualification.service';
 import { getCurrentDateContext } from './localContext.service';
@@ -608,6 +609,13 @@ function buildSafeApplicationSummary(app: ApplicationContext, clientState?: unkn
     finalized: Boolean(app.finalizedAt),
     disqualified: Boolean(app.disqualifiedAt),
     disqualificationReason: app.disqualificationReason ? 'configured_reason_present' : null,
+    // Time-in-business disqualifications are curable: a corrected Business
+    // Start Date saved on the Business Details page requalifies the file.
+    disqualificationRecoverable: Boolean(
+      app.disqualifiedAt &&
+      app.disqualificationReason &&
+      TIME_IN_BUSINESS_DISQUALIFICATION_REASONS.includes(app.disqualificationReason),
+    ),
     eligibilityDisqualificationEnabled: app.tenant.settings?.eligibilityDisqualificationEnabled ?? true,
     contact: {
       hasEmail: hasText(app.contactEmail),
@@ -841,8 +849,9 @@ async function requestOpenAiReply(input: {
     'EIN rule: EIN is the 9-digit business tax ID on the SS-4 confirmation letter the IRS sent when the business was first registered. It may also appear on business tax returns, payroll records, business bank paperwork, or IRS notices. If the merchant is a sole proprietor without an EIN, do NOT send them to the IRS for a new number or replacement letter (that takes weeks); tell them to select the Sole Proprietorship option in the form and continue.',
     'Field-help rule: if the merchant asks what a field means, why it is needed, or where to find the info, answer that question first in plain language using the fieldHelpGuidance hint when provided, then guide them to the next missing required field (do NOT push them to optional fields they skipped unless they ask to revisit).',
     input.eligibilityDisqualificationEnabled
-      ? 'Hard disqualification rule: if the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, the backend will disqualify the lead. If you see disqualified=true or no next field, do not keep pushing the form.'
+      ? 'Hard disqualification rule: if the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, the backend will disqualify the lead. If you see disqualified=true with disqualificationRecoverable=false and no next field, do not keep pushing the form.'
       : 'Eligibility disqualification is disabled for this tenant. If the merchant states no/zero revenue, pre-revenue, startup/not open, 0 months in business, or less than 1 month in business, acknowledge briefly and keep them moving through the application for alternate products. Do not tell them they are disqualified.',
+    'Recoverable disqualification rule: if applicationContext shows disqualified=true AND disqualificationRecoverable=true, the merchant was flagged only for time in business and CAN fix it. If they say the date was a mistake or the business is actually older, do not repeat that they are disqualified; warmly tell them to correct the Business Start Date on the Business Details page and click Continue, and eligibility will be rechecked automatically. If disqualified=false, the application is in good standing; never bring up a past disqualification.',
     'Silent qualification rule: if the merchant says something that may matter for underwriting but is NOT a hard disqualifier (bankruptcy, restricted industry, non-citizen, NSF, etc.) DO NOT alert them, DO NOT disqualify, DO NOT say "this may be an issue." Just keep them moving through the form normally; those signals are flagged internally for the funding team.',
     'Forward motion: every reply (unless the merchant explicitly opts out) ends with either a clear next step toward the next missing field, an invitation to review and sign, or a short follow-up question that moves the file forward.',
     'Opt-out: if the merchant opts out or says stop, acknowledge respectfully and stop pushing the application.',

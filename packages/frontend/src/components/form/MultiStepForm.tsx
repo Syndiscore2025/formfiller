@@ -137,6 +137,10 @@ export function MultiStepForm({ token }: Props) {
   const [aiPageContext, setAiPageContext] = useState<Record<string, unknown> | null>(null);
   const [disqualificationMessage, setDisqualificationMessage] = useState<string | null>(null);
   const disqualifiedSaveRef = useRef(false);
+  // Incremented each time the merchant clicks "Edit my information" after a
+  // disqualification; ChatDrawer watches this to re-enable the chat and post
+  // a recovery guidance message.
+  const [chatReactivationSignal, setChatReactivationSignal] = useState(0);
   // Exit-intent prompt — shown once per session when the pointer leaves toward
   // the top of the window (browser tab / close button) mid-application.
   const [showExitPrompt, setShowExitPrompt] = useState(false);
@@ -378,6 +382,7 @@ export function MultiStepForm({ token }: Props) {
   // is saved and passes the minimum time-in-business check.
   const handleEditAfterDisqualification = useCallback(() => {
     setDisqualificationMessage(null);
+    setChatReactivationSignal((n) => n + 1);
     setState((prev) => ({ ...prev, currentStep: prev.applicationId ? 2 : prev.currentStep }));
     if (state.applicationId) {
       api.patch(`/api/applications/${state.applicationId}/step`, { currentStep: 2 }, token ?? undefined)
@@ -724,7 +729,10 @@ export function MultiStepForm({ token }: Props) {
         )}
         {eligibilityOverlay}
         {!disqualificationMessage && exitPrompt}
-        {!restoring && !disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
+        {/* Keep the ChatWidget mounted while the eligibility overlay is up
+            (hidden, not unmounted) so the transcript survives the merchant
+            choosing "Edit my information" and returning to the form. */}
+        {!restoring && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget hidden={Boolean(disqualificationMessage)} applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} reactivationSignal={chatReactivationSignal} />}
       </div>
     </AnalyticsContext.Provider>
   );

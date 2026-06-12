@@ -32,6 +32,9 @@ interface Props {
   onApplyFieldAnswer?: (field: NonNullable<ChatReply['nextField']>, value: string) => boolean;
   onDisqualified?: (message: string) => void;
   onClose: () => void;
+  /** Increments when the merchant chooses to edit their info after a
+   *  disqualification; re-enables the chat so it can guide the correction. */
+  reactivationSignal?: number;
 }
 
 const PRE_APP_CHAT_KEY = 'formfiller.preApplicationChat.v2';
@@ -50,7 +53,7 @@ const STEP_GUIDE_MESSAGES: Record<number, string> = {
 const BANK_UPLOAD_GUIDE_MESSAGE =
   'You did it! Just one last step: upload your business bank statements as PDFs, then click Submit Application to wrap things up. If you have questions about which statements to upload, ask away.';
 
-export function ChatDrawer({ open, applicationId, token, formState, submittedAt, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, onClose }: Props) {
+export function ChatDrawer({ open, applicationId, token, formState, submittedAt, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, onClose, reactivationSignal }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,6 +120,24 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
     announcedPagesRef.current.add(pageKey);
     setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: guide }]);
   }, [open, chatStopped, submittedAt, formState.currentStep]);
+
+  // The merchant clicked "Edit my information" after a disqualification:
+  // unlock the chat (it was stopped by the disqualified reply) and post one
+  // recovery message so the assistant guides the fix instead of staying in
+  // the disqualified stance. Once the corrected date saves, the backend
+  // requalifies the application and chat continues normally.
+  const lastReactivationRef = useRef(reactivationSignal ?? 0);
+  useEffect(() => {
+    const signal = reactivationSignal ?? 0;
+    if (signal === lastReactivationRef.current) return;
+    lastReactivationRef.current = signal;
+    setChatStopped(false);
+    setMessages((current) => [...current, {
+      id: createLocalId(),
+      role: 'assistant',
+      content: 'No problem, let\'s get that fixed. Update your Business Start Date on the Business Details page and click Continue. We\'ll recheck eligibility automatically, and I\'m right here if you need a hand.',
+    }]);
+  }, [reactivationSignal]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' });

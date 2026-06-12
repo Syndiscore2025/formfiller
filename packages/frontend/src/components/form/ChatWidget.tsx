@@ -14,9 +14,15 @@ interface Props {
   onNavigateToField?: (field: { step: number; fieldKey: string }) => void;
   onApplyFieldAnswer?: (field: { step: number; fieldKey: string }, value: string) => boolean;
   onDisqualified?: (message: string) => void;
+  /** Visually hide the widget without unmounting it, so the chat transcript
+   *  survives temporary overlays (e.g., the eligibility prompt). */
+  hidden?: boolean;
+  /** Increments when the merchant chooses to edit their info after a
+   *  disqualification; re-enables the chat so it can guide the correction. */
+  reactivationSignal?: number;
 }
 
-export function ChatWidget({ applicationId, token, formState, submittedAt, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified }: Props) {
+export function ChatWidget({ applicationId, token, formState, submittedAt, pageContext, onNavigateToField, onApplyFieldAnswer, onDisqualified, hidden, reactivationSignal }: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -25,7 +31,7 @@ export function ChatWidget({ applicationId, token, formState, submittedAt, pageC
   if (!mounted) return null;
 
   return createPortal(
-    <>
+    <div hidden={hidden}>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -46,8 +52,9 @@ export function ChatWidget({ applicationId, token, formState, submittedAt, pageC
         onApplyFieldAnswer={onApplyFieldAnswer}
         onDisqualified={onDisqualified}
         onClose={() => setOpen(false)}
+        reactivationSignal={reactivationSignal}
       />
-    </>,
+    </div>,
     document.body,
   );
 }
