@@ -11,6 +11,9 @@ interface ChatMessage {
   content: string;
   createdAt?: string;
   nextField?: ChatReply['nextField'];
+  /** Full text being revealed by the typewriter effect. While set, `content`
+   *  is the currently-displayed portion. Cleared when typing completes. */
+  typewriterTarget?: string;
 }
 
 interface ChatReply {
@@ -65,6 +68,35 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
   const formStateRef = useRef(formState);
   useEffect(() => { formStateRef.current = formState; });
 
+  // Typewriter effect: finds the first message still being revealed and
+  // appends the next chunk of characters on a fixed interval.
+  useEffect(() => {
+    const typing = messages.find((m) => m.typewriterTarget !== undefined);
+    if (!typing) return;
+    const target = typing.typewriterTarget!;
+    const nextLen = Math.min(typing.content.length + 3, target.length);
+    const timer = setTimeout(() => {
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== typing.id) return m;
+        const done = nextLen >= target.length;
+        return { ...m, content: target.slice(0, nextLen), typewriterTarget: done ? undefined : target };
+      }));
+    }, 20);
+    return () => clearTimeout(timer);
+  }, [messages]);
+
+  // Post a static assistant message with a typewriter reveal instead of
+  // having it appear all at once.
+  const postTypewriter = useCallback((text: string, extra?: Partial<ChatMessage>) => {
+    setMessages((current) => [...current, {
+      id: createLocalId(),
+      role: 'assistant',
+      content: '',
+      typewriterTarget: text,
+      ...extra,
+    }]);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
 
@@ -118,8 +150,8 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
     const guide = submittedAt ? BANK_UPLOAD_GUIDE_MESSAGE : STEP_GUIDE_MESSAGES[formState.currentStep];
     if (!guide) return;
     announcedPagesRef.current.add(pageKey);
-    setMessages((current) => [...current, { id: createLocalId(), role: 'assistant', content: guide }]);
-  }, [open, chatStopped, submittedAt, formState.currentStep]);
+    postTypewriter(guide);
+  }, [open, chatStopped, submittedAt, formState.currentStep, postTypewriter]);
 
   // The merchant clicked "Edit my information" after a disqualification:
   // unlock the chat (it was stopped by the disqualified reply) and post one
@@ -132,11 +164,7 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
     if (signal === lastReactivationRef.current) return;
     lastReactivationRef.current = signal;
     setChatStopped(false);
-    setMessages((current) => [...current, {
-      id: createLocalId(),
-      role: 'assistant',
-      content: 'No problem, let\'s get that fixed. Update your Business Start Date on the Business Details page and click Continue. We\'ll recheck eligibility automatically, and I\'m right here if you need a hand.',
-    }]);
+    postTypewriter('No problem, let\'s get that fixed. Update your Business Start Date on the Business Details page and click Continue. We\'ll recheck eligibility automatically, and I\'m right here if you need a hand.');
   }, [reactivationSignal]);
 
   useEffect(() => {
@@ -212,6 +240,9 @@ export function ChatDrawer({ open, applicationId, token, formState, submittedAt,
             <div key={message.id} className={message.role === 'user' ? 'text-right' : 'text-left'}>
               <div className={`inline-block max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'bg-cyan-500 text-slate-950' : 'border border-white/10 bg-white/[0.05] text-slate-100'}`}>
                 {message.content}
+                {message.typewriterTarget !== undefined && (
+                  <span className="ml-0.5 inline-block w-0.5 animate-pulse bg-cyan-300 align-middle" style={{ height: '1em' }} aria-hidden="true" />
+                )}
               </div>
             </div>
           ))}
