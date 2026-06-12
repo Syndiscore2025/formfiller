@@ -49,6 +49,46 @@ const EMPTY_BUSINESS: BusinessInfo = {
 const EMPTY_FINANCIAL: FinancialInfo = { annualRevenue: '' };
 const EMPTY_LOAN: LoanRequest = { amountRequested: '', urgency: '' };
 
+// Resume support: the in-progress application id is kept in localStorage
+// (scoped per tenant slug) so a merchant who closes the tab or browser can
+// pick up where they left off. Cleared on final submission, or when the
+// stored application is finalized/disqualified/not found.
+const RESUME_STORAGE_KEY = `formfiller_resume_application_${TENANT_SLUG}`;
+
+function readStoredApplicationId(): string | null {
+  try { return localStorage.getItem(RESUME_STORAGE_KEY); } catch { return null; }
+}
+function storeApplicationId(id: string): void {
+  try { localStorage.setItem(RESUME_STORAGE_KEY, id); } catch { /* ignore */ }
+}
+function clearStoredApplicationId(): void {
+  try { localStorage.removeItem(RESUME_STORAGE_KEY); } catch { /* ignore */ }
+}
+
+// Shape of GET /api/applications/:id used for resume (subset of the record).
+interface ResumedApplication {
+  id: string;
+  status: string;
+  currentStep: number;
+  contactFirstName: string | null;
+  contactLastName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  tcpaConsentStep1: boolean;
+  hasAdditionalOwners: boolean | null;
+  homeBasedBusiness: boolean | null;
+  ownerHomeSameAsBusiness: boolean | null;
+  finalizedAt: string | null;
+  disqualifiedAt: string | null;
+  business: Partial<Record<keyof BusinessInfo, unknown>> & { businessStartDate?: string | null } | null;
+  owners: Array<Partial<Record<keyof OwnerInfo, unknown>>>;
+  financial: { annualRevenue: string | null } | null;
+  loanRequest: { amountRequested: string | null; urgency: string | null } | null;
+  signature: { signedAt: string } | null;
+}
+
+const str = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
+
 function isSamePartialBusiness(current: BusinessInfo, draft: Partial<BusinessInfo>): boolean {
   return Object.entries(draft).every(([key, value]) => {
     const currentValue = current[key as keyof BusinessInfo];
@@ -81,6 +121,10 @@ export function MultiStepForm({ token }: Props) {
     lastSaved: null,
   });
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  // True while we check localStorage for an in-progress application and
+  // rehydrate it from the backend. The form renders a brief loading state
+  // instead of Step 1 so a returning merchant never sees a blank restart.
+  const [restoring, setRestoring] = useState(true);
   // Overlay visibility (can be toggled off via the close button).
   const [isComplete, setIsComplete] = useState(false);
   // Sticky finalization flag — flipped true once POST /finalize succeeds and
@@ -105,6 +149,7 @@ export function MultiStepForm({ token }: Props) {
     // Scroll the underlying page to the top so the fixed, centered overlay
     // appears against the top of the form rather than a half-scrolled view.
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'auto' });
+    clearStoredApplicationId();
     setHasFinalized(true);
     setIsComplete(true);
   }, []);
@@ -160,6 +205,105 @@ export function MultiStepForm({ token }: Props) {
   // Apply tenant theme (dark/light). A user override in localStorage wins.
   useTheme(tenantSettings?.theme ?? null);
 
+  // Resume an in-progress application after a tab close / refresh. The id is
+  // read from the tenant-scoped localStorage key and the draft is fetched
+  // from the backend (tenant isolation is enforced server-side via the
+  // x-tenant-slug header on every request).
+  useEffect(() => {
+    const storedId = readStoredApplicationId();
+    if (!storedId) { setRestoring(false); return; }
+    let cancelled = false;
+
+    api.get<{ success: boolean; data: ResumedApplication }>(`/api/applications/${storedId}`, token ?? undefined)
+      .then((res) => {
+        if (cancelled) return;
+        const app = res.data;
+        // Finished or disqualified applications are not resumable.
+        if (!app || app.finalizedAt || app.disqualifiedAt) { clearStoredApplicationId(); return; }
+
+        const contact: ContactInfo = {
+          firstName: str(app.contactFirstName),
+          lastName: str(app.contactLastName),
+          email: str(app.contactEmail),
+          phone: normalizeUsPhoneDigits(str(app.contactPhone)),
+          tcpaConsent: Boolean(app.tcpaConsentStep1),
+        };
+
+        const business: BusinessInfo = {
+          ...EMPTY_BUSINESS,
+          ...(app.business ? {
+            legalName: str(app.business.legalName),
+            dba: str(app.business.dba),
+            entityType: str(app.business.entityType) as BusinessInfo['entityType'],
+            industry: str(app.business.industry),
+            stateOfFormation: str(app.business.stateOfFormation),
+            ein: str(app.business.ein),
+            businessStartDate: str(app.business.businessStartDate).slice(0, 10),
+            phone: normalizeUsPhoneDigits(str(app.business.phone)),
+            website: str(app.business.website),
+            streetAddress: str(app.business.streetAddress),
+            streetAddress2: str(app.business.streetAddress2),
+            city: str(app.business.city),
+            state: str(app.business.state),
+            zipCode: str(app.business.zipCode),
+            sicCode: str(app.business.sicCode),
+            naicsCode: str(app.business.naicsCode),
+          } : {}),
+        };
+
+        // SSN is stored encrypted server-side and never sent back to the
+        // browser, so it rehydrates empty and the merchant re-enters it if
+        // they revisit Owner Details.
+        const owners: OwnerInfo[] = (app.owners || []).map((owner, index) => ({
+          ownerIndex: index,
+          firstName: str(owner.firstName),
+          lastName: str(owner.lastName),
+          email: str(owner.email) || contact.email,
+          phone: normalizeUsPhoneDigits(str(owner.phone)) || contact.phone,
+          ownershipPct: str(owner.ownershipPct),
+          ssn: '',
+          dateOfBirth: str(owner.dateOfBirth).slice(0, 10),
+          creditScore: str(owner.creditScore),
+          streetAddress: str(owner.streetAddress),
+          streetAddress2: str(owner.streetAddress2),
+          city: str(owner.city),
+          state: str(owner.state),
+          zipCode: str(owner.zipCode),
+        }));
+        if (owners.length === 0 && app.currentStep > 1) {
+          owners.push({
+            ownerIndex: 0, firstName: '', lastName: '', email: contact.email, phone: contact.phone,
+            ownershipPct: '', ssn: '', dateOfBirth: '', creditScore: '',
+            streetAddress: '', streetAddress2: '', city: '', state: '', zipCode: '',
+          });
+        }
+
+        setState((prev) => ({
+          ...prev,
+          applicationId: app.id,
+          currentStep: Math.min(Math.max(Number(app.currentStep) || 1, 1), 5),
+          contact,
+          business,
+          owners,
+          financial: { annualRevenue: str(app.financial?.annualRevenue) },
+          loanRequest: { amountRequested: str(app.loanRequest?.amountRequested), urgency: str(app.loanRequest?.urgency) },
+          hasAdditionalOwners: app.hasAdditionalOwners,
+          homeAddressSameAsBusiness: app.homeBasedBusiness,
+          ownerHomeSameAsBusiness: app.ownerHomeSameAsBusiness,
+        }));
+
+        // Already signed: resume straight to the bank-statements screen.
+        if (app.signature?.signedAt) setSubmittedAt(app.signature.signedAt);
+      })
+      .catch(() => {
+        // Not found (e.g., different tenant's id or deleted draft): start fresh.
+        clearStoredApplicationId();
+      })
+      .finally(() => { if (!cancelled) setRestoring(false); });
+
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Analytics: keystroke tracking, field-level events, abandonment ──
   const analytics = useAnalytics(state.applicationId, token);
 
@@ -200,6 +344,7 @@ export function MultiStepForm({ token }: Props) {
       tcpaConsent: contact.tcpaConsent,
     }, token ?? undefined);
     const id = res.data.id;
+    storeApplicationId(id);
     setState((prev) => ({ ...prev, applicationId: id }));
     return id;
   }, [state.applicationId, token]);
@@ -491,7 +636,12 @@ export function MultiStepForm({ token }: Props) {
   return (
     <AnalyticsContext.Provider value={analytics}>
       <div>
-        {submittedAt ? (state.applicationId ? (
+        {restoring ? (
+          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" aria-hidden="true" />
+            <p className="text-sm text-slate-400">Checking for a saved application...</p>
+          </div>
+        ) : submittedAt ? (state.applicationId ? (
           <>
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="w-full max-w-2xl">
@@ -574,7 +724,7 @@ export function MultiStepForm({ token }: Props) {
         )}
         {eligibilityOverlay}
         {!disqualificationMessage && exitPrompt}
-        {!disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
+        {!restoring && !disqualificationMessage && (tenantSettings?.aiChatEnabled ?? true) && <ChatWidget applicationId={state.applicationId} token={token} formState={state} submittedAt={submittedAt} pageContext={aiPageContext} onNavigateToField={handleChatNavigateToField} onApplyFieldAnswer={handleChatFieldAnswer} onDisqualified={handleDisqualified} />}
       </div>
     </AnalyticsContext.Provider>
   );
